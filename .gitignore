@@ -1,0 +1,32 @@
+# Local planning notes. Not part of the open-source tree.
+/notes/
+
+# Editor and AI assistant files
+.cursor/
+.claude/
+.codex/
+.agents/
+.cursorrules
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# PHP / JS dependencies and tool caches
+/vendor/
+/node_modules/
+.phpunit.result.cache
+.phpcs.cache
+.phpstan.cache
+/coverage/
+/test-results/
+/playwright-report/
+
+# Build output and OS / editor junk
+*.zip
+.DS_Store
+.idea/
