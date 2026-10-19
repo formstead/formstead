@@ -1,0 +1,51 @@
+{
+	"name": "formstead/formstead",
+	"description": "Receive form submissions from static and headless sites on an existing WordPress install.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"homepage": "https://formstead.dev",
+	"support": {
+		"email": "hello@formstead.dev",
+		"issues": "https://github.com/formstead/formstead/issues"
+	},
+	"require": {
+		"php": ">=8.3"
+	},
+	"require-dev": {
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"phpstan/extension-installer": "^1.4",
+		"phpstan/phpstan": "^2.0",
+		"phpunit/phpunit": "^9.6",
+		"szepeviktor/phpstan-wordpress": "^2.0",
+		"wp-coding-standards/wpcs": "^3.1",
+		"yoast/phpunit-polyfills": "^4.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"Formstead\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"Formstead\\Tests\\": "tests/"
+		}
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true,
+			"phpstan/extension-installer": true
+		},
+		"optimize-autoloader": true,
+		"platform": {
+			"php": "8.3"
+		},
+		"sort-packages": true
+	},
+	"scripts": {
+		"analyse": "phpstan analyse",
+		"lint": "phpcs",
+		"lint:fix": "phpcbf",
+		"test": "phpunit"
+	}
+}
