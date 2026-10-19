@@ -16,7 +16,7 @@ rsync -a \
 	--exclude vendor/ \
 	"$ROOT/" "$PLUGIN_DIR/"
 
-COMPOSER_ROOT_VERSION="${COMPOSER_ROOT_VERSION:-0.0.1-dev}" \
+COMPOSER_ROOT_VERSION="${COMPOSER_ROOT_VERSION:-0.0.1}" \
 	composer install \
 	--working-dir="$PLUGIN_DIR" \
 	--no-dev \

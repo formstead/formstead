@@ -16,7 +16,7 @@ Please keep the report private until we publish a fix or confirm that the report
 
 ## Supported versions
 
-There are no public releases yet. Once a version is tagged, security fixes apply to the latest release. Older tags are not patched.
+Security fixes apply to the latest release. Older tags are not patched.
 
 ## Scope
 
