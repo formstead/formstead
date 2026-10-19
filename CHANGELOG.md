@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `npm run check` runs PHPUnit, PHPCS, PHPStan, and Plugin Check locally as the merge gate.
 
+### Fixed
+
+- Activate Twenty Twenty-Five on `wp-env start` so the development site is not a blank page when the database still points at a missing `default` theme.
+
 ## [0.0.1] - 2026-10-19
 
 ### Added

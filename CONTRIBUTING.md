@@ -17,7 +17,7 @@ npm install
 npx wp-env start
 ```
 
-The development site is at http://localhost:8888. Default credentials are `admin` / `password`.
+The development site is at http://localhost:8888. Default credentials are `admin` / `password`. `wp-env` activates Twenty Twenty-Five after start; WordPress 7.1.3 can otherwise leave `template` set to a missing `default` theme and render an empty front page.
 
 Stop the environment with `npx wp-env stop`. Destroy it, including the database, with `npx wp-env destroy`.
 
