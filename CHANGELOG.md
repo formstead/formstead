@@ -12,3 +12,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project license, security policy, and contribution guide.
 - Installable plugin bootstrap with PHP and WordPress minimums, a Multisite network-activation guard, and Composer autoloading.
 - Local `wp-env` environment, PHPUnit smoke tests, PHPCS, and PHPStan.
+- `SchemaTestCase` for activation and migration tests that need real tables.
