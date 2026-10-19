@@ -15,7 +15,10 @@ use Formstead\Lifecycle\Requirements;
 final class Plugin {
 
 	/**
-	 * Load translations. Domain logic is added in later stages.
+	 * Boot the plugin after WordPress has loaded plugins.
+	 *
+	 * Domain logic is added in later stages. WordPress 4.6+ loads translations
+	 * for the `formstead` text domain automatically when they are present.
 	 */
 	public static function boot(): void {
 		global $wp_version;
@@ -23,11 +26,5 @@ final class Plugin {
 		if ( ! Requirements::are_met( PHP_VERSION, (string) $wp_version ) ) {
 			return;
 		}
-
-		load_plugin_textdomain(
-			'formstead',
-			false,
-			dirname( plugin_basename( FORMSTEAD_FILE ) ) . '/languages'
-		);
 	}
 }
