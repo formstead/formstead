@@ -89,7 +89,7 @@ if ( ! formstead_php_meets_minimum() ) {
 	return;
 }
 
-$formstead_autoload = dirname( __FILE__ ) . '/vendor/autoload.php';
+$formstead_autoload = __DIR__ . '/vendor/autoload.php';
 if ( ! is_readable( $formstead_autoload ) ) {
 	add_action( 'admin_notices', 'formstead_missing_autoload_notice' );
 	return;
