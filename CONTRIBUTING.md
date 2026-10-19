@@ -37,6 +37,8 @@ If those paths change, `notes/stage-0-probes.md` records the confirmed container
 npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install
 ```
 
+PHPUnit must run in `tests-cli`. The `cli` container shares the development database, and the WordPress test installer drops that database.
+
 PHPUnit, PHPCS, PHPStan, and Plugin Check must pass in CI before a pull request is merged.
 
 ## Pull requests
