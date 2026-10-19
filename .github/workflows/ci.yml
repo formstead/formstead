@@ -122,6 +122,9 @@ jobs:
 
       - name: Run Plugin Check
         run: |
+          # The default Actions shell is `bash -e` without pipefail, so a failing
+          # `wp plugin check` would otherwise be hidden by `tee`.
+          set -o pipefail
           PCP_DIR="$(wp plugin path plugin-check --dir --path=wordpress)"
           wp plugin check formstead \
             --path=wordpress \

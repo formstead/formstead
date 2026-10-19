@@ -17,9 +17,16 @@ use WP_UnitTestCase;
  * can be tested against real tables in the tests database.
  *
  * WordPress PHPUnit rewrites `CREATE TABLE` to `CREATE TEMPORARY TABLE`.
- * `SHOW TABLES` then misses the table, and MySQL DDL commits the wrapping
- * transaction. Tests that need a durable schema opt into this base class and
- * drop the tables they create.
+ * `SHOW TABLES` then misses the table. Tests that need a durable schema opt
+ * into this base class and drop the tables they create.
+ *
+ * MySQL commits the suite transaction on DDL. The first `CREATE TABLE`
+ * commits writes made before it. `DROP TABLE` in `tear_down()` commits writes
+ * made after that `CREATE`. `parent::tear_down()` rolls back only work that
+ * happens after the last DDL statement, which is normally nothing. Do not
+ * rely on transaction rollback in subclasses. Register every table this test
+ * creates. Writes to other tables, including posts and options, leak into
+ * later tests.
  *
  * @group schema
  */

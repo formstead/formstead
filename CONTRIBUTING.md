@@ -29,7 +29,7 @@ Stop the environment with `npx wp-env stop`. Destroy it, including the database,
 npm run check
 ```
 
-Commands run in the WordPress environment. The plugin is mounted at `wp-content/plugins/formstead`. Individual steps:
+Commands run in the WordPress environment. Clone the repository into a directory named `formstead`. `wp-env` uses that directory name as the plugin slug, and these scripts expect the plugin at `wp-content/plugins/formstead`. Individual steps:
 
 ```sh
 npm test
@@ -38,7 +38,7 @@ npm run analyse
 npm run plugin-check
 ```
 
-If those paths change, `notes/stage-0-probes.md` records the confirmed container and mount. After Composer dependencies change, install them in the container:
+After Composer dependencies change, install them in the container:
 
 ```sh
 npm run composer -- install
