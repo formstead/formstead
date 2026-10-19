@@ -50,3 +50,110 @@ jobs:
 
       - name: PHPStan
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G
+
+  package:
+    name: ZIP and Plugin Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.3"
+          extensions: mysqli, zip
+          tools: composer, wp-cli
+          coverage: none
+
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Build ZIP
+        run: bash bin/build-zip.sh
+
+      - name: Download WordPress
+        run: wp core download --version=7.1.3 --path=wordpress --force
+
+      - name: Create wp-config
+        run: |
+          wp config create \
+            --path=wordpress \
+            --dbname=wordpress \
+            --dbuser=root \
+            --dbpass=root \
+            --dbhost=127.0.0.1 \
+            --extra-php <<'PHP'
+          define( 'WP_DEBUG', true );
+          define( 'WP_DEBUG_LOG', true );
+          define( 'WP_DEBUG_DISPLAY', false );
+          PHP
+
+      - name: Install WordPress
+        run: |
+          wp core install \
+            --path=wordpress \
+            --url=http://127.0.0.1:8080 \
+            --title=Formstead \
+            --admin_user=admin \
+            --admin_password=password \
+            --admin_email=admin@example.com \
+            --skip-email
+
+      - name: Install Formstead from ZIP
+        run: wp plugin install formstead.zip --activate --path=wordpress
+
+      - name: Install Plugin Check
+        run: wp plugin install plugin-check --activate --path=wordpress
+
+      - name: Run Plugin Check
+        run: |
+          PCP_DIR="$(wp plugin path plugin-check --dir --path=wordpress)"
+          wp plugin check formstead \
+            --path=wordpress \
+            --require="${PCP_DIR}/cli.php" \
+            --format=json | tee plugin-check.json
+          if grep -q '"type":"ERROR"' plugin-check.json; then
+            echo "Plugin Check reported errors."
+            exit 1
+          fi
+          echo "Plugin Check reported no errors."
+
+      - name: Hit front and login over PHP's built-in server
+        run: |
+          php -S 127.0.0.1:8080 -t wordpress >/tmp/php-server.log 2>&1 &
+          for i in $(seq 1 20); do
+            if curl -sf -o /dev/null http://127.0.0.1:8080/; then
+              break
+            fi
+            sleep 0.5
+          done
+          curl -sf -o /dev/null -w 'front:%{http_code}\n' http://127.0.0.1:8080/
+          curl -sf -o /dev/null -w 'login:%{http_code}\n' http://127.0.0.1:8080/wp-login.php
+          if [[ -f wordpress/wp-content/debug.log ]]; then
+            echo "debug.log is not empty:"
+            cat wordpress/wp-content/debug.log
+            exit 1
+          fi
+          echo "debug.log is absent (no warnings)."
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: formstead
+          path: formstead.zip
+
