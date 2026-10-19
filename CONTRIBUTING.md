@@ -23,29 +23,35 @@ Stop the environment with `npx wp-env stop`. Destroy it, including the database,
 
 ## Tests and quality checks
 
-Commands run in the WordPress environment. The plugin is mounted at `wp-content/plugins/formstead`.
+`npm run check` is the merge gate. It runs PHPUnit, PHPCS, PHPStan, and Plugin Check inside `wp-env`. Plugin Check skips development paths that `.distignore` keeps out of the ZIP, matching the package job. GitHub Actions repeats those commands as smoke when hosted runners are available; do not wait on the queue before merging.
 
 ```sh
-npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit
-npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs
-npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse
+npm run check
+```
+
+Commands run in the WordPress environment. The plugin is mounted at `wp-content/plugins/formstead`. Individual steps:
+
+```sh
+npm test
+npm run lint
+npm run analyse
+npm run plugin-check
 ```
 
 If those paths change, `notes/stage-0-probes.md` records the confirmed container and mount. After Composer dependencies change, install them in the container:
 
 ```sh
-npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install
+npm run composer -- install
 ```
 
 PHPUnit must run in `tests-cli`. The `cli` container shares the development database, and the WordPress test installer drops that database.
-
-PHPUnit, PHPCS, PHPStan, and Plugin Check must pass in CI before a pull request is merged.
 
 ## Pull requests
 
 - One topic per pull request.
 - Open against `main`.
 - Link the GitHub issue with `Closes #n`.
+- Merge when `npm run check` has passed locally.
 - Do not add domain logic in a scaffolding change, and do not mix refactors with behaviour changes.
 
 ## Commits

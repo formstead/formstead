@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `npm run check` runs PHPUnit, PHPCS, PHPStan, and Plugin Check locally as the merge gate.
+
 ## [0.0.1] - 2026-10-19
 
 ### Added
