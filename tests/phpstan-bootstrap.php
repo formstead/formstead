@@ -6,7 +6,7 @@
  */
 
 if ( ! defined( 'FORMSTEAD_VERSION' ) ) {
-	define( 'FORMSTEAD_VERSION', '0.0.1-dev' );
+	define( 'FORMSTEAD_VERSION', '0.0.1' );
 }
 
 if ( ! defined( 'FORMSTEAD_FILE' ) ) {
