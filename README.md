@@ -8,7 +8,7 @@ License: [GPL-2.0-or-later](LICENSE).
 
 ## Status
 
-Pre-release skeleton `0.0.1`. Domain logic is not implemented yet. The plugin is installable and activates on WordPress 7.0+ with PHP 8.3+.
+Pre-release skeleton `0.0.2`. Domain logic is not implemented yet. The plugin is installable and activates on WordPress 7.0+ with PHP 8.3+.
 
 - Public contact: hello@formstead.dev
 - Security reports: [SECURITY.md](SECURITY.md) (`security@formstead.dev`)
