@@ -434,40 +434,7 @@ jobs:
             fi
             sleep 0.5
           done
-          python3 - <<'PY'
-import json, sys
-data = json.load(open("/tmp/formstead-mailpit.json"))
-messages = data.get("messages") or []
-if data.get("total") != 1 or len(messages) != 1:
-    print("Expected one Mailpit message.", file=sys.stderr)
-    print(data, file=sys.stderr)
-    sys.exit(1)
-subject = str(messages[0].get("Subject") or "")
-if "idem-secret@example.com" in subject or "\n" in subject or "\r" in subject:
-    print("Subject contains the submitted value or a line break.", file=sys.stderr)
-    sys.exit(1)
-if "Contact" not in subject:
-    print("Subject did not include the form name.", file=sys.stderr)
-    print(subject, file=sys.stderr)
-    sys.exit(1)
-message_id = str(messages[0].get("ID") or "")
-open("/tmp/formstead-mailpit-id", "w", encoding="utf-8").write(message_id)
-PY
-          message_id="$(tr -d '[:space:]' < /tmp/formstead-mailpit-id)"
-          curl -sf "http://127.0.0.1:8025/api/v1/message/${message_id}" -o /tmp/formstead-mailpit-message.json
-          python3 - <<'PY'
-import json, sys
-data = json.load(open("/tmp/formstead-mailpit-message.json"))
-text = str(data.get("Text") or "")
-if "idem-secret@example.com" in text:
-    print("Message body included the submitted value.", file=sys.stderr)
-    sys.exit(1)
-if "page=formstead" not in text or "submission=" not in text:
-    print("Message body did not link to the inbox.", file=sys.stderr)
-    print(text, file=sys.stderr)
-    sys.exit(1)
-print("Mailpit stored one notification.")
-PY
+          bash bin/ci/assert-one-mailpit-message.sh 8025 idem-secret@example.com
 
           invalid_headers="$(mktemp)"
           invalid_code="$(curl -s -D "$invalid_headers" -o /tmp/formstead-invalid-body -w '%{http_code}' \
