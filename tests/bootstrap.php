@@ -33,8 +33,18 @@ require_once $formstead_tests_dir . '/includes/functions.php';
 
 /**
  * Load Formstead as a must-use plugin during tests.
+ *
+ * Prefer the copy inside the WordPress plugins directory. `plugin_basename()`
+ * only returns `formstead/formstead.php` for a file under that directory.
+ * The MySQL job symlinks the checkout there. wp-env already keeps it there.
  */
 function formstead_tests_load_plugin() {
+	$installed = WP_PLUGIN_DIR . '/formstead/formstead.php';
+	if ( is_readable( $installed ) ) {
+		require $installed;
+		return;
+	}
+
 	require dirname( __DIR__ ) . '/formstead.php';
 }
 
