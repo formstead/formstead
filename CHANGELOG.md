@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-20
+
 ### Added
 
 - Activation creates the forms and submissions tables and grants the four Formstead capabilities to administrators.
@@ -14,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The admin can create and edit forms. The endpoint URL comes from `rest_url()`.
 - A public form POST stores the submission and redirects to the form's success URL. Invalid fields get an HTML error page.
 - Administrators can read submissions. Opening one does not change its status.
+- The package job sends a real POST on a clean install and checks that uninstall keeps the tables.
 
 ### Changed
 
@@ -50,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/formstead/formstead/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/formstead/formstead/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/formstead/formstead/releases/tag/v0.0.1
