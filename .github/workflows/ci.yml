@@ -226,13 +226,29 @@ jobs:
             exit 1
           fi
 
-          invalid_code="$(curl -s -o /tmp/formstead-invalid-body -w '%{http_code}' \
+          invalid_headers="$(mktemp)"
+          invalid_code="$(curl -s -D "$invalid_headers" -o /tmp/formstead-invalid-body -w '%{http_code}' \
             -H 'Content-Type: application/x-www-form-urlencoded' \
-            --data 'extra=1' \
+            --data 'extra=dropped-secret' \
             "$endpoint")"
           echo "post_invalid:${invalid_code}"
           if [[ "$invalid_code" != "422" ]]; then
             echo "Expected 422 when the required field is missing." >&2
+            cat "$invalid_headers" >&2
+            exit 1
+          fi
+          if ! grep -Eqi '^Content-Type:.*text/html' "$invalid_headers"; then
+            echo "422 response was not text/html." >&2
+            cat "$invalid_headers" >&2
+            exit 1
+          fi
+          if ! grep -q '<ul>' /tmp/formstead-invalid-body; then
+            echo "422 page did not list field errors." >&2
+            cat /tmp/formstead-invalid-body >&2
+            exit 1
+          fi
+          if grep -q 'dropped-secret' /tmp/formstead-invalid-body; then
+            echo "422 page echoed the submitted value." >&2
             exit 1
           fi
           row_count="$(submission_count)"

@@ -99,7 +99,7 @@ $next_index  = count( $rows );
 					<th scope="col"><?php echo esc_html__( 'Remove', 'formstead' ); ?></th>
 				</tr>
 			</thead>
-			<tbody id="formstead-fields">
+			<tbody id="formstead-fields" data-next-index="<?php echo esc_attr( (string) $next_index ); ?>">
 				<?php foreach ( $rows as $index => $row ) : ?>
 					<?php
 					if ( ! is_array( $row ) ) {
@@ -148,11 +148,11 @@ $next_index  = count( $rows );
 							<?php endif; ?>
 						</td>
 						<td>
-							<label>
+							<label data-remove-fallback>
 								<input name="fields[<?php echo esc_attr( (string) $index ); ?>][remove]" type="checkbox" value="1">
 								<?php echo esc_html__( 'Remove', 'formstead' ); ?>
 							</label>
-							<button type="button" class="button-link" data-remove-field><?php echo esc_html__( 'Remove', 'formstead' ); ?></button>
+							<button type="button" class="button-link" data-remove-field hidden><?php echo esc_html__( 'Remove', 'formstead' ); ?></button>
 						</td>
 					</tr>
 				<?php endforeach; ?>
@@ -178,11 +178,11 @@ $next_index  = count( $rows );
 				<td><input name="fields[__INDEX__][required]" type="checkbox" value="1"></td>
 				<td><input name="fields[__INDEX__][max_length]" type="number" min="1" max="10000" value="" class="small-text"></td>
 				<td>
-					<label>
+					<label data-remove-fallback>
 						<input name="fields[__INDEX__][remove]" type="checkbox" value="1">
 						<?php echo esc_html__( 'Remove', 'formstead' ); ?>
 					</label>
-					<button type="button" class="button-link" data-remove-field><?php echo esc_html__( 'Remove', 'formstead' ); ?></button>
+					<button type="button" class="button-link" data-remove-field hidden><?php echo esc_html__( 'Remove', 'formstead' ); ?></button>
 				</td>
 			</tr>
 		</template>
@@ -190,9 +190,3 @@ $next_index  = count( $rows );
 	<?php submit_button( $form instanceof Form ? __( 'Save form', 'formstead' ) : __( 'Create form', 'formstead' ) ); ?>
 </form>
 </div>
-<script>
-	var formsteadFields = document.getElementById( 'formstead-fields' );
-	if ( formsteadFields ) {
-		formsteadFields.setAttribute( 'data-next-index', '<?php echo esc_attr( (string) $next_index ); ?>' );
-	}
-</script>
