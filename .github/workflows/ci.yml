@@ -196,3 +196,14 @@ jobs:
           name: formstead
           path: formstead.zip
 
+  legacy-php-lint:
+    name: PHP 7.4 syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Lint formstead.php on PHP 7.4
+        run: docker run --rm -v "$PWD:/app" -w /app php:7.4-cli php -l formstead.php
+

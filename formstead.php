@@ -33,6 +33,7 @@ define( 'FORMSTEAD_MIN_WP', '7.0' );
  * Whether the current PHP version meets the plugin minimum.
  *
  * Kept procedural and free of PHP 8 syntax so this file still parses on older runtimes.
+ * The legacy-php-lint CI job runs `php -l` on this file with PHP 7.4.
  *
  * @return bool
  */
