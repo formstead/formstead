@@ -23,7 +23,11 @@ Stop the environment with `npx wp-env stop`. Destroy it, including the database,
 
 ## Tests and quality checks
 
-`npm run check` is the merge gate. It runs PHPUnit, PHPCS, PHPStan, and Plugin Check inside `wp-env`. Plugin Check skips development paths that `.distignore` keeps out of the ZIP, matching the package job. GitHub Actions repeats those commands as smoke when hosted runners are available; do not wait on the queue before merging.
+`npm run check` is a fast local check before you push. It runs PHPUnit, PHPCS, PHPStan, and Plugin Check inside `wp-env`. Plugin Check skips development paths that `.distignore` keeps out of the ZIP.
+
+GitHub Actions runs those checks and a separate `package` job that builds the ZIP and installs it on a clean WordPress. Merge only after both `checks` and `package` are green on the pull request.
+
+Branch protection is unavailable on this private repository, so apply that rule by hand. Do not push directly to `main`, including fixes to CI.
 
 ```sh
 npm run check
@@ -48,10 +52,10 @@ PHPUnit must run in `tests-cli`. The `cli` container shares the development data
 
 ## Pull requests
 
-- One topic per pull request.
+- One topic per pull request and per commit.
 - Open against `main`.
 - Link the GitHub issue with `Closes #n`.
-- Merge when `npm run check` has passed locally.
+- Merge only after the `checks` and `package` jobs are green. Do not push the branch to `main` directly.
 - Do not add domain logic in a scaffolding change, and do not mix refactors with behaviour changes.
 
 ## Commits
