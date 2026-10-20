@@ -57,31 +57,37 @@ final class ProtectionTest extends WP_UnitTestCase {
 
 	/**
 	 * A declared Content-Length over the limit is refused even when the body is short.
+	 *
+	 * @dataProvider modes
+	 * @param string $mode `html` or `json`.
 	 */
-	public function test_declared_content_length_returns_413(): void {
+	public function test_declared_content_length_returns_413( string $mode ): void {
 		$form    = $this->save_form();
-		$request = $this->request( $form->public_id(), 'html', 'email=a@b.co' );
+		$request = $this->request( $form->public_id(), $mode, 'email=a@b.co' );
 		$request->set_header( 'Content-Length', '999999' );
 
 		$response = rest_do_request( $request );
 
-		$this->assert_error( $response, 'html', 413, 'payload_too_large' );
+		$this->assert_error( $response, $mode, 413, 'payload_too_large' );
 		$this->assertSame( array(), $this->rows() );
 	}
 
 	/**
 	 * More than 50 raw fields, including array elements, is refused.
+	 *
+	 * @dataProvider modes
+	 * @param string $mode `html` or `json`.
 	 */
-	public function test_too_many_fields_returns_413(): void {
+	public function test_too_many_fields_returns_413( string $mode ): void {
 		$form  = $this->save_form();
 		$parts = array( 'email=a@b.co' );
 		for ( $index = 0; $index < 50; $index++ ) {
 			$parts[] = 'extra' . $index . '=1';
 		}
 
-		$response = rest_do_request( $this->request( $form->public_id(), 'json', implode( '&', $parts ) ) );
+		$response = rest_do_request( $this->request( $form->public_id(), $mode, implode( '&', $parts ) ) );
 
-		$this->assert_error( $response, 'json', 413, 'payload_too_large' );
+		$this->assert_error( $response, $mode, 413, 'payload_too_large' );
 		$this->assertSame( array(), $this->rows() );
 	}
 
@@ -164,24 +170,27 @@ final class ProtectionTest extends WP_UnitTestCase {
 
 	/**
 	 * The sixth submission from one address is told to wait.
+	 *
+	 * @dataProvider modes
+	 * @param string $mode `html` or `json`.
 	 */
-	public function test_sixth_request_from_one_address_returns_429(): void {
+	public function test_sixth_request_from_one_address_returns_429( string $mode ): void {
 		$form = $this->save_form();
 		$this->wait_for_rate_window();
 		$this->set_remote( '203.0.113.10' );
 
 		try {
 			for ( $index = 0; $index < 5; $index++ ) {
-				$response = rest_do_request( $this->request( $form->public_id(), 'json', 'email=a@b.co' ) );
-				$this->assertSame( 201, $response->get_status() );
+				$response = rest_do_request( $this->request( $form->public_id(), $mode, 'email=a@b.co' ) );
+				$this->assertSame( 'json' === $mode ? 201 : 303, $response->get_status() );
 			}
 
-			$limited = rest_do_request( $this->request( $form->public_id(), 'html', 'email=a@b.co' ) );
+			$limited = rest_do_request( $this->request( $form->public_id(), $mode, 'email=a@b.co' ) );
 		} finally {
 			$this->clear_remote();
 		}
 
-		$this->assert_error( $limited, 'html', 429, 'rate_limited' );
+		$this->assert_error( $limited, $mode, 429, 'rate_limited' );
 		$this->assertArrayHasKey( 'Retry-After', $limited->get_headers() );
 		$this->assertGreaterThan( 0, (int) $limited->get_headers()['Retry-After'] );
 		$this->assertCount( 5, $this->rows() );

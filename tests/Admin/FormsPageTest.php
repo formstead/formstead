@@ -14,6 +14,7 @@ use Formstead\Admin\FormsPage;
 use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
+use Formstead\Forms\FormProtection;
 use Formstead\Forms\FormRepository;
 use Formstead\Forms\PublicId;
 use WP_UnitTestCase;
@@ -193,6 +194,99 @@ final class FormsPageTest extends WP_UnitTestCase {
 		$html = (string) ob_get_clean();
 		$this->assertStringContainsString( 'Reload the screen', $html );
 		$this->assertStringContainsString( 'name="schema_version" value="1"', $html );
+	}
+
+	/**
+	 * An allowlist and both rate overrides are stored without a new schema version.
+	 */
+	public function test_protection_settings_are_saved(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->insert_contact_form();
+
+		$this->post_form();
+		$_POST['form_id']         = (string) $saved->id();
+		$_POST['schema_version']  = (string) $saved->schema_version();
+		$_POST['allowed_origins'] = "https://Forms.Example:443\nhttp://forms.example:8080";
+		$_POST['rate_per_minute'] = '2';
+		$_POST['rate_per_hour']   = '20';
+		$_REQUEST                 = $_POST;
+
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( array( 'https://forms.example', 'http://forms.example:8080' ), $loaded->protection()->allowed_origins() );
+		$this->assertSame( 2, $loaded->protection()->rate_per_minute() );
+		$this->assertSame( 20, $loaded->protection()->rate_per_hour() );
+		$this->assertSame( 1, $loaded->schema_version() );
+	}
+
+	/**
+	 * A bad origin and a rate outside the ceiling change nothing and are shown.
+	 */
+	public function test_invalid_protection_settings_keep_the_saved_form(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->insert_contact_form();
+
+		$this->post_form();
+		$_POST['form_id']         = (string) $saved->id();
+		$_POST['schema_version']  = (string) $saved->schema_version();
+		$_POST['name']            = 'Renamed';
+		$_POST['allowed_origins'] = 'https://forms.example/path';
+		$_POST['rate_per_minute'] = '61';
+		$_REQUEST                 = $_POST;
+
+		FormsPage::handle_load();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 'Contact', $loaded->name() );
+		$this->assertSame( array(), $loaded->protection()->allowed_origins() );
+		$this->assertNull( $loaded->protection()->rate_per_minute() );
+
+		ob_start();
+		FormsPage::render();
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'without a path', $html );
+		$this->assertStringContainsString( 'per-minute limit', $html );
+	}
+
+	/**
+	 * Empty protection fields clear a stored allowlist and rate override.
+	 */
+	public function test_empty_protection_settings_use_the_global_limits(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = ( new FormRepository() )->insert(
+			new Form(
+				0,
+				'',
+				'Contact',
+				true,
+				array( new Field( 'email', 'Email', FieldType::Email, true, 255 ) ),
+				1,
+				'https://example.com/thanks',
+				'',
+				'',
+				new FormProtection( array( 'https://forms.example' ), 2, 20 )
+			)
+		);
+		$this->assertInstanceOf( Form::class, $saved );
+
+		$this->post_form();
+		$_POST['form_id']         = (string) $saved->id();
+		$_POST['schema_version']  = (string) $saved->schema_version();
+		$_POST['allowed_origins'] = '';
+		$_POST['rate_per_minute'] = '';
+		$_POST['rate_per_hour']   = '';
+		$_REQUEST                 = $_POST;
+
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( array(), $loaded->protection()->allowed_origins() );
+		$this->assertNull( $loaded->protection()->rate_per_minute() );
+		$this->assertNull( $loaded->protection()->rate_per_hour() );
 	}
 
 	/**
