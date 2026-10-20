@@ -136,7 +136,7 @@ final class SubmissionsPage {
 			$field  = $form instanceof Form ? $form->field( $name ) : null;
 			$rows[] = array(
 				'label'     => null !== $field ? $field->label() : $name,
-				'value'     => $value,
+				'value'     => self::as_text( $value ),
 				'multiline' => null !== $field && FieldType::Textarea === $field->type(),
 			);
 		}
@@ -155,7 +155,8 @@ final class SubmissionsPage {
 			return '';
 		}
 
-		$value = (string) reset( $payload );
+		$first = reset( $payload );
+		$value = self::as_text( is_string( $first ) || is_bool( $first ) || is_array( $first ) ? $first : '' );
 		$flat  = preg_replace( '/\s+/', ' ', $value );
 		$flat  = trim( is_string( $flat ) ? $flat : $value );
 		if ( mb_strlen( $flat ) <= 80 ) {
@@ -163,6 +164,25 @@ final class SubmissionsPage {
 		}
 
 		return mb_substr( $flat, 0, 80 ) . '…';
+	}
+
+	/**
+	 * One line of text for a stored value.
+	 *
+	 * Checkbox and choice values are readable here. The snapshot view replaces
+	 * this with labels.
+	 *
+	 * @param string|bool|list<string> $value Stored value.
+	 */
+	private static function as_text( string|bool|array $value ): string {
+		if ( is_bool( $value ) ) {
+			return $value ? '1' : '0';
+		}
+		if ( is_array( $value ) ) {
+			return implode( ', ', $value );
+		}
+
+		return $value;
 	}
 
 	/**

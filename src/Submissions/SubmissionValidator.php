@@ -7,47 +7,60 @@
 
 namespace Formstead\Submissions;
 
-use Formstead\Forms\Field;
-use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 
 /**
  * Checks posted values against the current field schema.
  *
  * Only fields on the form are read. Unknown names, including reserved `_fs_`
- * names, are ignored and are not stored.
+ * names, are ignored and are not stored. An optional empty value is omitted.
+ * A boolean is always stored.
  */
 final class SubmissionValidator {
 
-	public const REQUIRED = 'required';
-
-	public const TOO_LONG = 'too_long';
-
-	public const INVALID_EMAIL = 'invalid_email';
-
-	public const INVALID = 'invalid';
+	/**
+	 * Field normalizer.
+	 *
+	 * @var ValueNormalizer
+	 */
+	private ValueNormalizer $normalizer;
 
 	/**
-	 * Validate body parameters for a form.
+	 * Create a validator.
 	 *
-	 * Values are trimmed before the required and length checks, and the trimmed
-	 * value is what would be stored.
+	 * @param ValueNormalizer|null $normalizer Normalizer to use. Tests can pass their own.
+	 */
+	public function __construct( ?ValueNormalizer $normalizer = null ) {
+		$this->normalizer = $normalizer instanceof ValueNormalizer ? $normalizer : new ValueNormalizer();
+	}
+
+	/**
+	 * Validate input for a form.
 	 *
 	 * @param Form                 $form  Form that owns the schema.
-	 * @param array<string, mixed> $input Body parameters.
+	 * @param array<string, mixed> $input Body parameters or a decoded JSON object.
 	 */
 	public function validate( Form $form, array $input ): SubmissionValidation {
 		$values = array();
 		$errors = array();
 
 		foreach ( $form->fields() as $field ) {
-			$error = $this->field_error( $field, $input );
-			if ( null !== $error ) {
-				$errors[ $field->name() ] = $error;
+			$present    = array_key_exists( $field->name(), $input );
+			$normalized = $this->normalizer->normalize( $field, $present, $present ? $input[ $field->name() ] : null );
+			if ( ! $normalized->ok() ) {
+				$error                    = $normalized->error();
+				$errors[ $field->name() ] = $error instanceof FieldError ? $error : FieldError::Invalid;
 				continue;
 			}
 
-			$values[ $field->name() ] = $this->text_value( $field, $input );
+			if ( $normalized->is_omitted() ) {
+				continue;
+			}
+
+			$value = $normalized->value();
+			if ( is_string( $value ) || is_bool( $value ) || is_array( $value ) ) {
+				$values[ $field->name() ] = $value;
+			}
 		}
 
 		if ( array() !== $errors ) {
@@ -55,48 +68,5 @@ final class SubmissionValidator {
 		}
 
 		return new SubmissionValidation( $values, array() );
-	}
-
-	/**
-	 * Error code for one field, or null when the value can be stored.
-	 *
-	 * @param Field                $field Field schema.
-	 * @param array<string, mixed> $input Body parameters.
-	 */
-	private function field_error( Field $field, array $input ): ?string {
-		if ( ! array_key_exists( $field->name(), $input ) ) {
-			return $field->required() ? self::REQUIRED : null;
-		}
-
-		$raw = $input[ $field->name() ];
-		if ( ! is_string( $raw ) ) {
-			return self::INVALID;
-		}
-
-		$value = trim( $raw );
-		if ( $field->required() && '' === $value ) {
-			return self::REQUIRED;
-		}
-
-		if ( mb_strlen( $value ) > $field->max_length() ) {
-			return self::TOO_LONG;
-		}
-
-		if ( FieldType::Email === $field->type() && '' !== $value && ! is_email( $value ) ) {
-			return self::INVALID_EMAIL;
-		}
-
-		return null;
-	}
-
-	/**
-	 * Trimmed text for a field that has already passed validation.
-	 *
-	 * @param Field                $field Field schema.
-	 * @param array<string, mixed> $input Body parameters.
-	 */
-	private function text_value( Field $field, array $input ): string {
-		$raw = $input[ $field->name() ] ?? '';
-		return is_string( $raw ) ? trim( $raw ) : '';
 	}
 }

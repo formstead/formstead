@@ -12,6 +12,15 @@
 		next = root.querySelectorAll( '[data-field-row]' ).length;
 	}
 
+	function showSettings( row ) {
+		var select = row.querySelector( '[data-field-type]' );
+		var type = select ? select.value : '';
+		row.querySelectorAll( '[data-settings-for]' ).forEach( function ( block ) {
+			var types = ( block.getAttribute( 'data-settings-for' ) || '' ).split( ' ' );
+			block.hidden = types.indexOf( type ) === -1;
+		} );
+	}
+
 	function enhance( row ) {
 		var button = row.querySelector( '[data-remove-field]' );
 		var fallback = row.querySelector( '[data-remove-fallback]' );
@@ -21,6 +30,7 @@
 		if ( fallback ) {
 			fallback.hidden = true;
 		}
+		showSettings( row );
 	}
 
 	root.querySelectorAll( '[data-field-row]' ).forEach( enhance );
@@ -38,6 +48,18 @@
 		enhance( copy );
 		root.appendChild( copy );
 		next += 1;
+	} );
+
+	root.addEventListener( 'change', function ( event ) {
+		var select = event.target.closest( '[data-field-type]' );
+		if ( ! select || ! root.contains( select ) ) {
+			return;
+		}
+
+		var row = select.closest( '[data-field-row]' );
+		if ( row ) {
+			showSettings( row );
+		}
 	} );
 
 	root.addEventListener( 'click', function ( event ) {

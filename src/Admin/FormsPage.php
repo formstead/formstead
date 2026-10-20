@@ -308,6 +308,11 @@ final class FormsPage {
 			'type'       => self::text_value( $row['type'] ?? null ),
 			'required'   => isset( $row['required'] ) ? '1' : '',
 			'max_length' => self::text_value( $row['max_length'] ?? null ),
+			'min'        => self::text_value( $row['min'] ?? null ),
+			'max'        => self::text_value( $row['max'] ?? null ),
+			'scale'      => self::text_value( $row['scale'] ?? null ),
+			'options'    => self::options_value( $row['options'] ?? null ),
+			'multiple'   => isset( $row['multiple'] ) ? '1' : '',
 			'remove'     => isset( $row['remove'] ) ? '1' : '',
 		);
 	}
@@ -328,6 +333,24 @@ final class FormsPage {
 	 */
 	private static function label_value( mixed $value ): string {
 		return is_string( $value ) ? sanitize_text_field( $value ) : '';
+	}
+
+	/**
+	 * Option lines. Tags are removed and the line breaks are kept.
+	 *
+	 * @param mixed $value Posted options.
+	 */
+	private static function options_value( mixed $value ): string {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+
+		$lines = preg_split( '/\R/', wp_strip_all_tags( $value ) );
+		if ( ! is_array( $lines ) ) {
+			return '';
+		}
+
+		return implode( "\n", array_map( 'trim', $lines ) );
 	}
 
 	/**
@@ -370,12 +393,22 @@ final class FormsPage {
 	 * @return array<string, string>
 	 */
 	private static function row_from_field( Field $field ): array {
+		$lines = array();
+		foreach ( $field->settings()->options() as $option ) {
+			$lines[] = $option['value'] . '|' . $option['label'];
+		}
+
 		return array(
 			'name'       => $field->name(),
 			'label'      => $field->label(),
 			'type'       => $field->type()->value,
 			'required'   => $field->required() ? '1' : '',
 			'max_length' => (string) $field->max_length(),
+			'min'        => (string) $field->settings()->min(),
+			'max'        => (string) $field->settings()->max(),
+			'scale'      => FieldType::Number === $field->type() ? (string) $field->settings()->scale() : '',
+			'options'    => implode( "\n", $lines ),
+			'multiple'   => $field->settings()->multiple() ? '1' : '',
 			'remove'     => '',
 		);
 	}
@@ -401,6 +434,11 @@ final class FormsPage {
 					'type'       => isset( $row['type'] ) ? (string) $row['type'] : '',
 					'required'   => isset( $row['required'] ) && '1' === (string) $row['required'] ? '1' : '',
 					'max_length' => isset( $row['max_length'] ) ? (string) $row['max_length'] : '',
+					'min'        => isset( $row['min'] ) ? (string) $row['min'] : '',
+					'max'        => isset( $row['max'] ) ? (string) $row['max'] : '',
+					'scale'      => isset( $row['scale'] ) ? (string) $row['scale'] : '',
+					'options'    => isset( $row['options'] ) ? (string) $row['options'] : '',
+					'multiple'   => isset( $row['multiple'] ) && '1' === (string) $row['multiple'] ? '1' : '',
 					'remove'     => isset( $row['remove'] ) && '1' === (string) $row['remove'] ? '1' : '',
 				);
 			}
@@ -412,10 +450,15 @@ final class FormsPage {
 			'type'       => '',
 			'required'   => '',
 			'max_length' => '',
+			'min'        => '',
+			'max'        => '',
+			'scale'      => '',
+			'options'    => '',
+			'multiple'   => '',
 			'remove'     => '',
 		);
 		$last  = $normalized[ count( $normalized ) - 1 ] ?? null;
-		if ( ! is_array( $last ) || '' !== $last['name'] || '' !== $last['label'] || '' !== $last['type'] || '' !== $last['max_length'] ) {
+		if ( ! is_array( $last ) || '' !== $last['name'] || '' !== $last['label'] || '' !== $last['type'] || '' !== $last['max_length'] || '' !== $last['min'] || '' !== $last['max'] || '' !== $last['scale'] || '' !== $last['options'] ) {
 			$normalized[] = $blank;
 		}
 
@@ -431,6 +474,9 @@ final class FormsPage {
 		return match ( $type ) {
 			FieldType::Email->value => __( 'Email', 'formstead' ),
 			FieldType::Textarea->value => __( 'Textarea', 'formstead' ),
+			FieldType::Number->value => __( 'Number', 'formstead' ),
+			FieldType::Boolean->value => __( 'Checkbox', 'formstead' ),
+			FieldType::Choice->value => __( 'Choice', 'formstead' ),
 			default => __( 'Text', 'formstead' ),
 		};
 	}
