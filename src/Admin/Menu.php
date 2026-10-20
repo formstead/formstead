@@ -37,7 +37,7 @@ final class Menu {
 			__( 'Formstead', 'formstead' ),
 			Capabilities::READ_SUBMISSIONS,
 			self::MENU_SLUG,
-			array( self::class, 'render_submissions' ),
+			array( SubmissionsPage::class, 'render' ),
 			'dashicons-feedback',
 			26
 		);
@@ -57,23 +57,5 @@ final class Menu {
 		}
 
 		add_action( 'admin_enqueue_scripts', array( FormsPage::class, 'enqueue' ) );
-	}
-
-	/**
-	 * Placeholder inbox until the submissions screen is registered.
-	 */
-	public static function render_submissions(): void {
-		if ( ! current_user_can( Capabilities::READ_SUBMISSIONS ) ) {
-			wp_die(
-				esc_html__( 'Sorry, you are not allowed to read submissions.', 'formstead' ),
-				'',
-				array( 'response' => 403 )
-			);
-		}
-
-		echo '<div class="wrap">';
-		echo '<h1>' . esc_html__( 'Submissions', 'formstead' ) . '</h1>';
-		echo '<p>' . esc_html__( 'No submissions yet.', 'formstead' ) . '</p>';
-		echo '</div>';
 	}
 }

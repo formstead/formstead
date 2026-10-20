@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forms can be stored with a public id, field schema, and an absolute success URL.
 - The admin can create and edit forms. The endpoint URL comes from `rest_url()`.
 - A public form POST stores the submission and redirects to the form's success URL. Invalid fields get an HTML error page.
+- Administrators can read submissions. Opening one does not change its status.
 
 ### Changed
 
