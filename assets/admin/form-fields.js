@@ -12,6 +12,19 @@
 		next = root.querySelectorAll( '[data-field-row]' ).length;
 	}
 
+	function enhance( row ) {
+		var button = row.querySelector( '[data-remove-field]' );
+		var fallback = row.querySelector( '[data-remove-fallback]' );
+		if ( button ) {
+			button.hidden = false;
+		}
+		if ( fallback ) {
+			fallback.hidden = true;
+		}
+	}
+
+	root.querySelectorAll( '[data-field-row]' ).forEach( enhance );
+
 	add.addEventListener( 'click', function () {
 		var row = template.content.querySelector( '[data-field-row]' );
 		if ( ! row ) {
@@ -22,6 +35,7 @@
 		copy.querySelectorAll( '[name]' ).forEach( function ( input ) {
 			input.name = input.name.replace( '__INDEX__', String( next ) );
 		} );
+		enhance( copy );
 		root.appendChild( copy );
 		next += 1;
 	} );
