@@ -171,6 +171,92 @@ jobs:
             echo "debug.log is absent or empty."
           }
 
+          prefix="$(wp db prefix --path=wordpress)"
+          assert_schema() {
+            local found table
+            found="$(wp db query "SHOW TABLES" --skip-column-names --path=wordpress)"
+            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions"; do
+              if ! grep -Fxq "$table" <<<"$found"; then
+                echo "Missing table ${table}." >&2
+                printf '%s\n' "$found" >&2
+                exit 1
+              fi
+            done
+            echo "Formstead tables are present."
+          }
+
+          submission_count() {
+            wp db query "SELECT COUNT(*) FROM ${prefix}formstead_submissions" --skip-column-names --path=wordpress | tr -d '[:space:]'
+          }
+
+          assert_schema
+          db_version="$(wp option get formstead_db_version --path=wordpress)"
+          if [[ "$db_version" != "1" ]]; then
+            echo "Expected formstead_db_version 1, got ${db_version}." >&2
+            exit 1
+          fi
+
+          public_id="$(wp eval-file bin/ci/seed-form.php --path=wordpress)"
+          if [[ ! "$public_id" =~ ^fs_[a-z2-7]{16}$ ]]; then
+            echo "Seed did not print a public id: ${public_id}" >&2
+            exit 1
+          fi
+          endpoint="$(wp eval "echo rest_url( 'formstead/v1/forms/${public_id}/submissions' );" --path=wordpress)"
+          echo "endpoint:${endpoint}"
+
+          success_headers="$(mktemp)"
+          success_code="$(curl -s -D "$success_headers" -o /tmp/formstead-success-body -w '%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'email=a@b.co' \
+            "$endpoint")"
+          echo "post_ok:${success_code}"
+          if [[ "$success_code" != "303" ]]; then
+            echo "Expected 303 from a valid POST." >&2
+            cat "$success_headers" >&2
+            exit 1
+          fi
+          if ! grep -Eq '^Location: https://example.com/thanks[[:space:]]*$' "$success_headers"; then
+            echo "Location was not the configured success URL." >&2
+            cat "$success_headers" >&2
+            exit 1
+          fi
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "1" ]]; then
+            echo "Expected 1 submission, found ${row_count}." >&2
+            exit 1
+          fi
+
+          invalid_headers="$(mktemp)"
+          invalid_code="$(curl -s -D "$invalid_headers" -o /tmp/formstead-invalid-body -w '%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'extra=dropped-secret' \
+            "$endpoint")"
+          echo "post_invalid:${invalid_code}"
+          if [[ "$invalid_code" != "422" ]]; then
+            echo "Expected 422 when the required field is missing." >&2
+            cat "$invalid_headers" >&2
+            exit 1
+          fi
+          if ! grep -Eqi '^Content-Type:.*text/html' "$invalid_headers"; then
+            echo "422 response was not text/html." >&2
+            cat "$invalid_headers" >&2
+            exit 1
+          fi
+          if ! grep -q '<ul>' /tmp/formstead-invalid-body; then
+            echo "422 page did not list field errors." >&2
+            cat /tmp/formstead-invalid-body >&2
+            exit 1
+          fi
+          if grep -q 'dropped-secret' /tmp/formstead-invalid-body; then
+            echo "422 page echoed the submitted value." >&2
+            exit 1
+          fi
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "1" ]]; then
+            echo "Invalid POST stored a row. Count is ${row_count}." >&2
+            exit 1
+          fi
+
           JAR="$(mktemp)"
           curl -sf -o /dev/null -w 'front:%{http_code} %{url_effective}\n' http://127.0.0.1:8080/
           curl -sf -c "$JAR" -b "$JAR" -o /dev/null -w 'login:%{http_code} %{url_effective}\n' http://127.0.0.1:8080/wp-login.php
@@ -191,6 +277,7 @@ jobs:
 
           wp plugin deactivate formstead --path=wordpress
           wp plugin uninstall formstead --path=wordpress
+          assert_schema
           assert_debug_log
 
       - name: Upload ZIP

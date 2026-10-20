@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
+### Fixed
+
+- The forms screen keeps a percent-encoded success URL and form name, and it rejects a field name that does not match the pattern instead of rewriting it.
+- The public submissions route stays registered when a migration lock is held and the tables already exist.
+- A field row shows the remove checkbox without JavaScript and the remove button once the script runs.
+- The package job checks that an invalid POST returns an HTML page and does not echo the submitted value.
+
+## [0.1.0] - 2026-10-20
+
+### Added
+
+- Activation creates the forms and submissions tables and grants the four Formstead capabilities to administrators.
+- Forms can be stored with a public id, field schema, and an absolute success URL.
+- The admin can create and edit forms. The endpoint URL comes from `rest_url()`.
+- A public form POST stores the submission and redirects to the form's success URL. Invalid fields get an HTML error page.
+- Administrators can read submissions. Opening one does not change its status.
+- The package job sends a real POST on a clean install and checks that uninstall keeps the tables.
+
 ### Changed
 
 - The PHP 7.4 syntax job uses the pinned setup-php action instead of a floating `php:7.4-cli` image.
@@ -42,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/formstead/formstead/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/formstead/formstead/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/formstead/formstead/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/formstead/formstead/releases/tag/v0.0.1
