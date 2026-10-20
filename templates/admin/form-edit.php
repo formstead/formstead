@@ -21,13 +21,14 @@ $errors  = isset( $errors ) && is_array( $errors ) ? $errors : array();
 $updated = isset( $updated ) && $updated;
 $form    = isset( $form ) && $form instanceof Form ? $form : null;
 
-$form_id     = isset( $values['form_id'] ) ? (int) $values['form_id'] : 0;
-$name        = isset( $values['name'] ) ? (string) $values['name'] : '';
-$is_enabled  = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
-$success_url = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
-$rows        = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
-$endpoint    = $form instanceof Form ? rest_url( 'formstead/v1/forms/' . $form->public_id() . '/submissions' ) : '';
-$next_index  = count( $rows );
+$form_id        = isset( $values['form_id'] ) ? (int) $values['form_id'] : 0;
+$schema_version = isset( $values['schema_version'] ) ? (int) $values['schema_version'] : 0;
+$name           = isset( $values['name'] ) ? (string) $values['name'] : '';
+$is_enabled     = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
+$success_url    = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
+$rows           = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
+$endpoint       = $form instanceof Form ? rest_url( 'formstead/v1/forms/' . $form->public_id() . '/submissions' ) : '';
+$next_index     = count( $rows );
 ?>
 <div class="wrap">
 	<h1><?php echo $form instanceof Form ? esc_html__( 'Edit form', 'formstead' ) : esc_html__( 'Add form', 'formstead' ); ?></h1>
@@ -45,6 +46,7 @@ $next_index  = count( $rows );
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=formstead-forms' ) ); ?>">
 		<?php wp_nonce_field( 'formstead_save_form' ); ?>
 		<input type="hidden" name="form_id" value="<?php echo esc_attr( (string) $form_id ); ?>">
+		<input type="hidden" name="schema_version" value="<?php echo esc_attr( (string) $schema_version ); ?>">
 
 		<table class="form-table" role="presentation">
 			<tr>

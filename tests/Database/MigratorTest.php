@@ -19,11 +19,16 @@ use WP_Role;
  * Covers installation, the migration lock, and capability grants.
  *
  * @group schema
+ *
+ * @phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
+ * @phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
+ * @phpcs:disable WordPress.DB.DirectDatabaseQuery.SchemaChange
+ * @phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
  */
 final class MigratorTest extends MigrationTestCase {
 
 	/**
-	 * A fresh install creates both tables and stores schema version 1.
+	 * A fresh install creates the tables and stores the current schema version.
 	 */
 	public function test_fresh_install_creates_tables_and_version(): void {
 		$this->assertNull( Migrator::run() );
@@ -111,6 +116,98 @@ final class MigratorTest extends MigrationTestCase {
 		foreach ( Capabilities::all() as $capability ) {
 			$this->assertTrue( $role->has_cap( $capability ) );
 		}
+	}
+
+	/**
+	 * An install that is still on schema version 1 gains snapshots and receipt ids.
+	 */
+	public function test_upgrade_from_version_1_backfills_snapshots_and_receipts(): void {
+		global $wpdb;
+
+		$forms       = Schema::forms_table();
+		$submissions = Schema::submissions_table();
+		$versions    = Schema::form_versions_table();
+		$charset     = $wpdb->get_charset_collate();
+
+		$wpdb->query( "DROP TABLE IF EXISTS {$versions}" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$submissions}" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$forms}" );
+
+		$wpdb->query(
+			"CREATE TABLE {$forms} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				public_id varchar(19) NOT NULL,
+				name varchar(190) NOT NULL,
+				is_enabled tinyint(1) NOT NULL DEFAULT 1,
+				fields longtext NOT NULL,
+				schema_version int(10) unsigned NOT NULL DEFAULT 1,
+				success_url varchar(2048) NOT NULL,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY public_id (public_id)
+			) {$charset} ENGINE=InnoDB"
+		);
+		$wpdb->query(
+			"CREATE TABLE {$submissions} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				form_id bigint(20) unsigned NOT NULL,
+				schema_version int(10) unsigned NOT NULL,
+				payload longtext NOT NULL,
+				status varchar(20) NOT NULL DEFAULT 'new',
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY form_status_created (form_id,status,created_at)
+			) {$charset} ENGINE=InnoDB"
+		);
+
+		$wpdb->insert(
+			$forms,
+			array(
+				'public_id'      => 'fs_abcdefghijklmnop',
+				'name'           => 'Contact',
+				'is_enabled'     => 1,
+				'fields'         => '[{"name":"email","label":"Email","type":"email","required":true,"max_length":255}]',
+				'schema_version' => 2,
+				'success_url'    => 'https://example.com/thanks',
+				'created_at'     => '2026-10-20 10:00:00',
+				'updated_at'     => '2026-10-20 11:00:00',
+			)
+		);
+		$form_id = (int) $wpdb->insert_id;
+		$wpdb->insert(
+			$submissions,
+			array(
+				'form_id'        => $form_id,
+				'schema_version' => 1,
+				'payload'        => '{"email":"a@b.co"}',
+				'status'         => 'new',
+				'created_at'     => '2026-10-20 10:30:00',
+			)
+		);
+
+		update_option( Schema::VERSION_OPTION, 1, true );
+
+		$this->assertNull( Migrator::maybe_migrate() );
+		$this->assertSame( Schema::VERSION, (int) get_option( Schema::VERSION_OPTION ) );
+		$this->assertTrue( Migrator::tables_exist() );
+
+		$snapshot = $wpdb->get_row(
+			$wpdb->prepare( "SELECT version, fields FROM {$versions} WHERE form_id = %d", $form_id ),
+			ARRAY_A
+		);
+		$this->assertIsArray( $snapshot );
+		$this->assertSame( '2', (string) $snapshot['version'] );
+		$this->assertStringContainsString( 'Email', (string) $snapshot['fields'] );
+
+		$receipt = $wpdb->get_var( $wpdb->prepare( "SELECT receipt_id FROM {$submissions} WHERE form_id = %d", $form_id ) );
+		$this->assertIsString( $receipt );
+		$this->assertMatchesRegularExpression( '/^fsr_[a-z2-7]{16}$/', $receipt );
+
+		$older = $wpdb->get_var(
+			$wpdb->prepare( "SELECT id FROM {$versions} WHERE form_id = %d AND version = %d", $form_id, 1 )
+		);
+		$this->assertNull( $older );
 	}
 
 	/**

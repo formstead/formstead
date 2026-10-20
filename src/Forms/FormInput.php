@@ -51,13 +51,31 @@ final class FormInput {
 			$name,
 			self::is_checked( $input['is_enabled'] ?? null ),
 			$fields,
-			$existing instanceof Form ? $existing->schema_version() : 1,
+			self::schema_version( $input, $existing ),
 			$success_url,
 			$existing instanceof Form ? $existing->created_at() : '',
 			$existing instanceof Form ? $existing->updated_at() : ''
 		);
 
 		return new FormInputResult( $form, array() );
+	}
+
+	/**
+	 * Schema version the editor opened.
+	 *
+	 * A new form starts at version 1. An edit uses the posted version, which
+	 * the repository compares with the stored row. A missing value cannot
+	 * match, so an edit without it is a conflict.
+	 *
+	 * @param array<string, mixed> $input    Posted form values.
+	 * @param Form|null            $existing Form being edited, or null for a new form.
+	 */
+	private static function schema_version( array $input, ?Form $existing ): int {
+		if ( ! $existing instanceof Form ) {
+			return 1;
+		}
+
+		return isset( $input['schema_version'] ) ? (int) $input['schema_version'] : 0;
 	}
 
 	/**

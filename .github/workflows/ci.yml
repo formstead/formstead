@@ -175,7 +175,7 @@ jobs:
           assert_schema() {
             local found table
             found="$(wp db query "SHOW TABLES" --skip-column-names --path=wordpress)"
-            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions"; do
+            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions" "${prefix}formstead_form_versions"; do
               if ! grep -Fxq "$table" <<<"$found"; then
                 echo "Missing table ${table}." >&2
                 printf '%s\n' "$found" >&2
@@ -191,8 +191,8 @@ jobs:
 
           assert_schema
           db_version="$(wp option get formstead_db_version --path=wordpress)"
-          if [[ "$db_version" != "1" ]]; then
-            echo "Expected formstead_db_version 1, got ${db_version}." >&2
+          if [[ "$db_version" != "2" ]]; then
+            echo "Expected formstead_db_version 2, got ${db_version}." >&2
             exit 1
           fi
 

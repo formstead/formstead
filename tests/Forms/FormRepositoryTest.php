@@ -8,9 +8,11 @@
 namespace Formstead\Tests\Forms;
 
 use Formstead\Forms\Field;
+use Formstead\Forms\FieldCodec;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
+use Formstead\Forms\FormVersionRepository;
 use Formstead\Forms\PublicId;
 use WP_UnitTestCase;
 
@@ -64,7 +66,7 @@ final class FormRepositoryTest extends WP_UnitTestCase {
 			'Support',
 			false,
 			$saved->fields(),
-			99,
+			$saved->schema_version(),
 			'https://example.com/other',
 			$saved->created_at(),
 			$saved->updated_at()
@@ -111,6 +113,123 @@ final class FormRepositoryTest extends WP_UnitTestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $updated );
 		$this->assertSame( 2, $updated->schema_version() );
 		$this->assertSame( 'Work email', $updated->fields()[0]->label() );
+
+		$snapshot = ( new FormVersionRepository() )->find( $saved->id(), 1 );
+		$this->assertNotNull( $snapshot );
+		$this->assertSame( 'Email', $snapshot->fields()[0]->label() );
+
+		$current = ( new FormVersionRepository() )->find( $saved->id(), 2 );
+		$this->assertNotNull( $current );
+		$this->assertSame( 'Work email', $current->fields()[0]->label() );
+	}
+
+	/**
+	 * An editor that opened an older version cannot overwrite a newer save.
+	 */
+	public function test_update_rejects_a_stale_editor_version(): void {
+		$saved = $this->forms->insert( $this->form( 'Contact' ) );
+		$this->assertInstanceOf( Form::class, $saved );
+
+		$changed = new Form(
+			$saved->id(),
+			$saved->public_id(),
+			$saved->name(),
+			true,
+			array( new Field( 'email', 'Work email', FieldType::Email, true, 255 ) ),
+			$saved->schema_version(),
+			$saved->success_url(),
+			$saved->created_at(),
+			$saved->updated_at()
+		);
+		$updated = $this->forms->update( $changed );
+		$this->assertInstanceOf( Form::class, $updated );
+
+		$stale = new Form(
+			$saved->id(),
+			$saved->public_id(),
+			'Renamed',
+			true,
+			array( new Field( 'email', 'Other', FieldType::Email, true, 255 ) ),
+			$saved->schema_version(),
+			$saved->success_url(),
+			$saved->created_at(),
+			$saved->updated_at()
+		);
+
+		$rejected = $this->forms->update( $stale );
+
+		$this->assertInstanceOf( \WP_Error::class, $rejected );
+		$this->assertSame( 'formstead_form_conflict', $rejected->get_error_code() );
+
+		$loaded = $this->forms->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 'Contact', $loaded->name() );
+		$this->assertSame( 2, $loaded->schema_version() );
+		$this->assertSame( 'Work email', $loaded->fields()[0]->label() );
+	}
+
+	/**
+	 * Renaming from a stale editor version does not change the stored name.
+	 */
+	public function test_update_rejects_a_stale_name_change(): void {
+		$saved = $this->forms->insert( $this->form( 'Contact' ) );
+		$this->assertInstanceOf( Form::class, $saved );
+
+		$renamed = new Form(
+			$saved->id(),
+			$saved->public_id(),
+			'Support',
+			$saved->is_enabled(),
+			$saved->fields(),
+			$saved->schema_version() + 1,
+			$saved->success_url(),
+			$saved->created_at(),
+			$saved->updated_at()
+		);
+
+		$rejected = $this->forms->update( $renamed );
+
+		$this->assertInstanceOf( \WP_Error::class, $rejected );
+		$this->assertSame( 'formstead_form_conflict', $rejected->get_error_code() );
+
+		$loaded = $this->forms->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 'Contact', $loaded->name() );
+		$this->assertSame( 1, $loaded->schema_version() );
+	}
+
+	/**
+	 * A snapshot of the next version with different fields blocks the save.
+	 */
+	public function test_update_reports_a_conflict_when_the_next_version_differs(): void {
+		$saved = $this->forms->insert( $this->form( 'Contact' ) );
+		$this->assertInstanceOf( Form::class, $saved );
+
+		$other = new Field( 'email', 'Other', FieldType::Email, true, 255 );
+		$this->assertNotInstanceOf( \WP_Error::class, ( new FormVersionRepository() )->insert( $saved->id(), 2, array( $other ) ) );
+
+		$changed = new Form(
+			$saved->id(),
+			$saved->public_id(),
+			$saved->name(),
+			true,
+			array( new Field( 'email', 'Work email', FieldType::Email, true, 255 ) ),
+			$saved->schema_version(),
+			$saved->success_url(),
+			$saved->created_at(),
+			$saved->updated_at()
+		);
+
+		$updated = $this->forms->update( $changed );
+
+		$this->assertInstanceOf( \WP_Error::class, $updated );
+		$this->assertSame( 'formstead_form_conflict', $updated->get_error_code() );
+
+		$loaded = $this->forms->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 1, $loaded->schema_version() );
+		$this->assertSame( 'Email', $loaded->fields()[0]->label() );
+		$this->assertNotSame( FieldCodec::encode( $changed->fields() ), FieldCodec::encode( $loaded->fields() ) );
 	}
 
 	/**
