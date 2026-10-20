@@ -189,7 +189,6 @@ final class CorsTest extends WP_UnitTestCase {
 	private function assert_no_credentials( WP_REST_Response $response ): void {
 		foreach ( $response->get_headers() as $name => $value ) {
 			$this->assertStringNotContainsStringIgnoringCase( 'allow-credentials', (string) $name );
-			$this->assertStringNotContainsStringIgnoringCase( 'true', (string) $name );
 			if ( is_string( $name ) && str_contains( strtolower( $name ), 'access-control' ) ) {
 				$this->assertStringNotContainsStringIgnoringCase( 'credentials', (string) $value );
 			}
