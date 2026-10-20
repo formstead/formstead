@@ -222,6 +222,7 @@ jobs:
           define( 'WP_DEBUG', true );
           define( 'WP_DEBUG_LOG', true );
           define( 'WP_DEBUG_DISPLAY', false );
+          define( 'FORMSTEAD_RATE_PER_MINUTE', 100 );
           PHP
 
       - name: Install WordPress
@@ -323,9 +324,6 @@ jobs:
             echo "Expected formstead_db_version 3, got ${db_version}." >&2
             exit 1
           fi
-
-          # The smoke test posts more than the default five-per-minute limit.
-          wp config set FORMSTEAD_RATE_PER_MINUTE 100 --raw --type=constant --path=wordpress
 
           public_id="$(wp eval-file bin/ci/seed-form.php --path=wordpress)"
           if [[ ! "$public_id" =~ ^fs_[a-z2-7]{16}$ ]]; then
