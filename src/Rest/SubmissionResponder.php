@@ -45,9 +45,10 @@ final class SubmissionResponder {
 	 *
 	 * @param ResponseMode                $mode   Response mode.
 	 * @param RequestError                $error  Request error.
-	 * @param array<string, list<string>> $fields Field error codes for a 422 response.
+	 * @param array<string, list<string>> $fields  Field error codes for a 422 response.
+	 * @param array<string, string>       $headers Extra response headers, such as `Retry-After`.
 	 */
-	public static function failure( ResponseMode $mode, RequestError $error, array $fields = array() ): WP_REST_Response {
+	public static function failure( ResponseMode $mode, RequestError $error, array $fields = array(), array $headers = array() ): WP_REST_Response {
 		if ( $mode->is_json() ) {
 			$body = array(
 				'error' => array(
@@ -59,7 +60,7 @@ final class SubmissionResponder {
 				$body['error']['fields'] = $fields;
 			}
 
-			return self::json( $body, $error->status() );
+			return self::json( $body, $error->status(), $headers );
 		}
 
 		if ( RequestError::InvalidFields === $error ) {
@@ -76,10 +77,13 @@ final class SubmissionResponder {
 		$heading = match ( $error ) {
 			RequestError::FormNotFound => __( 'Form not found', 'formstead' ),
 			RequestError::StorageFailed => __( 'Something went wrong', 'formstead' ),
+			RequestError::PayloadTooLarge => __( 'Submission too large', 'formstead' ),
+			RequestError::OriginNotAllowed => __( 'Submission not accepted', 'formstead' ),
+			RequestError::RateLimited => __( 'Too many submissions', 'formstead' ),
 			default => $message,
 		};
 
-		return self::page( $error->status(), $heading, $heading, $message, array() );
+		return self::page( $error->status(), $heading, $heading, $message, array(), $headers );
 	}
 
 	/**
@@ -130,7 +134,7 @@ final class SubmissionResponder {
 		if ( ! $response instanceof WP_Error || 'rest_invalid_json' !== $response->get_error_code() ) {
 			return $response;
 		}
-		if ( ! $request instanceof \WP_REST_Request || ! self::is_submission_route( $request->get_route() ) ) {
+		if ( ! $request instanceof \WP_REST_Request || ! Routes::is_submission( $request->get_route() ) ) {
 			return $response;
 		}
 
@@ -141,15 +145,6 @@ final class SubmissionResponder {
 			: RequestError::UnsupportedMediaType;
 
 		return self::failure( ResponseMode::from_request( $request ), $error );
-	}
-
-	/**
-	 * Whether the route is the public submissions endpoint.
-	 *
-	 * @param string $route Matched route.
-	 */
-	private static function is_submission_route( string $route ): bool {
-		return 1 === preg_match( '#^/formstead/v1/forms/[^/]+/submissions$#', $route );
 	}
 
 	/**
@@ -174,12 +169,14 @@ final class SubmissionResponder {
 	/**
 	 * JSON response with the contract headers.
 	 *
-	 * @param array<string, mixed> $data   Response body.
-	 * @param int                  $status HTTP status.
+	 * @param array<string, mixed>  $data    Response body.
+	 * @param int                   $status  HTTP status.
+	 * @param array<string, string> $headers Extra response headers.
 	 */
-	private static function json( array $data, int $status ): WP_REST_Response {
+	private static function json( array $data, int $status, array $headers = array() ): WP_REST_Response {
 		$response = new WP_REST_Response( $data, $status );
 		self::mark( $response );
+		self::extra_headers( $response, $headers );
 		return $response;
 	}
 
@@ -189,7 +186,7 @@ final class SubmissionResponder {
 	 * @param WP_REST_Response $response Response to mark.
 	 */
 	private static function mark( WP_REST_Response $response ): void {
-		$response->header( 'Vary', 'Accept' );
+		$response->header( 'Vary', 'Accept, Origin' );
 		$response->header( 'Cache-Control', 'no-store' );
 	}
 
@@ -223,15 +220,30 @@ final class SubmissionResponder {
 	 * @param string                                            $heading Visible heading.
 	 * @param string                                            $message Paragraph for pages without field errors.
 	 * @param array<int, array{label: string, message: string}> $errors  Field errors.
+	 * @param array<string, string>                             $headers Extra response headers.
 	 */
-	private static function page( int $status, string $title, string $heading, string $message, array $errors ): HtmlResponse {
+	private static function page( int $status, string $title, string $heading, string $message, array $errors, array $headers = array() ): HtmlResponse {
 		$language = str_replace( '_', '-', determine_locale() );
 
 		ob_start();
 		include dirname( FORMSTEAD_FILE ) . '/templates/public/message.php';
 		$html = ob_get_clean();
 
-		return new HtmlResponse( is_string( $html ) ? $html : '', $status );
+		$response = new HtmlResponse( is_string( $html ) ? $html : '', $status );
+		self::extra_headers( $response, $headers );
+		return $response;
+	}
+
+	/**
+	 * Add headers that belong to one error, such as `Retry-After`.
+	 *
+	 * @param WP_REST_Response      $response Response to update.
+	 * @param array<string, string> $headers  Header names and values.
+	 */
+	private static function extra_headers( WP_REST_Response $response, array $headers ): void {
+		foreach ( $headers as $name => $value ) {
+			$response->header( $name, $value );
+		}
 	}
 	// phpcs:enable Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
 }

@@ -18,6 +18,9 @@ enum RequestError: string {
 	case FilesNotSupported    = 'files_not_supported';
 	case InvalidFields        = 'invalid_fields';
 	case StorageFailed        = 'storage_failed';
+	case PayloadTooLarge      = 'payload_too_large';
+	case OriginNotAllowed     = 'origin_not_allowed';
+	case RateLimited          = 'rate_limited';
 
 	/**
 	 * HTTP status for this error.
@@ -31,6 +34,9 @@ enum RequestError: string {
 			self::UnsupportedMediaType, self::FilesNotSupported => 415,
 			self::InvalidFields => 422,
 			self::StorageFailed => 500,
+			self::PayloadTooLarge => 413,
+			self::OriginNotAllowed => 403,
+			self::RateLimited => 429,
 		};
 	}
 }

@@ -9,6 +9,7 @@ namespace Formstead\Rest;
 
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
+use Formstead\Security\Limits;
 use Formstead\Submissions\SubmissionRepository;
 use Formstead\Submissions\SubmissionValidator;
 use WP_Error;
@@ -29,6 +30,7 @@ final class SubmissionsController {
 	 */
 	public static function register(): void {
 		add_action( 'rest_api_init', array( self::class, 'register_routes' ) );
+		add_filter( 'rest_pre_dispatch', array( self::class, 'guard_size' ), 11, 3 );
 		add_filter( 'rest_request_after_callbacks', array( self::class, 'replace_invalid_json' ), 10, 3 );
 	}
 
@@ -66,7 +68,8 @@ final class SubmissionsController {
 	public static function create( WP_REST_Request $request ): WP_REST_Response {
 		$mode      = ResponseMode::from_request( $request );
 		$public_id = $request->get_param( 'public_form_id' );
-		$form      = ( new FormRepository() )->find_by_public_id( is_string( $public_id ) ? $public_id : '' );
+		$forms     = new FormRepository();
+		$form      = $forms->find_by_public_id( is_string( $public_id ) ? $public_id : '' );
 
 		if ( ! $form instanceof Form || ! $form->is_enabled() ) {
 			return SubmissionResponder::failure( $mode, RequestError::FormNotFound );
@@ -76,6 +79,10 @@ final class SubmissionsController {
 		if ( $params instanceof WP_Error ) {
 			$error = RequestError::tryFrom( $params->get_error_code() );
 			return SubmissionResponder::failure( $mode, $error instanceof RequestError ? $error : RequestError::MalformedBody );
+		}
+
+		if ( FieldCounter::count( $params ) > Limits::max_fields() ) {
+			return SubmissionResponder::failure( $mode, RequestError::PayloadTooLarge );
 		}
 
 		$result = ( new SubmissionValidator() )->validate( $form, $params );
@@ -89,6 +96,49 @@ final class SubmissionsController {
 		}
 
 		return SubmissionResponder::accepted( $mode, $saved->receipt_id(), $form->success_url() );
+	}
+
+	/**
+	 * Reject an oversized body before the route callback reads it.
+	 *
+	 * A request that already has a result, including `OPTIONS`, is left alone.
+	 *
+	 * @param mixed $result  Current dispatch result.
+	 * @param mixed $server  REST server. Unused.
+	 * @param mixed $request Incoming request.
+	 */
+	public static function guard_size( mixed $result, mixed $server, mixed $request ): mixed {
+		unset( $server );
+
+		if ( null !== $result || ! $request instanceof WP_REST_Request ) {
+			return $result;
+		}
+
+		if ( 'POST' !== $request->get_method() || ! Routes::is_submission( $request->get_route() ) ) {
+			return $result;
+		}
+
+		if ( ! self::body_too_large( $request ) ) {
+			return $result;
+		}
+
+		return SubmissionResponder::failure( ResponseMode::from_request( $request ), RequestError::PayloadTooLarge );
+	}
+
+	/**
+	 * Whether the declared or actual body is larger than the global limit.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 */
+	private static function body_too_large( WP_REST_Request $request ): bool {
+		$limit    = Limits::max_request_bytes();
+		$declared = $request->get_header( 'content_length' );
+		if ( is_string( $declared ) && is_numeric( trim( $declared ) ) && (int) trim( $declared ) > $limit ) {
+			return true;
+		}
+
+		$body = $request->get_body();
+		return is_string( $body ) && strlen( $body ) > $limit;
 	}
 
 	/**

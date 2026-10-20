@@ -34,7 +34,7 @@ final class HtmlResponse extends WP_REST_Response {
 			array(
 				'Content-Type'  => 'text/html; charset=utf-8',
 				'Cache-Control' => 'no-store',
-				'Vary'          => 'Accept',
+				'Vary'          => 'Accept, Origin',
 			)
 		);
 		$this->html = $html;
