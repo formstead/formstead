@@ -29,12 +29,18 @@
 	</rule>
 
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<exclude-pattern>*/templates/*</exclude-pattern>
 		<properties>
 			<property name="prefixes" type="array">
 				<element value="formstead"/>
 				<element value="Formstead"/>
 			</property>
 		</properties>
+	</rule>
+
+	<!-- Templates are included from methods, so these assignments are local. -->
+	<rule ref="WordPress.WP.GlobalVariablesOverride">
+		<exclude-pattern>*/templates/*</exclude-pattern>
 	</rule>
 
 	<rule ref="WordPress.Files.FileName">

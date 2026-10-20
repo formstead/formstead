@@ -7,6 +7,7 @@
 
 namespace Formstead;
 
+use Formstead\Admin\Menu;
 use Formstead\Database\Migrator;
 use Formstead\Lifecycle\Requirements;
 use WP_Error;
@@ -42,7 +43,10 @@ final class Plugin {
 		if ( $error instanceof WP_Error ) {
 			self::$migration_error = $error;
 			add_action( 'admin_notices', array( self::class, 'migration_notice' ) );
+			return;
 		}
+
+		Menu::register();
 	}
 
 	/**
