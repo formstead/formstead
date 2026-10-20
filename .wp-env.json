@@ -5,7 +5,7 @@
 	"mariadbVersion": "10.11",
 	"plugins": [
 		".",
-		"https://downloads.wordpress.org/plugin/plugin-check.latest-stable.zip"
+		"https://downloads.wordpress.org/plugin/plugin-check.2.1.0.zip"
 	],
 	"port": 8888,
 	"config": {

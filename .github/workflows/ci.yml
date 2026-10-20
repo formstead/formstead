@@ -77,7 +77,7 @@ jobs:
         with:
           php-version: "8.3"
           extensions: mysqli, zip
-          tools: composer, wp-cli
+          tools: composer, wp-cli:2.12.0
           coverage: none
 
       - name: Install zip
@@ -118,7 +118,7 @@ jobs:
         run: wp plugin install formstead.zip --activate --path=wordpress
 
       - name: Install Plugin Check
-        run: wp plugin install plugin-check --activate --path=wordpress
+        run: wp plugin install plugin-check --version=2.1.0 --activate --path=wordpress
 
       - name: Run Plugin Check
         run: |
@@ -136,7 +136,7 @@ jobs:
           fi
           echo "Plugin Check reported no errors."
 
-      - name: Hit front and login over PHP's built-in server
+      - name: Hit front, admin, and uninstall over PHP's built-in server
         run: |
           php -S 127.0.0.1:8080 -t wordpress >/tmp/php-server.log 2>&1 &
           for i in $(seq 1 20); do
@@ -145,14 +145,50 @@ jobs:
             fi
             sleep 0.5
           done
-          curl -sf -o /dev/null -w 'front:%{http_code}\n' http://127.0.0.1:8080/
-          curl -sf -o /dev/null -w 'login:%{http_code}\n' http://127.0.0.1:8080/wp-login.php
-          if [[ -f wordpress/wp-content/debug.log ]]; then
-            echo "debug.log is not empty:"
-            cat wordpress/wp-content/debug.log
+
+          assert_ok() {
+            local label="$1"
+            local url="$2"
+            local result
+            result="$(curl -s -b "$JAR" -o /dev/null -w '%{http_code} %{url_effective}' "$url")"
+            echo "${label}:${result}"
+            local code="${result%% *}"
+            if [[ "$code" != "200" || "$result" == *wp-login.php* ]]; then
+              echo "${label} did not return 200 at ${url}." >&2
+              exit 1
+            fi
+          }
+
+          assert_debug_log() {
+            if [[ -s wordpress/wp-content/debug.log ]]; then
+              echo "debug.log is not empty:"
+              cat wordpress/wp-content/debug.log
+              exit 1
+            fi
+            echo "debug.log is absent or empty."
+          }
+
+          JAR="$(mktemp)"
+          curl -sf -o /dev/null -w 'front:%{http_code} %{url_effective}\n' http://127.0.0.1:8080/
+          curl -sf -c "$JAR" -b "$JAR" -o /dev/null -w 'login:%{http_code} %{url_effective}\n' http://127.0.0.1:8080/wp-login.php
+          # The login form sets this cookie in JavaScript. curl does not run it, and an empty test cookie rejects the POST.
+          printf '127.0.0.1\tFALSE\t/\tFALSE\t0\twordpress_test_cookie\t1\n' >> "$JAR"
+          login_post="$(curl -s -c "$JAR" -b "$JAR" -o /dev/null -w '%{http_code} %{redirect_url}' \
+            -d 'log=admin&pwd=password&wp-submit=Log+In&redirect_to=http%3A%2F%2F127.0.0.1%3A8080%2Fwp-admin%2F&testcookie=1' \
+            http://127.0.0.1:8080/wp-login.php)"
+          echo "login_post:${login_post}"
+          if [[ "$login_post" != 302* || "$login_post" != *wp-admin* || "$login_post" == *wp-login.php* ]]; then
+            echo "Login did not redirect to wp-admin." >&2
             exit 1
           fi
-          echo "debug.log is absent (no warnings)."
+
+          assert_ok admin http://127.0.0.1:8080/wp-admin/
+          assert_ok plugins http://127.0.0.1:8080/wp-admin/plugins.php
+          assert_debug_log
+
+          wp plugin deactivate formstead --path=wordpress
+          wp plugin uninstall formstead --path=wordpress
+          assert_debug_log
 
       - name: Upload ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
