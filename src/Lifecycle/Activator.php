@@ -52,21 +52,8 @@ final class Activator {
 
 		global $wp_version;
 
-		$reason = Requirements::unmet_reason( PHP_VERSION, (string) $wp_version );
-
-		if ( Requirements::REASON_PHP === $reason ) {
-			return new WP_Error(
-				'formstead_php_version',
-				sprintf(
-					/* translators: 1: required PHP version, 2: current PHP version */
-					__( 'Formstead requires PHP %1$s or later. This site is running PHP %2$s.', 'formstead' ),
-					FORMSTEAD_MIN_PHP,
-					PHP_VERSION
-				)
-			);
-		}
-
-		if ( Requirements::REASON_WP === $reason ) {
+		// PHP is refused before this class is loaded. Only the WordPress check can still fail here.
+		if ( Requirements::REASON_WP === Requirements::unmet_reason( PHP_VERSION, (string) $wp_version ) ) {
 			return new WP_Error(
 				'formstead_wp_version',
 				sprintf(

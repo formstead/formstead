@@ -46,6 +46,10 @@ function formstead_php_meets_minimum() {
  * @return void
  */
 function formstead_requirements_notice() {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+
 	global $wp_version;
 
 	if ( ! formstead_php_meets_minimum() ) {
@@ -78,6 +82,10 @@ function formstead_requirements_notice() {
  * @return void
  */
 function formstead_missing_autoload_notice() {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+
 	printf(
 		'<div class="notice notice-error"><p>%s</p></div>',
 		esc_html__( 'Formstead could not load because vendor/autoload.php is missing. Run composer install.', 'formstead' )
