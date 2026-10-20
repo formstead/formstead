@@ -317,6 +317,9 @@ jobs:
             exit 1
           fi
 
+          # The smoke test posts more than the default five-per-minute limit.
+          wp config set FORMSTEAD_RATE_PER_MINUTE 100 --raw --type=constant --path=wordpress
+
           public_id="$(wp eval-file bin/ci/seed-form.php --path=wordpress)"
           if [[ ! "$public_id" =~ ^fs_[a-z2-7]{16}$ ]]; then
             echo "Seed did not print a public id: ${public_id}" >&2

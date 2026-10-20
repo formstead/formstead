@@ -10,6 +10,7 @@ namespace Formstead\Rest;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Security\Limits;
+use Formstead\Security\RateLimiter;
 use Formstead\Submissions\SubmissionRepository;
 use Formstead\Submissions\SubmissionValidator;
 use WP_Error;
@@ -73,6 +74,16 @@ final class SubmissionsController {
 
 		if ( ! $form instanceof Form || ! $form->is_enabled() ) {
 			return SubmissionResponder::failure( $mode, RequestError::FormNotFound );
+		}
+
+		$retry = ( new RateLimiter() )->consume( $form );
+		if ( is_int( $retry ) ) {
+			return SubmissionResponder::failure(
+				$mode,
+				RequestError::RateLimited,
+				array(),
+				array( 'Retry-After' => (string) $retry )
+			);
 		}
 
 		$params = RequestPayload::read( $request );
