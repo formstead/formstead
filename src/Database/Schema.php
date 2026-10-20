@@ -1,6 +1,6 @@
 <?php
 /**
- * Database schema version 2.
+ * Database schema version 3.
  *
  * @package Formstead
  */
@@ -15,7 +15,7 @@ namespace Formstead\Database;
  */
 final class Schema {
 
-	public const VERSION = 2;
+	public const VERSION = 3;
 
 	public const VERSION_OPTION = 'formstead_db_version';
 
@@ -49,6 +49,15 @@ final class Schema {
 	}
 
 	/**
+	 * Rate-limit counters, including the site prefix.
+	 */
+	public static function rate_limits_table(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . 'formstead_rate_limits';
+	}
+
+	/**
 	 * CREATE TABLE statements, one per table.
 	 *
 	 * Table names are identifiers, so they cannot be placeholders.
@@ -62,6 +71,7 @@ final class Schema {
 		$forms       = self::forms_table();
 		$versions    = self::form_versions_table();
 		$submissions = self::submissions_table();
+		$rate_limits = self::rate_limits_table();
 
 		// Table names are identifiers, so they cannot be placeholders.
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -76,6 +86,10 @@ final class Schema {
 				success_url varchar(2048) NOT NULL,
 				created_at datetime NOT NULL,
 				updated_at datetime NOT NULL,
+				allowed_origins text,
+				rate_per_minute smallint(5) unsigned DEFAULT NULL,
+				rate_per_hour int(10) unsigned DEFAULT NULL,
+				honeypot_rejections bigint(20) unsigned NOT NULL DEFAULT 0,
 				PRIMARY KEY  (id),
 				UNIQUE KEY public_id (public_id)
 			) {$charset} ENGINE=InnoDB;",
@@ -99,6 +113,13 @@ final class Schema {
 				PRIMARY KEY  (id),
 				UNIQUE KEY receipt_id (receipt_id),
 				KEY form_status_created (form_id,status,created_at)
+			) {$charset} ENGINE=InnoDB;",
+			"CREATE TABLE {$rate_limits} (
+				bucket char(64) NOT NULL,
+				hits int(10) unsigned NOT NULL DEFAULT 0,
+				expires_at bigint(20) unsigned NOT NULL,
+				PRIMARY KEY  (bucket),
+				KEY expires_at (expires_at)
 			) {$charset} ENGINE=InnoDB;",
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared

@@ -11,6 +11,7 @@ use Formstead\Forms\Field;
 use Formstead\Forms\FieldCodec;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
+use Formstead\Forms\FormProtection;
 use Formstead\Forms\FormRepository;
 use Formstead\Forms\FormVersionRepository;
 use Formstead\Forms\PublicId;
@@ -230,6 +231,55 @@ final class FormRepositoryTest extends WP_UnitTestCase {
 		$this->assertSame( 1, $loaded->schema_version() );
 		$this->assertSame( 'Email', $loaded->fields()[0]->label() );
 		$this->assertNotSame( FieldCodec::encode( $changed->fields() ), FieldCodec::encode( $loaded->fields() ) );
+	}
+
+	/**
+	 * Protection is stored without a new field-schema version, and a later field edit keeps it.
+	 */
+	public function test_protection_is_saved_without_bumping_the_schema(): void {
+		$saved = $this->forms->insert( $this->form( 'Contact' ) );
+		$this->assertInstanceOf( Form::class, $saved );
+
+		$protected = new Form(
+			$saved->id(),
+			$saved->public_id(),
+			$saved->name(),
+			true,
+			$saved->fields(),
+			$saved->schema_version(),
+			$saved->success_url(),
+			$saved->created_at(),
+			$saved->updated_at(),
+			new FormProtection( array( 'https://forms.example' ), 2, null )
+		);
+		$updated   = $this->forms->update( $protected );
+		$this->assertInstanceOf( Form::class, $updated );
+		$this->assertSame( 1, $updated->schema_version() );
+		$this->assertSame( array( 'https://forms.example' ), $updated->protection()->allowed_origins() );
+		$this->assertSame( 2, $updated->protection()->rate_per_minute() );
+
+		$this->forms->record_honeypot( $saved->id() );
+		$renamed = new Form(
+			$saved->id(),
+			$saved->public_id(),
+			'Renamed',
+			true,
+			array( new Field( 'email', 'Work email', FieldType::Email, true, 255 ) ),
+			$updated->schema_version(),
+			$saved->success_url(),
+			$saved->created_at(),
+			$saved->updated_at(),
+			$updated->protection()
+		);
+		$changed = $this->forms->update( $renamed );
+		$this->assertInstanceOf( Form::class, $changed );
+		$this->assertSame( 2, $changed->schema_version() );
+
+		$loaded = $this->forms->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( array( 'https://forms.example' ), $loaded->protection()->allowed_origins() );
+		$this->assertSame( 2, $loaded->protection()->rate_per_minute() );
+		$this->assertSame( 1, $loaded->honeypot_rejections() );
 	}
 
 	/**
