@@ -222,6 +222,7 @@ jobs:
           define( 'WP_DEBUG', true );
           define( 'WP_DEBUG_LOG', true );
           define( 'WP_DEBUG_DISPLAY', false );
+          define( 'FORMSTEAD_RATE_PER_MINUTE', 100 );
           PHP
 
       - name: Install WordPress
@@ -323,9 +324,6 @@ jobs:
             echo "Expected formstead_db_version 3, got ${db_version}." >&2
             exit 1
           fi
-
-          # The smoke test posts more than the default five-per-minute limit.
-          wp config set FORMSTEAD_RATE_PER_MINUTE 100 --raw --type=constant --path=wordpress
 
           public_id="$(wp eval-file bin/ci/seed-form.php --path=wordpress)"
           if [[ ! "$public_id" =~ ^fs_[a-z2-7]{16}$ ]]; then
@@ -575,11 +573,12 @@ jobs:
           fi
 
           core_headers="$(mktemp)"
+          core_endpoint="$(wp eval "echo rest_url( 'wp/v2/types' );" --path=wordpress)"
           core_code="$(curl -s -D "$core_headers" -o /dev/null -w '%{http_code}' \
             -X OPTIONS \
             -H 'Origin: https://other.example' \
             -H 'Access-Control-Request-Method: GET' \
-            http://127.0.0.1:8080/wp-json/wp/v2/types)"
+            "$core_endpoint")"
           assert_status core_preflight 200 "$core_code"
           if ! grep -Eq '^Access-Control-Allow-Origin: https://other.example[[:space:]]*$' "$core_headers"; then
             echo "wp/v2 lost the core CORS origin header." >&2
