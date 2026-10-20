@@ -65,6 +65,118 @@ final class SubmissionRepository {
 	}
 
 	/**
+	 * One page of submissions, newest first.
+	 *
+	 * A form id limits the query to that form. The `form_status_created` index
+	 * starts with `form_id`, which is the filter used by the inbox.
+	 *
+	 * @param int|null $form_id  Form id, or null for every form.
+	 * @param int      $page     Page number, starting at 1.
+	 * @param int      $per_page Page size.
+	 */
+	public function paginate( ?int $form_id, int $page, int $per_page ): SubmissionList {
+		global $wpdb;
+
+		$page     = max( 1, $page );
+		$per_page = max( 1, $per_page );
+		$offset   = ( $page - 1 ) * $per_page;
+		$table    = Schema::submissions_table();
+
+		if ( null !== $form_id ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, form_id, schema_version, payload, status, created_at FROM {$table} WHERE form_id = %d ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d", $form_id, $per_page, $offset ), ARRAY_A );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$total = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE form_id = %d", $form_id ) );
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, form_id, schema_version, payload, status, created_at FROM {$table} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d", $per_page, $offset ), ARRAY_A );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$total = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+		}
+
+		return new SubmissionList( $this->hydrate_rows( $rows ), (int) $total );
+	}
+
+	/**
+	 * Load one submission. Reading it does not change its status.
+	 *
+	 * @param int $id Submission id.
+	 */
+	public function find( int $id ): ?Submission {
+		global $wpdb;
+
+		$table = Schema::submissions_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, form_id, schema_version, payload, status, created_at FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+
+		return $this->hydrate( is_array( $row ) ? $row : null );
+	}
+
+	/**
+	 * Build submissions from wpdb rows.
+	 *
+	 * @param mixed $rows Rows from wpdb.
+	 * @return Submission[]
+	 */
+	private function hydrate_rows( mixed $rows ): array {
+		if ( ! is_array( $rows ) ) {
+			return array();
+		}
+
+		$submissions = array();
+		foreach ( $rows as $row ) {
+			$submission = $this->hydrate( is_array( $row ) ? $row : null );
+			if ( $submission instanceof Submission ) {
+				$submissions[] = $submission;
+			}
+		}
+
+		return $submissions;
+	}
+
+	/**
+	 * Build a submission from a database row.
+	 *
+	 * @param array<string, mixed>|null $row Row from wpdb.
+	 */
+	private function hydrate( ?array $row ): ?Submission {
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+
+		return new Submission(
+			(int) ( $row['id'] ?? 0 ),
+			(int) ( $row['form_id'] ?? 0 ),
+			(int) ( $row['schema_version'] ?? 0 ),
+			$this->decode_payload( (string) ( $row['payload'] ?? '' ) ),
+			(string) ( $row['status'] ?? '' ),
+			(string) ( $row['created_at'] ?? '' )
+		);
+	}
+
+	/**
+	 * Field values from stored JSON. Non-text values are skipped.
+	 *
+	 * @param string $json Stored payload.
+	 * @return array<string, string>
+	 */
+	private function decode_payload( string $json ): array {
+		$decoded = json_decode( $json, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+
+		$payload = array();
+		foreach ( $decoded as $name => $value ) {
+			if ( is_string( $name ) && is_string( $value ) ) {
+				$payload[ $name ] = $value;
+			}
+		}
+
+		return $payload;
+	}
+
+	/**
 	 * Record a failed insert without the query or the submission text.
 	 *
 	 * @param int $form_id Form id.
