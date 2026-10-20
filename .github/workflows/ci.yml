@@ -284,12 +284,19 @@ jobs:
           }
 
           assert_debug_log() {
-            if [[ -s wordpress/wp-content/debug.log ]]; then
+            if [[ ! -s wordpress/wp-content/debug.log ]]; then
+              echo "debug.log is absent or empty."
+              return
+            fi
+            # wp-cli 2.12 logs its own PHP deprecations through WordPress while this step also runs wp.
+            local plugin_lines
+            plugin_lines="$(grep -v 'phar:///usr/local/bin/wp-cli/' wordpress/wp-content/debug.log || true)"
+            if [[ -n "${plugin_lines//[[:space:]]/}" ]]; then
               echo "debug.log is not empty:"
               cat wordpress/wp-content/debug.log
               exit 1
             fi
-            echo "debug.log is absent or empty."
+            echo "debug.log has only wp-cli deprecations."
           }
 
           prefix="$(wp db prefix --path=wordpress)"
