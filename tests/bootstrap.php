@@ -41,6 +41,9 @@ require_once $formstead_tests_dir . '/includes/functions.php';
 function formstead_tests_load_plugin() {
 	$installed = WP_PLUGIN_DIR . '/formstead/formstead.php';
 	if ( is_readable( $installed ) ) {
+		// __FILE__ resolves the symlink the MySQL job uses. Register that
+		// path so plugin_basename() still returns formstead/formstead.php.
+		wp_register_plugin_realpath( $installed );
 		require $installed;
 		return;
 	}
