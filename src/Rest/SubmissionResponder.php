@@ -138,6 +138,14 @@ final class SubmissionResponder {
 			return $response;
 		}
 
+		// WordPress decodes JSON with its own depth limit before the route
+		// callback. That failure is still "too large", not a malformed body.
+		$data       = $response->get_error_data();
+		$json_error = is_array( $data ) ? ( $data['json_error_code'] ?? null ) : null;
+		if ( is_numeric( $json_error ) && JSON_ERROR_DEPTH === (int) $json_error ) {
+			return self::failure( ResponseMode::from_request( $request ), RequestError::PayloadTooLarge );
+		}
+
 		// WordPress parses every +json body before the route callback. Only
 		// application/json is a Formstead body, so another type is 415.
 		$error = 'application/json' === RequestPayload::media_type( $request )
