@@ -190,6 +190,8 @@ final class ContractTest extends WP_UnitTestCase {
 			'json missing form'  => array( 'json', 404, 'form_not_found', 'application/json', $json, false ),
 			'html storage'       => array( 'html', 500, 'storage_failed', 'application/x-www-form-urlencoded', 'email=a@b.co&note=SECRET', false ),
 			'json storage'       => array( 'json', 500, 'storage_failed', 'application/json', '{"email":"a@b.co","note":"SECRET"}', false ),
+			'html bad key'       => array( 'html', 400, 'invalid_idempotency_key', 'application/x-www-form-urlencoded', 'email=a@b.co&note=Hi&_fs_idempotency_key=bad+key', false ),
+			'json bad key'       => array( 'json', 400, 'invalid_idempotency_key', 'application/json', '{"email":"a@b.co","note":"Hi","_fs_idempotency_key":"bad key"}', false ),
 		);
 	}
 

@@ -123,14 +123,24 @@ final class SubmissionRepository {
 	/**
 	 * Load one submission. Reading it does not change its status.
 	 *
-	 * @param int $id Submission id.
+	 * A locking read sees a row committed by another connection after this
+	 * transaction's snapshot was taken. Replay uses that so it can return the
+	 * original receipt.
+	 *
+	 * @param int  $id         Submission id.
+	 * @param bool $for_update Whether to lock the row.
 	 */
-	public function find( int $id ): ?Submission {
+	public function find( int $id, bool $for_update = false ): ?Submission {
 		global $wpdb;
 
 		$table = Schema::submissions_table();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		if ( $for_update ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE id = %d FOR UPDATE", $id ), ARRAY_A );
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		}
 
 		return $this->hydrate( is_array( $row ) ? $row : null );
 	}

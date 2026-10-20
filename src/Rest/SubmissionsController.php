@@ -12,8 +12,9 @@ use Formstead\Forms\FormRepository;
 use Formstead\Security\Limits;
 use Formstead\Security\OriginPolicy;
 use Formstead\Security\RateLimiter;
+use Formstead\Submissions\IdempotencyKey;
 use Formstead\Submissions\ReceiptId;
-use Formstead\Submissions\SubmissionRepository;
+use Formstead\Submissions\SubmissionIntake;
 use Formstead\Submissions\SubmissionValidator;
 use WP_Error;
 use WP_REST_Request;
@@ -112,12 +113,25 @@ final class SubmissionsController {
 			return SubmissionResponder::invalid( $mode, $form, $result );
 		}
 
-		$saved = ( new SubmissionRepository() )->insert( $form, $result->values() );
-		if ( $saved instanceof WP_Error ) {
+		$key = IdempotencyKey::read( $request, $params );
+		if ( $key instanceof RequestError ) {
+			return SubmissionResponder::failure( $mode, $key );
+		}
+
+		$intake = ( new SubmissionIntake() )->accept( $form, $result->values(), $key );
+		if ( $intake->is_conflict() ) {
+			return SubmissionResponder::failure( $mode, RequestError::IdempotencyConflict );
+		}
+		if ( $intake->is_failed() || null === $intake->submission() ) {
 			return SubmissionResponder::failure( $mode, RequestError::StorageFailed );
 		}
 
-		return SubmissionResponder::accepted( $mode, $saved->receipt_id(), $form->success_url() );
+		return SubmissionResponder::accepted(
+			$mode,
+			$intake->submission()->receipt_id(),
+			$form->success_url(),
+			$intake->is_replayed()
+		);
 	}
 
 	/**

@@ -12,15 +12,17 @@ namespace Formstead\Rest;
  */
 enum RequestError: string {
 
-	case FormNotFound         = 'form_not_found';
-	case MalformedBody        = 'malformed_body';
-	case UnsupportedMediaType = 'unsupported_media_type';
-	case FilesNotSupported    = 'files_not_supported';
-	case InvalidFields        = 'invalid_fields';
-	case StorageFailed        = 'storage_failed';
-	case PayloadTooLarge      = 'payload_too_large';
-	case OriginNotAllowed     = 'origin_not_allowed';
-	case RateLimited          = 'rate_limited';
+	case FormNotFound          = 'form_not_found';
+	case MalformedBody         = 'malformed_body';
+	case UnsupportedMediaType  = 'unsupported_media_type';
+	case FilesNotSupported     = 'files_not_supported';
+	case InvalidFields         = 'invalid_fields';
+	case StorageFailed         = 'storage_failed';
+	case PayloadTooLarge       = 'payload_too_large';
+	case OriginNotAllowed      = 'origin_not_allowed';
+	case RateLimited           = 'rate_limited';
+	case InvalidIdempotencyKey = 'invalid_idempotency_key';
+	case IdempotencyConflict   = 'idempotency_conflict';
 
 	/**
 	 * HTTP status for this error.
@@ -37,6 +39,8 @@ enum RequestError: string {
 			self::PayloadTooLarge => 413,
 			self::OriginNotAllowed => 403,
 			self::RateLimited => 429,
+			self::InvalidIdempotencyKey => 400,
+			self::IdempotencyConflict => 409,
 		};
 	}
 }
