@@ -28,6 +28,10 @@ use WP_UnitTestCase;
  * creates. Writes to other tables, including posts and options, leak into
  * later tests.
  *
+ * `SAVEPOINT` and `ROLLBACK TO SAVEPOINT` keep the suite transaction open.
+ * `START TRANSACTION` ends it immediately, before `COMMIT`: a second database
+ * connection can already see the row.
+ *
  * @group schema
  */
 abstract class SchemaTestCase extends WP_UnitTestCase {

@@ -65,4 +65,27 @@ final class SchemaTestCaseTest extends SchemaTestCase {
 		$listed = $wpdb->get_col( 'SHOW TABLES' );
 		$this->assertContains( $table, $listed );
 	}
+
+	/**
+	 * A bigint(20) unsigned column matches what dbDelta already stores on MariaDB.
+	 */
+	public function test_dbdelta_bigint_20_is_idempotent(): void {
+		global $wpdb;
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+		$table = $wpdb->prefix . 'formstead_schema_bigint';
+		$this->register_schema_table( $table );
+
+		$charset = $wpdb->get_charset_collate();
+		$schema  = "CREATE TABLE {$table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			PRIMARY KEY  (id)
+		) {$charset};";
+
+		dbDelta( $schema );
+		$second = dbDelta( $schema );
+
+		$this->assertSame( array(), $second );
+	}
 }
