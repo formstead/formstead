@@ -512,6 +512,86 @@ jobs:
             exit 1
           fi
 
+          assert_no_credentials() {
+            local label="$1"
+            local headers="$2"
+            if grep -Eqi '^Access-Control-Allow-Credentials:' "$headers"; then
+              echo "${label} sent Access-Control-Allow-Credentials." >&2
+              cat "$headers" >&2
+              exit 1
+            fi
+          }
+
+          allowed_headers="$(mktemp)"
+          allowed_code="$(curl -s -D "$allowed_headers" -o /dev/null -w '%{http_code}' \
+            -H 'Origin: https://forms.example' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'email=a@b.co' \
+            "$endpoint")"
+          assert_status post_allowed_origin 303 "$allowed_code"
+          if ! grep -Eq '^Access-Control-Allow-Origin: https://forms.example[[:space:]]*$' "$allowed_headers"; then
+            echo "Allowed origin was not granted CORS." >&2
+            cat "$allowed_headers" >&2
+            exit 1
+          fi
+          assert_no_credentials "Allowed origin" "$allowed_headers"
+
+          allowed_invalid_headers="$(mktemp)"
+          allowed_invalid_code="$(curl -s -D "$allowed_invalid_headers" -o /tmp/formstead-allowed-invalid -w '%{http_code}' \
+            -H 'Origin: https://forms.example' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'extra=dropped-secret' \
+            "$endpoint")"
+          assert_status post_allowed_invalid 422 "$allowed_invalid_code"
+          assert_no_credentials "Invalid allowed origin" "$allowed_invalid_headers"
+          if grep -q 'dropped-secret' /tmp/formstead-allowed-invalid; then
+            echo "Allowed-origin 422 echoed the submitted value." >&2
+            exit 1
+          fi
+
+          allowed_json_headers="$(mktemp)"
+          allowed_json_code="$(curl -s -D "$allowed_json_headers" -o /tmp/formstead-allowed-json -w '%{http_code}' \
+            -H 'Origin: https://forms.example' \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            --data '{"email":"a@b.co"}' \
+            "$endpoint")"
+          assert_status post_allowed_json 201 "$allowed_json_code"
+          if ! grep -Eq '^Access-Control-Allow-Origin: https://forms.example[[:space:]]*$' "$allowed_json_headers"; then
+            echo "Allowed JSON response did not grant the origin." >&2
+            cat "$allowed_json_headers" >&2
+            exit 1
+          fi
+          assert_no_credentials "Allowed JSON" "$allowed_json_headers"
+          if grep -q 'a@b.co' /tmp/formstead-allowed-json; then
+            echo "Allowed JSON success echoed the submitted value." >&2
+            exit 1
+          fi
+
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "5" ]]; then
+            echo "Expected 5 submissions after allowed-origin posts, found ${row_count}." >&2
+            exit 1
+          fi
+
+          core_headers="$(mktemp)"
+          core_code="$(curl -s -D "$core_headers" -o /dev/null -w '%{http_code}' \
+            -X OPTIONS \
+            -H 'Origin: https://other.example' \
+            -H 'Access-Control-Request-Method: GET' \
+            http://127.0.0.1:8080/wp-json/wp/v2/types)"
+          assert_status core_preflight 200 "$core_code"
+          if ! grep -Eq '^Access-Control-Allow-Origin: https://other.example[[:space:]]*$' "$core_headers"; then
+            echo "wp/v2 lost the core CORS origin header." >&2
+            cat "$core_headers" >&2
+            exit 1
+          fi
+          if ! grep -Eqi '^Access-Control-Allow-Credentials: true[[:space:]]*$' "$core_headers"; then
+            echo "wp/v2 lost the core credentialed CORS header." >&2
+            cat "$core_headers" >&2
+            exit 1
+          fi
+
           JAR="$(mktemp)"
           curl -sf -o /dev/null -w 'front:%{http_code} %{url_effective}\n' http://127.0.0.1:8080/
           curl -sf -c "$JAR" -b "$JAR" -o /dev/null -w 'login:%{http_code} %{url_effective}\n' http://127.0.0.1:8080/wp-login.php
