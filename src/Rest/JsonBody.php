@@ -27,10 +27,11 @@ final class JsonBody {
 	 * Returns null when the body is not a JSON object. The caller maps that
 	 * to `malformed_body`. `{}` and `{ }` are objects. `[]` is not.
 	 *
-	 * @param string $raw Raw request body.
-	 * @return array<string, mixed>|null
+	 * @param string $raw   Raw request body.
+	 * @param int    $depth Maximum nesting depth. Deeper documents are too large.
+	 * @return array<string, mixed>|RequestError|null `PayloadTooLarge` when the document is too deep. Null when it is not an object.
 	 */
-	public static function object( string $raw ): ?array {
+	public static function object( string $raw, int $depth = 8 ): array|RequestError|null {
 		if ( '' === $raw || ! mb_check_encoding( $raw, 'UTF-8' ) ) {
 			return null;
 		}
@@ -39,12 +40,22 @@ final class JsonBody {
 			return null;
 		}
 
-		$decoded = json_decode( $raw, true );
+		if ( $depth < 1 ) {
+			return null;
+		}
+
+		$decoded = json_decode( $raw, true, $depth );
+		if ( JSON_ERROR_DEPTH === json_last_error() ) {
+			return RequestError::PayloadTooLarge;
+		}
 		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $decoded ) ) {
 			return null;
 		}
 
-		$marked = json_decode( self::mark_numbers( $raw ), true );
+		$marked = json_decode( self::mark_numbers( $raw ), true, $depth );
+		if ( JSON_ERROR_DEPTH === json_last_error() ) {
+			return RequestError::PayloadTooLarge;
+		}
 		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $marked ) ) {
 			return $decoded;
 		}

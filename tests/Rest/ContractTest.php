@@ -76,7 +76,7 @@ final class ContractTest extends WP_UnitTestCase {
 
 		$this->assertInstanceOf( WP_REST_Response::class, $response );
 		$this->assertSame( $status, $response->get_status() );
-		$this->assertSame( 'Accept', $response->get_headers()['Vary'] );
+		$this->assertSame( 'Accept, Origin', $response->get_headers()['Vary'] );
 		$this->assertSame( 'no-store', $response->get_headers()['Cache-Control'] );
 
 		if ( 'html' === $mode && 'accepted' !== $code ) {
