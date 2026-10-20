@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Activation creates the forms and submissions tables and grants the four Formstead capabilities to administrators.
 - Forms can be stored with a public id, field schema, and an absolute success URL.
+- The admin can create and edit forms. The endpoint URL comes from `rest_url()`.
 
 ### Changed
 
