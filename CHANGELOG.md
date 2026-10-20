@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The PHP 7.4 syntax job uses the pinned setup-php action instead of a floating `php:7.4-cli` image.
+- The package job treats HTTP 200 as success. It no longer treats `wp-login.php` in the effective URL as a failure, because that curl call does not follow redirects.
+
 ## [0.0.2] - 2026-10-20
 
 ### Added

@@ -117,6 +117,8 @@ jobs:
       - name: Install Formstead from ZIP
         run: wp plugin install formstead.zip --activate --path=wordpress
 
+      # Keep 2.1.0 in sync with the plugin-check ZIP URL in .wp-env.json.
+      # That file is strict JSON, so the pin cannot be commented there.
       - name: Install Plugin Check
         run: wp plugin install plugin-check --version=2.1.0 --activate --path=wordpress
 
@@ -150,10 +152,11 @@ jobs:
             local label="$1"
             local url="$2"
             local result
+            # No -L: a redirect to wp-login.php stays a non-200. url_effective is only the requested URL.
             result="$(curl -s -b "$JAR" -o /dev/null -w '%{http_code} %{url_effective}' "$url")"
             echo "${label}:${result}"
             local code="${result%% *}"
-            if [[ "$code" != "200" || "$result" == *wp-login.php* ]]; then
+            if [[ "$code" != "200" ]]; then
               echo "${label} did not return 200 at ${url}." >&2
               exit 1
             fi
@@ -204,6 +207,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
+      - name: Set up PHP 7.4
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "7.4"
+          coverage: none
+          tools: none
+
       - name: Lint formstead.php on PHP 7.4
-        run: docker run --rm -v "$PWD:/app" -w /app php:7.4-cli php -l formstead.php
+        run: php -l formstead.php
 
