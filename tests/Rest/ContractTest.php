@@ -14,6 +14,7 @@ use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Rest\HtmlResponse;
+use Formstead\Security\OriginPolicy;
 use Formstead\Submissions\ReceiptId;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -33,6 +34,7 @@ final class ContractTest extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		OriginPolicy::reset();
 		rest_get_server();
 	}
 

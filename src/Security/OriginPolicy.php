@@ -22,6 +22,23 @@ use WP_REST_Request;
 final class OriginPolicy {
 
 	/**
+	 * Enabled forms already loaded during this request, keyed by public id.
+	 *
+	 * A null entry is a miss: unknown or disabled. Call {@see self::reset()}
+	 * between tests. PHP clears the array at the end of a web request.
+	 *
+	 * @var array<string, Form|null>
+	 */
+	private static array $forms = array();
+
+	/**
+	 * Forget forms loaded during this request.
+	 */
+	public static function reset(): void {
+		self::$forms = array();
+	}
+
+	/**
 	 * Whether this request may submit the form.
 	 *
 	 * @param Form            $form    Form being submitted.
@@ -67,11 +84,18 @@ final class OriginPolicy {
 			return null;
 		}
 
+		if ( array_key_exists( $public_id, self::$forms ) ) {
+			$cached = self::$forms[ $public_id ];
+			return $cached instanceof Form ? $cached : null;
+		}
+
 		$form = ( new FormRepository() )->find_by_public_id( $public_id );
 		if ( ! $form instanceof Form || ! $form->is_enabled() ) {
+			self::$forms[ $public_id ] = null;
 			return null;
 		}
 
+		self::$forms[ $public_id ] = $form;
 		return $form;
 	}
 

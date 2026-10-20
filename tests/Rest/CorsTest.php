@@ -34,6 +34,7 @@ final class CorsTest extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		OriginPolicy::reset();
 		rest_get_server();
 	}
 
@@ -121,6 +122,32 @@ final class CorsTest extends WP_UnitTestCase {
 		$unknown = rest_do_request( $this->preflight( 'fs_aaaaaaaaaaaaaaaa', 'https://forms.example' ) );
 		$this->assertSame( 204, $unknown->get_status() );
 		$this->assertArrayNotHasKey( 'Access-Control-Allow-Origin', $unknown->get_headers() );
+	}
+
+	/**
+	 * The form row is loaded once for the origin checks in a single dispatch.
+	 */
+	public function test_origin_lookup_is_cached_for_the_request(): void {
+		$form    = $this->save_form( array( 'https://forms.example' ) );
+		$table   = Schema::forms_table();
+		$selects = 0;
+		$filter  = static function ( $query ) use ( $table, &$selects ) {
+			if ( is_string( $query ) && str_contains( $query, $table ) && str_contains( strtolower( $query ), 'select' ) ) {
+				++$selects;
+			}
+
+			return $query;
+		};
+
+		add_filter( 'query', $filter );
+		try {
+			$response = rest_do_request( $this->request( $form->public_id(), 'https://forms.example' ) );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+
+		$this->assertSame( 303, $response->get_status() );
+		$this->assertSame( 2, $selects );
 	}
 
 	/**

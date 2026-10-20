@@ -15,6 +15,7 @@ use Formstead\Forms\FormProtection;
 use Formstead\Forms\FormRepository;
 use Formstead\Rest\HtmlResponse;
 use Formstead\Security\IpHasher;
+use Formstead\Security\OriginPolicy;
 use Formstead\Security\RateLimiter;
 use Formstead\Submissions\ReceiptId;
 use WP_REST_Request;
@@ -35,6 +36,7 @@ final class ProtectionTest extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		OriginPolicy::reset();
 		rest_get_server();
 	}
 
