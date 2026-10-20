@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for submission limits and rate limiting.
+ * Tests for submission limits, the honeypot, and rate limiting.
  *
  * @package Formstead
  */
@@ -16,12 +16,13 @@ use Formstead\Forms\FormRepository;
 use Formstead\Rest\HtmlResponse;
 use Formstead\Security\IpHasher;
 use Formstead\Security\RateLimiter;
+use Formstead\Submissions\ReceiptId;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_UnitTestCase;
 
 /**
- * Covers 413 and 429 in both response modes.
+ * Covers 413, 429, and the honeypot in both response modes.
  *
  * @phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
  * @phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -103,6 +104,38 @@ final class ProtectionTest extends WP_UnitTestCase {
 
 		$this->assert_error( $response, $mode, 413, 'payload_too_large' );
 		$this->assertSame( array(), $this->rows() );
+	}
+
+	/**
+	 * A filled honeypot looks like success and stores nothing.
+	 *
+	 * @dataProvider modes
+	 * @param string $mode `html` or `json`.
+	 */
+	public function test_filled_honeypot_pretends_to_succeed( string $mode ): void {
+		$form = $this->save_form();
+		if ( 'json' === $mode ) {
+			$request = $this->request( $form->public_id(), 'json', '{"email":"a@b.co","_fs_honeypot":"bot"}' );
+			$request->set_header( 'Content-Type', 'application/json' );
+		} else {
+			$request = $this->request( $form->public_id(), 'html', 'email=a@b.co&_fs_honeypot=bot' );
+		}
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 'json' === $mode ? 201 : 303, $response->get_status() );
+		$this->assertSame( array(), $this->rows() );
+		if ( 'json' === $mode ) {
+			$data = $response->get_data();
+			$this->assertIsArray( $data );
+			$this->assertTrue( ReceiptId::is_valid( (string) $data['receipt_id'] ) );
+		} else {
+			$this->assertSame( 'https://example.com/thanks', $response->get_headers()['Location'] );
+		}
+
+		$loaded = ( new FormRepository() )->find_by_id( $form->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 1, $loaded->honeypot_rejections() );
 	}
 
 	/**

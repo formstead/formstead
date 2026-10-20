@@ -30,6 +30,7 @@ $forms = isset( $forms ) && is_array( $forms ) ? $forms : array();
 					<th scope="col"><?php echo esc_html__( 'Name', 'formstead' ); ?></th>
 					<th scope="col"><?php echo esc_html__( 'Status', 'formstead' ); ?></th>
 					<th scope="col"><?php echo esc_html__( 'Public identifier', 'formstead' ); ?></th>
+					<th scope="col"><?php echo esc_html__( 'Honeypot', 'formstead' ); ?></th>
 					<th scope="col"><?php echo esc_html__( 'Updated', 'formstead' ); ?></th>
 				</tr>
 			</thead>
@@ -54,6 +55,7 @@ $forms = isset( $forms ) && is_array( $forms ) ? $forms : array();
 							?>
 						</td>
 						<td><code><?php echo esc_html( $form->public_id() ); ?></code></td>
+						<td><?php echo esc_html( number_format_i18n( $form->honeypot_rejections() ) ); ?></td>
 						<td><?php echo esc_html( get_date_from_gmt( $form->updated_at(), 'Y-m-d H:i' ) ); ?></td>
 					</tr>
 				<?php endforeach; ?>

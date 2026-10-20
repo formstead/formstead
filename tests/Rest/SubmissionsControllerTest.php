@@ -51,7 +51,7 @@ final class SubmissionsControllerTest extends WP_UnitTestCase {
 
 		$response = $this->post(
 			$form->public_id(),
-			'email=' . rawurlencode( '  a@b.co  ' ) . '&note=' . rawurlencode( 'Zażółć' ) . '&extra=drop-me&_fs_honeypot=bot&redirect_to=' . rawurlencode( 'https://evil.example' ),
+			'email=' . rawurlencode( '  a@b.co  ' ) . '&note=' . rawurlencode( 'Zażółć' ) . '&extra=drop-me&_fs_honeypot=&redirect_to=' . rawurlencode( 'https://evil.example' ),
 			array( 'redirect_to' => 'https://evil.example' )
 		);
 
