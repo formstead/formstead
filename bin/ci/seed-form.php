@@ -10,6 +10,7 @@
 use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
+use Formstead\Forms\FormProtection;
 use Formstead\Forms\FormRepository;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -33,7 +34,8 @@ function formstead_ci_seed_form() {
 		1,
 		'https://example.com/thanks',
 		'',
-		''
+		'',
+		new FormProtection( array( 'https://forms.example' ), null, null )
 	);
 
 	$saved = ( new FormRepository() )->insert( $form );

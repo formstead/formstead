@@ -284,12 +284,19 @@ jobs:
           }
 
           assert_debug_log() {
-            if [[ -s wordpress/wp-content/debug.log ]]; then
+            if [[ ! -s wordpress/wp-content/debug.log ]]; then
+              echo "debug.log is absent or empty."
+              return
+            fi
+            # wp-cli 2.12 logs its own PHP deprecations through WordPress while this step also runs wp.
+            local plugin_lines
+            plugin_lines="$(grep -v 'phar:///usr/local/bin/wp-cli/' wordpress/wp-content/debug.log || true)"
+            if [[ -n "${plugin_lines//[[:space:]]/}" ]]; then
               echo "debug.log is not empty:"
               cat wordpress/wp-content/debug.log
               exit 1
             fi
-            echo "debug.log is absent or empty."
+            echo "debug.log has only wp-cli deprecations."
           }
 
           prefix="$(wp db prefix --path=wordpress)"
@@ -463,6 +470,45 @@ jobs:
           row_count="$(submission_count)"
           if [[ "$row_count" != "3" ]]; then
             echo "Expected 3 submissions after JSON and multipart success, found ${row_count}." >&2
+            exit 1
+          fi
+
+          preflight_headers="$(mktemp)"
+          preflight_code="$(curl -s -D "$preflight_headers" -o /dev/null -w '%{http_code}' \
+            -X OPTIONS \
+            -H 'Origin: https://forms.example' \
+            -H 'Access-Control-Request-Method: POST' \
+            "$endpoint")"
+          assert_status preflight 204 "$preflight_code"
+          if ! grep -Eq '^Access-Control-Allow-Origin: https://forms.example[[:space:]]*$' "$preflight_headers"; then
+            echo "Allowed preflight did not grant the origin." >&2
+            cat "$preflight_headers" >&2
+            exit 1
+          fi
+          if grep -Eqi '^Access-Control-Allow-Credentials:' "$preflight_headers"; then
+            echo "Preflight sent Access-Control-Allow-Credentials." >&2
+            exit 1
+          fi
+
+          denied_headers="$(mktemp)"
+          denied_code="$(curl -s -D "$denied_headers" -o /tmp/formstead-denied -w '%{http_code}' \
+            -H 'Origin: https://evil.example' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'email=a@b.co' \
+            "$endpoint")"
+          assert_status post_foreign 403 "$denied_code"
+          if grep -Eqi '^Access-Control-Allow-Origin:' "$denied_headers"; then
+            echo "Rejected origin was granted CORS." >&2
+            cat "$denied_headers" >&2
+            exit 1
+          fi
+          if grep -Eqi '^Access-Control-Allow-Credentials:' "$denied_headers"; then
+            echo "Rejected origin sent Access-Control-Allow-Credentials." >&2
+            exit 1
+          fi
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "3" ]]; then
+            echo "Rejected origin stored a row. Count is ${row_count}." >&2
             exit 1
           fi
 

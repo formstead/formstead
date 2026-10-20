@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
+### Added
+
+- Request size, field count, and JSON depth limits. Oversized input returns `413` `payload_too_large`.
+- Rate limits per IP address and per form, with `429` and `Retry-After`. A form can override the global limits. Global values can be set with `FORMSTEAD_MAX_REQUEST_BYTES`, `FORMSTEAD_MAX_FIELDS`, `FORMSTEAD_RATE_PER_MINUTE`, `FORMSTEAD_RATE_PER_HOUR`, and `FORMSTEAD_TRUSTED_PROXIES` in `wp-config.php`.
+- A honeypot field, `_fs_honeypot`. A filled field looks like success and is not stored. The rejection count is shown in the admin.
+- An origin allowlist on each form. An empty list allows only this site. A missing `Origin` header stays allowed. Another origin gets `403` `origin_not_allowed`.
+- CORS for `formstead/v1` without `Access-Control-Allow-Credentials`.
+
+### Changed
+
+- Forms that are submitted from another site need that origin on the allowlist after this update.
+
 ## [0.2.0] - 2026-10-20
 
 ### Added
@@ -77,7 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/formstead/formstead/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/formstead/formstead/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/formstead/formstead/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/formstead/formstead/compare/v0.0.2...v0.1.0
