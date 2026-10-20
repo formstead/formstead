@@ -143,6 +143,7 @@ final class ProtectionTest extends WP_UnitTestCase {
 	 */
 	public function test_sixth_request_from_one_address_returns_429(): void {
 		$form = $this->save_form();
+		$this->wait_for_rate_window();
 		$this->set_remote( '203.0.113.10' );
 
 		try {
@@ -168,6 +169,7 @@ final class ProtectionTest extends WP_UnitTestCase {
 	 */
 	public function test_spoofed_forwarded_for_stays_in_the_same_bucket(): void {
 		$form = $this->save_form();
+		$this->wait_for_rate_window();
 		$this->set_remote( '203.0.113.10' );
 
 		try {
@@ -194,6 +196,7 @@ final class ProtectionTest extends WP_UnitTestCase {
 	 */
 	public function test_trusted_proxy_uses_the_forwarded_address(): void {
 		$form = $this->save_form();
+		$this->wait_for_rate_window();
 		add_filter( 'formstead_trusted_proxies', array( $this, 'trust_proxy' ) );
 		$this->set_remote( '203.0.113.10' );
 
@@ -221,6 +224,7 @@ final class ProtectionTest extends WP_UnitTestCase {
 	 */
 	public function test_ipv6_is_counted_by_prefix(): void {
 		$form = $this->save_form();
+		$this->wait_for_rate_window();
 		$this->set_remote( '2001:db8:1:2::1' );
 
 		try {
@@ -246,6 +250,7 @@ final class ProtectionTest extends WP_UnitTestCase {
 	 */
 	public function test_form_rate_override_is_enforced(): void {
 		$form = $this->save_form( new FormProtection( array(), 1, null ) );
+		$this->wait_for_rate_window();
 		$this->set_remote( '203.0.113.20' );
 
 		try {
@@ -257,6 +262,67 @@ final class ProtectionTest extends WP_UnitTestCase {
 
 		$this->assertSame( 201, $first->get_status() );
 		$this->assertSame( 429, $second->get_status() );
+	}
+
+	/**
+	 * Requests already rejected for one address do not spend the form's hourly limit.
+	 */
+	public function test_minute_limit_does_not_spend_the_hourly_bucket(): void {
+		$form = $this->save_form( new FormProtection( array(), null, 10 ) );
+		$this->wait_for_rate_window();
+		$this->set_remote( '203.0.113.40' );
+
+		try {
+			for ( $index = 0; $index < 20; $index++ ) {
+				$response = rest_do_request( $this->request( $form->public_id(), 'json', 'email=a@b.co' ) );
+				$this->assertSame( $index < 5 ? 201 : 429, $response->get_status() );
+			}
+
+			$this->assertSame( 5, $this->hour_hits( $form ) );
+
+			$this->set_remote( '203.0.113.41' );
+			$other = rest_do_request( $this->request( $form->public_id(), 'json', 'email=a@b.co' ) );
+			$this->assertSame( 201, $other->get_status() );
+		} finally {
+			$this->clear_remote();
+		}
+
+		$this->assertSame( 6, $this->hour_hits( $form ) );
+	}
+
+	/**
+	 * A failed write of the hourly counter still rejects an address over its minute limit.
+	 */
+	public function test_hourly_write_failure_still_returns_the_minute_limit(): void {
+		$form = $this->save_form();
+		$this->wait_for_rate_window();
+		$this->set_remote( '203.0.113.42' );
+		$hour_bucket = $this->hour_bucket( $form );
+		$filter      = static function ( $query ) use ( $hour_bucket ) {
+			if ( is_string( $query ) && str_contains( $query, $hour_bucket ) ) {
+				return '';
+			}
+
+			return $query;
+		};
+
+		try {
+			for ( $index = 0; $index < 5; $index++ ) {
+				$response = rest_do_request( $this->request( $form->public_id(), 'json', 'email=a@b.co' ) );
+				$this->assertSame( 201, $response->get_status() );
+			}
+
+			$this->assertSame( 5, $this->hour_hits( $form ) );
+			add_filter( 'query', $filter );
+			$limited = rest_do_request( $this->request( $form->public_id(), 'json', 'email=a@b.co' ) );
+		} finally {
+			remove_filter( 'query', $filter );
+			$this->clear_remote();
+		}
+
+		$this->assert_error( $limited, 'json', 429, 'rate_limited' );
+		$this->assertArrayHasKey( 'Retry-After', $limited->get_headers() );
+		$this->assertSame( 5, $this->hour_hits( $form ) );
 	}
 
 	/**
@@ -441,6 +507,52 @@ final class ProtectionTest extends WP_UnitTestCase {
 		}
 
 		return $request;
+	}
+
+	/**
+	 * Avoid starting a fixed window that would end during this test.
+	 */
+	private function wait_for_rate_window(): void {
+		$minute_left = 60 - ( time() % 60 );
+		$hour_left   = 3600 - ( time() % 3600 );
+		$wait        = 0;
+
+		if ( $minute_left < 5 ) {
+			$wait = $minute_left;
+		}
+		if ( $hour_left < 5 ) {
+			$wait = max( $wait, $hour_left );
+		}
+		if ( $wait > 0 ) {
+			sleep( $wait + 1 );
+		}
+	}
+
+	/**
+	 * Hits stored for this form's current hourly bucket.
+	 *
+	 * @param Form $form Form being submitted.
+	 */
+	private function hour_hits( Form $form ): int {
+		global $wpdb;
+
+		$table = Schema::rate_limits_table();
+		$hits  = $wpdb->get_var( $wpdb->prepare( "SELECT hits FROM {$table} WHERE bucket = %s", $this->hour_bucket( $form ) ) );
+
+		return (int) $hits;
+	}
+
+	/**
+	 * HMAC key for this form's current hourly bucket.
+	 *
+	 * Matches `RateLimiter` window keys: scope, form id, subject, window start.
+	 *
+	 * @param Form $form Form being submitted.
+	 */
+	private function hour_bucket( Form $form ): string {
+		$start = intdiv( time(), 3600 ) * 3600;
+
+		return hash_hmac( 'sha256', 'hour|' . $form->id() . '|form|' . $start, IpHasher::secret() );
 	}
 
 	/**
