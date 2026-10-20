@@ -8,6 +8,7 @@
 namespace Formstead\Database;
 
 use Formstead\Security\Capabilities;
+use Formstead\Submissions\ReceiptId;
 use WP_Error;
 
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- dbDelta and SHOW TABLES cannot use placeholders for identifiers.
@@ -26,6 +27,11 @@ final class Migrator {
 	public const LOCK_TTL = 600;
 
 	/**
+	 * Rows updated in one backfill query batch.
+	 */
+	private const BATCH = 100;
+
+	/**
 	 * Migrate when the stored schema version is behind the code.
 	 */
 	public static function maybe_migrate(): ?WP_Error {
@@ -42,7 +48,7 @@ final class Migrator {
 	 * Create or update tables, grant capabilities, and store the schema version.
 	 *
 	 * Returns an error without the database message. The schema version is
-	 * stored only after both tables exist.
+	 * stored only after the tables exist and any backfill has finished.
 	 */
 	public static function run(): ?WP_Error {
 		if ( ! self::acquire_lock() ) {
@@ -55,6 +61,8 @@ final class Migrator {
 		try {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
+			$installed = (int) get_option( Schema::VERSION_OPTION, 0 );
+
 			foreach ( Schema::statements() as $statement ) {
 				dbDelta( $statement );
 			}
@@ -64,6 +72,13 @@ final class Migrator {
 					'formstead_migration_tables',
 					__( 'Formstead could not create its database tables.', 'formstead' )
 				);
+			}
+
+			if ( $installed < 2 ) {
+				$upgraded = self::upgrade_to_2();
+				if ( $upgraded instanceof WP_Error ) {
+					return $upgraded;
+				}
 			}
 
 			Capabilities::grant_to_administrator();
@@ -76,10 +91,192 @@ final class Migrator {
 	}
 
 	/**
-	 * Whether both Formstead tables are present.
+	 * Whether every Formstead table is present.
 	 */
 	public static function tables_exist(): bool {
-		return self::table_exists( Schema::forms_table() ) && self::table_exists( Schema::submissions_table() );
+		return self::table_exists( Schema::forms_table() )
+			&& self::table_exists( Schema::form_versions_table() )
+			&& self::table_exists( Schema::submissions_table() );
+	}
+
+	/**
+	 * Backfill schema snapshots and receipt ids added in schema version 2.
+	 *
+	 * The schema version option stays unchanged until this finishes, so a
+	 * failed batch runs again on the next request.
+	 */
+	private static function upgrade_to_2(): ?WP_Error {
+		$snapshots = self::backfill_snapshots();
+		if ( $snapshots instanceof WP_Error ) {
+			return $snapshots;
+		}
+
+		return self::backfill_receipts();
+	}
+
+	/**
+	 * Store the current field schema of every form that has no snapshot yet.
+	 *
+	 * Older schema versions from 0.1.x were not kept, so they cannot be rebuilt.
+	 */
+	private static function backfill_snapshots(): ?WP_Error {
+		global $wpdb;
+
+		$forms    = Schema::forms_table();
+		$versions = Schema::form_versions_table();
+		$last_id  = 0;
+
+		do {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names are identifiers.
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT id, schema_version, fields, updated_at FROM {$forms} WHERE id > %d ORDER BY id ASC LIMIT %d",
+					$last_id,
+					self::BATCH
+				),
+				ARRAY_A
+			);
+
+			if ( ! is_array( $rows ) || array() === $rows ) {
+				return null;
+			}
+
+			foreach ( $rows as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+
+				$form_id = (int) ( $row['id'] ?? 0 );
+				$version = (int) ( $row['schema_version'] ?? 0 );
+				$last_id = $form_id;
+				if ( $form_id < 1 || $version < 1 ) {
+					continue;
+				}
+
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+				$exists = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT id FROM {$versions} WHERE form_id = %d AND version = %d",
+						$form_id,
+						$version
+					)
+				);
+				if ( null !== $exists ) {
+					continue;
+				}
+
+				$previous  = $wpdb->suppress_errors( true );
+				$saved     = $wpdb->insert(
+					$versions,
+					array(
+						'form_id'    => $form_id,
+						'version'    => $version,
+						'fields'     => (string) ( $row['fields'] ?? '[]' ),
+						'created_at' => (string) ( $row['updated_at'] ?? current_time( 'mysql', true ) ),
+					),
+					array( '%d', '%d', '%s', '%s' )
+				);
+				$duplicate = false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
+				$wpdb->suppress_errors( $previous );
+
+				if ( false === $saved && ! $duplicate ) {
+					return new WP_Error(
+						'formstead_migration_backfill',
+						__( 'Formstead could not update its database.', 'formstead' )
+					);
+				}
+			}
+
+			$batch = count( $rows );
+		} while ( self::BATCH === $batch );
+
+		return null;
+	}
+
+	/**
+	 * Assign a receipt id to every submission that does not have one.
+	 */
+	private static function backfill_receipts(): ?WP_Error {
+		global $wpdb;
+
+		$table = Schema::submissions_table();
+
+		do {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT id FROM {$table} WHERE receipt_id IS NULL ORDER BY id ASC LIMIT %d",
+					self::BATCH
+				),
+				ARRAY_A
+			);
+
+			if ( ! is_array( $rows ) || array() === $rows ) {
+				return null;
+			}
+
+			foreach ( $rows as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+
+				$assigned = self::assign_receipt( (int) ( $row['id'] ?? 0 ) );
+				if ( $assigned instanceof WP_Error ) {
+					return $assigned;
+				}
+			}
+
+			$batch = count( $rows );
+		} while ( self::BATCH === $batch );
+
+		return null;
+	}
+
+	/**
+	 * Set one receipt id, retrying when the generated value collides.
+	 *
+	 * @param int $submission_id Submission id.
+	 */
+	private static function assign_receipt( int $submission_id ): ?WP_Error {
+		global $wpdb;
+
+		if ( $submission_id < 1 ) {
+			return null;
+		}
+
+		$table = Schema::submissions_table();
+
+		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
+			$previous = $wpdb->suppress_errors( true );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$saved     = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET receipt_id = %s WHERE id = %d AND receipt_id IS NULL",
+					ReceiptId::generate(),
+					$submission_id
+				)
+			);
+			$duplicate = false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
+			$wpdb->suppress_errors( $previous );
+
+			if ( false === $saved ) {
+				if ( $duplicate ) {
+					continue;
+				}
+
+				return new WP_Error(
+					'formstead_migration_backfill',
+					__( 'Formstead could not update its database.', 'formstead' )
+				);
+			}
+
+			return null;
+		}
+
+		return new WP_Error(
+			'formstead_migration_backfill',
+			__( 'Formstead could not update its database.', 'formstead' )
+		);
 	}
 
 	/**

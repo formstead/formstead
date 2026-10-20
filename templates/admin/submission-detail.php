@@ -6,7 +6,7 @@
  *
  * @var Submission|null                                              $submission Stored submission, or null.
  * @var Form|null                                                    $form       Current form, or null.
- * @var array<int, array{label: string, value: string, multiline: bool}> $rows   Fields to show.
+ * @var array<int, array{label: string, value: string, multiline: bool, items: list<string>}> $rows Fields to show.
  */
 
 use Formstead\Admin\Menu;
@@ -43,11 +43,18 @@ $form_name  = $form instanceof Form ? $form->name() : '';
 					$label     = isset( $row['label'] ) ? (string) $row['label'] : '';
 					$value     = isset( $row['value'] ) ? (string) $row['value'] : '';
 					$multiline = ! empty( $row['multiline'] );
+					$items     = isset( $row['items'] ) && is_array( $row['items'] ) ? $row['items'] : array();
 					?>
 					<tr>
 						<th scope="row"><?php echo esc_html( $label ); ?></th>
 						<td>
-							<?php if ( $multiline ) : ?>
+							<?php if ( array() !== $items ) : ?>
+								<ul>
+									<?php foreach ( $items as $formstead_item ) : ?>
+										<li><?php echo esc_html( (string) $formstead_item ); ?></li>
+									<?php endforeach; ?>
+								</ul>
+							<?php elseif ( $multiline ) : ?>
 								<?php echo nl2br( esc_html( $value ) ); ?>
 							<?php else : ?>
 								<?php echo esc_html( $value ); ?>

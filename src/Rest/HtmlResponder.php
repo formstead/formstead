@@ -41,6 +41,7 @@ final class HtmlResponder {
 		if ( $server instanceof WP_REST_Server && ! headers_sent() ) {
 			$server->send_header( 'Content-Type', 'text/html; charset=utf-8' );
 			$server->send_header( 'Cache-Control', 'no-store' );
+			$server->send_header( 'Vary', 'Accept' );
 		}
 
 		// The template escaped the document before it was stored on the response.

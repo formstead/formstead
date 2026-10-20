@@ -1,6 +1,6 @@
 <?php
 /**
- * Database schema version 1.
+ * Database schema version 2.
  *
  * @package Formstead
  */
@@ -15,7 +15,7 @@ namespace Formstead\Database;
  */
 final class Schema {
 
-	public const VERSION = 1;
+	public const VERSION = 2;
 
 	public const VERSION_OPTION = 'formstead_db_version';
 
@@ -40,6 +40,15 @@ final class Schema {
 	}
 
 	/**
+	 * Immutable form-schema snapshots, including the site prefix.
+	 */
+	public static function form_versions_table(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . 'formstead_form_versions';
+	}
+
+	/**
 	 * CREATE TABLE statements, one per table.
 	 *
 	 * Table names are identifiers, so they cannot be placeholders.
@@ -51,6 +60,7 @@ final class Schema {
 
 		$charset     = $wpdb->get_charset_collate();
 		$forms       = self::forms_table();
+		$versions    = self::form_versions_table();
 		$submissions = self::submissions_table();
 
 		// Table names are identifiers, so they cannot be placeholders.
@@ -69,14 +79,25 @@ final class Schema {
 				PRIMARY KEY  (id),
 				UNIQUE KEY public_id (public_id)
 			) {$charset} ENGINE=InnoDB;",
+			"CREATE TABLE {$versions} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				form_id bigint(20) unsigned NOT NULL,
+				version int(10) unsigned NOT NULL,
+				fields longtext NOT NULL,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY form_version (form_id,version)
+			) {$charset} ENGINE=InnoDB;",
 			"CREATE TABLE {$submissions} (
 				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 				form_id bigint(20) unsigned NOT NULL,
 				schema_version int(10) unsigned NOT NULL,
+				receipt_id varchar(20) DEFAULT NULL,
 				payload longtext NOT NULL,
 				status varchar(20) NOT NULL DEFAULT 'new',
 				created_at datetime NOT NULL,
 				PRIMARY KEY  (id),
+				UNIQUE KEY receipt_id (receipt_id),
 				KEY form_status_created (form_id,status,created_at)
 			) {$charset} ENGINE=InnoDB;",
 		);

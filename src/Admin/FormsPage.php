@@ -229,11 +229,12 @@ final class FormsPage {
 	 * percent-encoded address survives; FormInput rejects a URL that
 	 * `esc_url_raw()` would change.
 	 *
-	 * @return array{form_id: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
 	 */
 	private static function input_from_post(): array {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_load() before this runs.
 		$form_id = isset( $_POST['form_id'] ) ? absint( wp_unslash( $_POST['form_id'] ) ) : 0;
+		$version = isset( $_POST['schema_version'] ) ? absint( wp_unslash( $_POST['schema_version'] ) ) : 0;
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- posted_name() strips tags and keeps percent-encoded text.
 		$name = self::posted_name( isset( $_POST['name'] ) ? wp_unslash( $_POST['name'] ) : '' );
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput rejects URLs that esc_url_raw() would change.
@@ -241,11 +242,12 @@ final class FormsPage {
 		$enabled = isset( $_POST['is_enabled'] ) ? '1' : '';
 
 		return array(
-			'form_id'     => $form_id,
-			'name'        => $name,
-			'is_enabled'  => $enabled,
-			'success_url' => $url,
-			'fields'      => self::posted_fields(),
+			'form_id'        => $form_id,
+			'schema_version' => $version,
+			'name'           => $name,
+			'is_enabled'     => $enabled,
+			'success_url'    => $url,
+			'fields'         => self::posted_fields(),
 		);
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 	}
@@ -306,6 +308,11 @@ final class FormsPage {
 			'type'       => self::text_value( $row['type'] ?? null ),
 			'required'   => isset( $row['required'] ) ? '1' : '',
 			'max_length' => self::text_value( $row['max_length'] ?? null ),
+			'min'        => self::text_value( $row['min'] ?? null ),
+			'max'        => self::text_value( $row['max'] ?? null ),
+			'scale'      => self::text_value( $row['scale'] ?? null ),
+			'options'    => self::options_value( $row['options'] ?? null ),
+			'multiple'   => isset( $row['multiple'] ) ? '1' : '',
 			'remove'     => isset( $row['remove'] ) ? '1' : '',
 		);
 	}
@@ -329,19 +336,38 @@ final class FormsPage {
 	}
 
 	/**
+	 * Option lines. Tags are removed and the line breaks are kept.
+	 *
+	 * @param mixed $value Posted options.
+	 */
+	private static function options_value( mixed $value ): string {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+
+		$lines = preg_split( '/\R/', wp_strip_all_tags( $value ) );
+		if ( ! is_array( $lines ) ) {
+			return '';
+		}
+
+		return implode( "\n", array_map( 'trim', $lines ) );
+	}
+
+	/**
 	 * Values for the edit form.
 	 *
 	 * @param Form|null $form Saved form, or null for a new form.
-	 * @return array{form_id: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
 	 */
 	private static function values_from_form( ?Form $form ): array {
 		if ( ! $form instanceof Form ) {
 			return array(
-				'form_id'     => 0,
-				'name'        => '',
-				'is_enabled'  => '1',
-				'success_url' => '',
-				'fields'      => array(),
+				'form_id'        => 0,
+				'schema_version' => 1,
+				'name'           => '',
+				'is_enabled'     => '1',
+				'success_url'    => '',
+				'fields'         => array(),
 			);
 		}
 
@@ -351,11 +377,12 @@ final class FormsPage {
 		}
 
 		return array(
-			'form_id'     => $form->id(),
-			'name'        => $form->name(),
-			'is_enabled'  => $form->is_enabled() ? '1' : '',
-			'success_url' => $form->success_url(),
-			'fields'      => $rows,
+			'form_id'        => $form->id(),
+			'schema_version' => $form->schema_version(),
+			'name'           => $form->name(),
+			'is_enabled'     => $form->is_enabled() ? '1' : '',
+			'success_url'    => $form->success_url(),
+			'fields'         => $rows,
 		);
 	}
 
@@ -366,12 +393,22 @@ final class FormsPage {
 	 * @return array<string, string>
 	 */
 	private static function row_from_field( Field $field ): array {
+		$lines = array();
+		foreach ( $field->settings()->options() as $option ) {
+			$lines[] = $option['value'] . '|' . $option['label'];
+		}
+
 		return array(
 			'name'       => $field->name(),
 			'label'      => $field->label(),
 			'type'       => $field->type()->value,
 			'required'   => $field->required() ? '1' : '',
 			'max_length' => (string) $field->max_length(),
+			'min'        => (string) $field->settings()->min(),
+			'max'        => (string) $field->settings()->max(),
+			'scale'      => FieldType::Number === $field->type() ? (string) $field->settings()->scale() : '',
+			'options'    => implode( "\n", $lines ),
+			'multiple'   => $field->settings()->multiple() ? '1' : '',
 			'remove'     => '',
 		);
 	}
@@ -397,6 +434,11 @@ final class FormsPage {
 					'type'       => isset( $row['type'] ) ? (string) $row['type'] : '',
 					'required'   => isset( $row['required'] ) && '1' === (string) $row['required'] ? '1' : '',
 					'max_length' => isset( $row['max_length'] ) ? (string) $row['max_length'] : '',
+					'min'        => isset( $row['min'] ) ? (string) $row['min'] : '',
+					'max'        => isset( $row['max'] ) ? (string) $row['max'] : '',
+					'scale'      => isset( $row['scale'] ) ? (string) $row['scale'] : '',
+					'options'    => isset( $row['options'] ) ? (string) $row['options'] : '',
+					'multiple'   => isset( $row['multiple'] ) && '1' === (string) $row['multiple'] ? '1' : '',
 					'remove'     => isset( $row['remove'] ) && '1' === (string) $row['remove'] ? '1' : '',
 				);
 			}
@@ -408,10 +450,15 @@ final class FormsPage {
 			'type'       => '',
 			'required'   => '',
 			'max_length' => '',
+			'min'        => '',
+			'max'        => '',
+			'scale'      => '',
+			'options'    => '',
+			'multiple'   => '',
 			'remove'     => '',
 		);
 		$last  = $normalized[ count( $normalized ) - 1 ] ?? null;
-		if ( ! is_array( $last ) || '' !== $last['name'] || '' !== $last['label'] || '' !== $last['type'] || '' !== $last['max_length'] ) {
+		if ( ! is_array( $last ) || '' !== $last['name'] || '' !== $last['label'] || '' !== $last['type'] || '' !== $last['max_length'] || '' !== $last['min'] || '' !== $last['max'] || '' !== $last['scale'] || '' !== $last['options'] ) {
 			$normalized[] = $blank;
 		}
 
@@ -427,6 +474,9 @@ final class FormsPage {
 		return match ( $type ) {
 			FieldType::Email->value => __( 'Email', 'formstead' ),
 			FieldType::Textarea->value => __( 'Textarea', 'formstead' ),
+			FieldType::Number->value => __( 'Number', 'formstead' ),
+			FieldType::Boolean->value => __( 'Checkbox', 'formstead' ),
+			FieldType::Choice->value => __( 'Choice', 'formstead' ),
 			default => __( 'Text', 'formstead' ),
 		};
 	}

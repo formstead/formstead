@@ -51,13 +51,31 @@ final class FormInput {
 			$name,
 			self::is_checked( $input['is_enabled'] ?? null ),
 			$fields,
-			$existing instanceof Form ? $existing->schema_version() : 1,
+			self::schema_version( $input, $existing ),
 			$success_url,
 			$existing instanceof Form ? $existing->created_at() : '',
 			$existing instanceof Form ? $existing->updated_at() : ''
 		);
 
 		return new FormInputResult( $form, array() );
+	}
+
+	/**
+	 * Schema version the editor opened.
+	 *
+	 * A new form starts at version 1. An edit uses the posted version, which
+	 * the repository compares with the stored row. A missing value cannot
+	 * match, so an edit without it is a conflict.
+	 *
+	 * @param array<string, mixed> $input    Posted form values.
+	 * @param Form|null            $existing Form being edited, or null for a new form.
+	 */
+	private static function schema_version( array $input, ?Form $existing ): int {
+		if ( ! $existing instanceof Form ) {
+			return 1;
+		}
+
+		return isset( $input['schema_version'] ) ? (int) $input['schema_version'] : 0;
 	}
 
 	/**
@@ -147,7 +165,14 @@ final class FormInput {
 				$errors[ $prefix . '.max_length' ] = __( 'Enter a length from 1 to 10000.', 'formstead' );
 			}
 
-			if ( isset( $errors[ $prefix . '.name' ] ) || isset( $errors[ $prefix . '.label' ] ) || isset( $errors[ $prefix . '.type' ] ) || isset( $errors[ $prefix . '.max_length' ] ) ) {
+			$settings = FieldSettings::none();
+			if ( FieldType::Number === $field_type ) {
+				$settings = self::number_settings( $row, $prefix, $errors );
+			} elseif ( FieldType::Choice === $field_type ) {
+				$settings = self::choice_settings( $row, $prefix, $errors );
+			}
+
+			if ( isset( $errors[ $prefix . '.name' ] ) || isset( $errors[ $prefix . '.label' ] ) || isset( $errors[ $prefix . '.type' ] ) || isset( $errors[ $prefix . '.max_length' ] ) || isset( $errors[ $prefix . '.min' ] ) || isset( $errors[ $prefix . '.max' ] ) || isset( $errors[ $prefix . '.scale' ] ) || isset( $errors[ $prefix . '.options' ] ) ) {
 				continue;
 			}
 
@@ -155,7 +180,7 @@ final class FormInput {
 				continue;
 			}
 
-			$fields[] = new Field( $name, $label, $field_type, self::is_checked( $row['required'] ?? null ), $max_length );
+			$fields[] = new Field( $name, $label, $field_type, self::is_checked( $row['required'] ?? null ), $max_length, $settings );
 		}
 
 		if ( array() === $fields && ! isset( $errors['fields'] ) ) {
@@ -180,12 +205,142 @@ final class FormInput {
 	 * @param array<mixed> $row Posted field row.
 	 */
 	private static function is_blank_row( array $row ): bool {
-		$name  = isset( $row['name'] ) && is_string( $row['name'] ) ? trim( $row['name'] ) : '';
-		$label = isset( $row['label'] ) && is_string( $row['label'] ) ? trim( $row['label'] ) : '';
-		$type  = isset( $row['type'] ) && is_string( $row['type'] ) ? trim( $row['type'] ) : '';
-		$max   = isset( $row['max_length'] ) ? trim( (string) $row['max_length'] ) : '';
+		$name    = isset( $row['name'] ) && is_string( $row['name'] ) ? trim( $row['name'] ) : '';
+		$label   = isset( $row['label'] ) && is_string( $row['label'] ) ? trim( $row['label'] ) : '';
+		$type    = isset( $row['type'] ) && is_string( $row['type'] ) ? trim( $row['type'] ) : '';
+		$max     = isset( $row['max_length'] ) ? trim( (string) $row['max_length'] ) : '';
+		$min     = isset( $row['min'] ) ? trim( (string) $row['min'] ) : '';
+		$upper   = isset( $row['max'] ) ? trim( (string) $row['max'] ) : '';
+		$scale   = isset( $row['scale'] ) ? trim( (string) $row['scale'] ) : '';
+		$options = isset( $row['options'] ) && is_string( $row['options'] ) ? trim( $row['options'] ) : '';
 
-		return '' === $name && '' === $label && '' === $type && '' === $max;
+		return '' === $name && '' === $label && '' === $type && '' === $max && '' === $min && '' === $upper && '' === $scale && '' === $options;
+	}
+
+	/**
+	 * Number limits from a posted row.
+	 *
+	 * @param array<mixed>          $row    Posted field row.
+	 * @param string                $prefix Error key prefix.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 */
+	private static function number_settings( array $row, string $prefix, array &$errors ): FieldSettings {
+		$min_text   = isset( $row['min'] ) ? trim( (string) $row['min'] ) : '';
+		$max_text   = isset( $row['max'] ) ? trim( (string) $row['max'] ) : '';
+		$scale_text = isset( $row['scale'] ) ? trim( (string) $row['scale'] ) : '';
+		$min        = self::decimal_bound( $min_text, $prefix . '.min', __( 'Enter a minimum as a whole or decimal number.', 'formstead' ), $errors );
+		$max        = self::decimal_bound( $max_text, $prefix . '.max', __( 'Enter a maximum as a whole or decimal number.', 'formstead' ), $errors );
+
+		if ( '' === $scale_text ) {
+			$scale = 0;
+		} elseif ( 1 === preg_match( '/^[0-6]$/', $scale_text ) ) {
+			$scale = (int) $scale_text;
+		} else {
+			$errors[ $prefix . '.scale' ] = __( 'Enter a number of decimal places from 0 to 6.', 'formstead' );
+			$scale                        = 0;
+		}
+
+		if ( null !== $min && null !== $max && Decimal::compare( $min, $max ) > 0 ) {
+			$errors[ $prefix . '.min' ] = __( 'Enter a minimum that is not greater than the maximum.', 'formstead' );
+		}
+
+		return new FieldSettings( $min, $max, $scale, array(), false );
+	}
+
+	/**
+	 * A canonical bound, or null when the input is empty or invalid.
+	 *
+	 * @param string                $text   Posted bound.
+	 * @param string                $key    Error key.
+	 * @param string                $message Message stored when the bound is not a decimal.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 */
+	private static function decimal_bound( string $text, string $key, string $message, array &$errors ): ?string {
+		if ( '' === $text ) {
+			return null;
+		}
+
+		$canonical = Decimal::canonical( $text );
+		if ( null === $canonical ) {
+			$errors[ $key ] = $message;
+			return null;
+		}
+
+		return $canonical;
+	}
+
+	/**
+	 * Choice options from a posted row.
+	 *
+	 * @param array<mixed>          $row    Posted field row.
+	 * @param string                $prefix Error key prefix.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 */
+	private static function choice_settings( array $row, string $prefix, array &$errors ): FieldSettings {
+		$text = isset( $row['options'] ) && is_string( $row['options'] ) ? $row['options'] : '';
+
+		return new FieldSettings( null, null, 0, self::options( $text, $prefix, $errors ), self::is_checked( $row['multiple'] ?? null ) );
+	}
+
+	/**
+	 * Options from `value|Label` lines.
+	 *
+	 * A line without a label uses the value as the label. Empty lines are ignored.
+	 *
+	 * @param string                $text   Posted options.
+	 * @param string                $prefix Error key prefix.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 * @return list<array{value: string, label: string}>
+	 */
+	private static function options( string $text, string $prefix, array &$errors ): array {
+		$lines   = preg_split( '/\R/', $text );
+		$options = array();
+		$seen    = array();
+		$key     = $prefix . '.options';
+
+		foreach ( is_array( $lines ) ? $lines : array() as $line ) {
+			$line = trim( $line );
+			if ( '' === $line ) {
+				continue;
+			}
+
+			$parts = explode( '|', $line, 2 );
+			$value = trim( $parts[0] );
+			$label = isset( $parts[1] ) ? trim( $parts[1] ) : '';
+			if ( '' === $label ) {
+				$label = $value;
+			}
+
+			if ( '' === $value || mb_strlen( $value ) > 190 || 1 === preg_match( '/[[:cntrl:]]/', $value ) ) {
+				$errors[ $key ] = __( 'Enter an option value up to 190 characters.', 'formstead' );
+				continue;
+			}
+			if ( mb_strlen( $label ) > 190 || 1 === preg_match( '/[[:cntrl:]]/', $label ) ) {
+				$errors[ $key ] = __( 'Enter an option label up to 190 characters.', 'formstead' );
+				continue;
+			}
+			if ( isset( $seen[ $value ] ) ) {
+				$errors[ $key ] = __( 'Option values must be unique.', 'formstead' );
+				continue;
+			}
+
+			$seen[ $value ] = true;
+			$options[]      = array(
+				'value' => $value,
+				'label' => $label,
+			);
+		}
+
+		if ( count( $options ) > 100 ) {
+			$errors[ $key ] = __( 'Enter up to 100 options.', 'formstead' );
+			return array();
+		}
+
+		if ( array() === $options && ! isset( $errors[ $key ] ) ) {
+			$errors[ $key ] = __( 'Enter at least one option.', 'formstead' );
+		}
+
+		return $options;
 	}
 
 	/**

@@ -4,19 +4,36 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
   checks:
-    name: PHPUnit, PHPCS, PHPStan
+    name: PHPUnit, PHPCS, PHPStan (${{ matrix.php }} / ${{ matrix.wp }})
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: "8.3"
+            core: "WordPress/WordPress#7.1.3"
+            wp: "7.1"
+          - php: "8.5"
+            core: "WordPress/WordPress#7.0"
+            wp: "7.0"
+    env:
+      WP_ENV_PHP_VERSION: ${{ matrix.php }}
+      WP_ENV_CORE: ${{ matrix.core }}
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -50,6 +67,110 @@ jobs:
 
       - name: PHPStan
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G
+
+  checks-full:
+    name: Nightly (${{ matrix.php }} / ${{ matrix.wp }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.experimental == true }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: "8.3"
+            core: "WordPress/WordPress#7.0"
+            wp: "7.0"
+          - php: "8.4"
+            core: "WordPress/WordPress#7.0"
+            wp: "7.0"
+          - php: "8.5"
+            core: "WordPress/WordPress#7.0"
+            wp: "7.0"
+          - php: "8.3"
+            core: "WordPress/WordPress#7.1.3"
+            wp: "7.1"
+          - php: "8.4"
+            core: "WordPress/WordPress#7.1.3"
+            wp: "7.1"
+          - php: "8.5"
+            core: "WordPress/WordPress#7.1.3"
+            wp: "7.1"
+          - php: "8.3"
+            core: "WordPress/WordPress#master"
+            wp: trunk
+            experimental: true
+    env:
+      WP_ENV_PHP_VERSION: ${{ matrix.php }}
+      WP_ENV_CORE: ${{ matrix.core }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Cache Composer packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - name: Start wp-env
+        run: npx wp-env start
+
+      - name: Install Composer dependencies
+        run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
+
+      - name: PHPUnit
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit
+
+  mysql:
+    name: PHPUnit on MySQL 8.0
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.3"
+          extensions: mysqli
+          tools: composer
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Install WordPress tests
+        run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 7.1.3
+
+      - name: PHPUnit
+        run: vendor/bin/phpunit
+        env:
+          WP_TESTS_DIR: /tmp/wordpress-tests-lib
 
   package:
     name: ZIP and Plugin Check
@@ -175,7 +296,7 @@ jobs:
           assert_schema() {
             local found table
             found="$(wp db query "SHOW TABLES" --skip-column-names --path=wordpress)"
-            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions"; do
+            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions" "${prefix}formstead_form_versions"; do
               if ! grep -Fxq "$table" <<<"$found"; then
                 echo "Missing table ${table}." >&2
                 printf '%s\n' "$found" >&2
@@ -191,8 +312,8 @@ jobs:
 
           assert_schema
           db_version="$(wp option get formstead_db_version --path=wordpress)"
-          if [[ "$db_version" != "1" ]]; then
-            echo "Expected formstead_db_version 1, got ${db_version}." >&2
+          if [[ "$db_version" != "2" ]]; then
+            echo "Expected formstead_db_version 2, got ${db_version}." >&2
             exit 1
           fi
 
@@ -254,6 +375,91 @@ jobs:
           row_count="$(submission_count)"
           if [[ "$row_count" != "1" ]]; then
             echo "Invalid POST stored a row. Count is ${row_count}." >&2
+            exit 1
+          fi
+
+          assert_status() {
+            local label="$1"
+            local expected="$2"
+            local actual="$3"
+            echo "${label}:${actual}"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "${label} expected ${expected}, got ${actual}." >&2
+              exit 1
+            fi
+          }
+
+          json_headers="$(mktemp)"
+          json_code="$(curl -s -D "$json_headers" -o /tmp/formstead-json-body -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            --data '{"email":"a@b.co"}' \
+            "$endpoint")"
+          assert_status post_json 201 "$json_code"
+          if ! grep -Eq '"receipt_id"[[:space:]]*:[[:space:]]*"fsr_[a-z2-7]{16}"' /tmp/formstead-json-body; then
+            echo "JSON success did not return a receipt id." >&2
+            cat /tmp/formstead-json-body >&2
+            exit 1
+          fi
+          if grep -q 'a@b.co' /tmp/formstead-json-body; then
+            echo "JSON success echoed the submitted value." >&2
+            exit 1
+          fi
+
+          bad_json_code="$(curl -s -o /tmp/formstead-bad-json -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            --data '{' \
+            "$endpoint")"
+          assert_status post_bad_json 400 "$bad_json_code"
+          if ! grep -q '"malformed_body"' /tmp/formstead-bad-json; then
+            echo "Malformed JSON did not return malformed_body." >&2
+            cat /tmp/formstead-bad-json >&2
+            exit 1
+          fi
+
+          plain_code="$(curl -s -o /tmp/formstead-plain -w '%{http_code}' \
+            -H 'Content-Type: text/plain' \
+            -H 'Accept: application/json' \
+            --data 'email=a@b.co' \
+            "$endpoint")"
+          assert_status post_plain 415 "$plain_code"
+          if ! grep -q '"unsupported_media_type"' /tmp/formstead-plain; then
+            echo "text/plain did not return unsupported_media_type." >&2
+            cat /tmp/formstead-plain >&2
+            exit 1
+          fi
+
+          printf 'secret' > /tmp/formstead-upload.txt
+          file_code="$(curl -s -o /tmp/formstead-file -w '%{http_code}' \
+            -F 'email=a@b.co' \
+            -F 'upload=@/tmp/formstead-upload.txt' \
+            "$endpoint")"
+          assert_status post_file 415 "$file_code"
+          if ! grep -q 'File uploads are not supported.' /tmp/formstead-file; then
+            echo "File upload did not return the HTML refusal." >&2
+            cat /tmp/formstead-file >&2
+            exit 1
+          fi
+          if grep -q 'secret' /tmp/formstead-file; then
+            echo "File upload echoed the submitted value." >&2
+            exit 1
+          fi
+
+          multipart_headers="$(mktemp)"
+          multipart_code="$(curl -s -D "$multipart_headers" -o /tmp/formstead-multipart -w '%{http_code}' \
+            -F 'email=a@b.co' \
+            "$endpoint")"
+          assert_status post_multipart 303 "$multipart_code"
+          if ! grep -Eq '^Location: https://example.com/thanks[[:space:]]*$' "$multipart_headers"; then
+            echo "Multipart success did not redirect to the configured URL." >&2
+            cat "$multipart_headers" >&2
+            exit 1
+          fi
+
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "3" ]]; then
+            echo "Expected 3 submissions after JSON and multipart success, found ${row_count}." >&2
             exit 1
           fi
 

@@ -75,7 +75,7 @@ final class FormRepository {
 		global $wpdb;
 
 		$now    = $this->now();
-		$fields = $this->encode_fields( $form->fields() );
+		$fields = FieldCodec::encode( $form->fields() );
 		$table  = Schema::forms_table();
 
 		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
@@ -100,8 +100,16 @@ final class FormRepository {
 			$wpdb->suppress_errors( $previous );
 
 			if ( false !== $saved ) {
+				$form_id = (int) $wpdb->insert_id;
+				$version = ( new FormVersionRepository() )->insert( $form_id, 1, $form->fields() );
+				if ( $version instanceof WP_Error ) {
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- remove the form whose snapshot failed.
+					$wpdb->delete( $table, array( 'id' => $form_id ), array( '%d' ) );
+					return $version;
+				}
+
 				return new Form(
-					(int) $wpdb->insert_id,
+					$form_id,
 					$public_id,
 					$form->name(),
 					$form->is_enabled(),
@@ -130,7 +138,9 @@ final class FormRepository {
 	/**
 	 * Update a form. The public id is never changed.
 	 *
-	 * The schema version increments only when the fields JSON changes.
+	 * `$form->schema_version()` is the version the editor opened. It must
+	 * still be the stored version. The schema version increments only when
+	 * the fields JSON changes.
 	 *
 	 * @param Form $form Form to store. `public_id` on this object is ignored.
 	 */
@@ -145,12 +155,27 @@ final class FormRepository {
 			);
 		}
 
-		$version = $current->schema_version();
-		if ( $this->encode_fields( $current->fields() ) !== $this->encode_fields( $form->fields() ) ) {
-			++$version;
+		if ( $form->schema_version() !== $current->schema_version() ) {
+			return new WP_Error(
+				'formstead_form_conflict',
+				__( 'This form was saved somewhere else. Reload the screen and try again.', 'formstead' )
+			);
 		}
 
-		$now      = $this->now();
+		$now             = $this->now();
+		$fields_changed  = FieldCodec::encode( $current->fields() ) !== FieldCodec::encode( $form->fields() );
+		$version         = $current->schema_version();
+		$versions        = new FormVersionRepository();
+		$created_version = false;
+
+		if ( $fields_changed ) {
+			$version         = $current->schema_version() + 1;
+			$created_version = $this->prepare_snapshot( $versions, $form, $version );
+			if ( $created_version instanceof WP_Error ) {
+				return $created_version;
+			}
+		}
+
 		$previous = $wpdb->suppress_errors( true );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- custom table.
 		$saved = $wpdb->update(
@@ -158,21 +183,40 @@ final class FormRepository {
 			array(
 				'name'           => $form->name(),
 				'is_enabled'     => $form->is_enabled() ? 1 : 0,
-				'fields'         => $this->encode_fields( $form->fields() ),
+				'fields'         => FieldCodec::encode( $form->fields() ),
 				'schema_version' => $version,
 				'success_url'    => $form->success_url(),
 				'updated_at'     => $now,
 			),
-			array( 'id' => $form->id() ),
+			array(
+				'id'             => $form->id(),
+				'schema_version' => $form->schema_version(),
+			),
 			array( '%s', '%d', '%s', '%d', '%s', '%s' ),
-			array( '%d' )
+			array( '%d', '%d' )
 		);
 		$wpdb->suppress_errors( $previous );
 
-		if ( false === $saved ) {
+		if ( false === $saved || 0 === $saved ) {
+			if ( true === $created_version ) {
+				$versions->delete( $form->id(), $version );
+			}
+
+			if ( false === $saved ) {
+				return new WP_Error(
+					'formstead_form_save_failed',
+					__( 'The form could not be saved.', 'formstead' )
+				);
+			}
+
+			$unchanged = $this->find_by_id( $form->id() );
+			if ( ! $fields_changed && $unchanged instanceof Form && $unchanged->schema_version() === $form->schema_version() ) {
+				return $unchanged;
+			}
+
 			return new WP_Error(
-				'formstead_form_save_failed',
-				__( 'The form could not be saved.', 'formstead' )
+				'formstead_form_conflict',
+				__( 'This form was saved somewhere else. Reload the screen and try again.', 'formstead' )
 			);
 		}
 
@@ -186,6 +230,35 @@ final class FormRepository {
 			$form->success_url(),
 			$current->created_at(),
 			$now
+		);
+	}
+
+	/**
+	 * Insert the next snapshot, or reuse one left by an interrupted save of the same fields.
+	 *
+	 * @param FormVersionRepository $versions Snapshot store.
+	 * @param Form                  $form     Form being saved.
+	 * @param int                   $version  Version number the snapshot should use.
+	 * @return bool|WP_Error True when this call inserted the snapshot. False when an identical snapshot already existed. `WP_Error` when the version is taken by different fields.
+	 */
+	private function prepare_snapshot( FormVersionRepository $versions, Form $form, int $version ): bool|WP_Error {
+		$inserted = $versions->insert( $form->id(), $version, $form->fields() );
+		if ( ! $inserted instanceof WP_Error ) {
+			return true;
+		}
+
+		if ( 'formstead_form_version_duplicate' !== $inserted->get_error_code() ) {
+			return $inserted;
+		}
+
+		$existing = $versions->find( $form->id(), $version );
+		if ( $existing instanceof FormVersion && FieldCodec::encode( $existing->fields() ) === FieldCodec::encode( $form->fields() ) ) {
+			return false;
+		}
+
+		return new WP_Error(
+			'formstead_form_conflict',
+			__( 'This form was saved somewhere else. Reload the screen and try again.', 'formstead' )
 		);
 	}
 
@@ -221,7 +294,7 @@ final class FormRepository {
 			return null;
 		}
 
-		$fields = $this->decode_fields( (string) ( $row['fields'] ?? '' ) );
+		$fields = FieldCodec::decode( (string) ( $row['fields'] ?? '' ) );
 
 		return new Form(
 			(int) ( $row['id'] ?? 0 ),
@@ -234,57 +307,6 @@ final class FormRepository {
 			(string) ( $row['created_at'] ?? '' ),
 			(string) ( $row['updated_at'] ?? '' )
 		);
-	}
-
-	/**
-	 * JSON for a field list.
-	 *
-	 * @param Field[] $fields Fields to store.
-	 */
-	private function encode_fields( array $fields ): string {
-		$rows = array();
-		foreach ( $fields as $field ) {
-			$rows[] = $field->to_array();
-		}
-
-		$json = wp_json_encode( $rows, JSON_UNESCAPED_UNICODE );
-
-		return is_string( $json ) ? $json : '[]';
-	}
-
-	/**
-	 * Fields from stored JSON. Invalid rows are skipped.
-	 *
-	 * JSON numbers become ints. `required` is normalized to a boolean before
-	 * `Field::from_array()` sees the row.
-	 *
-	 * @param string $json Stored fields JSON.
-	 * @return Field[]
-	 */
-	private function decode_fields( string $json ): array {
-		$decoded = json_decode( $json, true );
-		if ( ! is_array( $decoded ) ) {
-			return array();
-		}
-
-		$fields = array();
-		foreach ( $decoded as $row ) {
-			if ( ! is_array( $row ) ) {
-				continue;
-			}
-
-			if ( isset( $row['max_length'] ) && is_numeric( $row['max_length'] ) ) {
-				$row['max_length'] = (int) $row['max_length'];
-			}
-			$row['required'] = (bool) ( $row['required'] ?? false );
-
-			$field = Field::from_array( $row );
-			if ( $field instanceof Field ) {
-				$fields[] = $field;
-			}
-		}
-
-		return $fields;
 	}
 
 	/**

@@ -7,9 +7,12 @@
 
 namespace Formstead\Admin;
 
+use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
+use Formstead\Forms\FormVersion;
+use Formstead\Forms\FormVersionRepository;
 use Formstead\Security\Capabilities;
 use Formstead\Submissions\Submission;
 use Formstead\Submissions\SubmissionList;
@@ -122,26 +125,99 @@ final class SubmissionsPage {
 	/**
 	 * Detail rows for the template.
 	 *
-	 * A field that is still on the form uses its current label. A removed field
-	 * keeps the stored name. Textarea values keep their line breaks.
+	 * Labels and types come from the schema snapshot for the submission's
+	 * version. When that snapshot does not exist, the current form is used.
+	 * A field in neither place keeps its stored name.
 	 *
 	 * @param Submission $submission Stored submission.
 	 * @param Form|null  $form       Current form, when it still exists.
-	 * @return array<int, array{label: string, value: string, multiline: bool}>
+	 * @return array<int, array{label: string, value: string, multiline: bool, items: list<string>}>
 	 */
 	private static function detail_rows( Submission $submission, ?Form $form ): array {
-		$rows = array();
+		$snapshot = ( new FormVersionRepository() )->find( $submission->form_id(), $submission->schema_version() );
+		$fields   = $snapshot instanceof FormVersion ? $snapshot->fields() : array();
+		if ( array() === $fields && $form instanceof Form ) {
+			$fields = $form->fields();
+		}
 
+		$by_name = array();
+		foreach ( $fields as $field ) {
+			$by_name[ $field->name() ] = $field;
+		}
+
+		$rows = array();
 		foreach ( $submission->payload() as $name => $value ) {
-			$field  = $form instanceof Form ? $form->field( $name ) : null;
+			$field   = $by_name[ $name ] ?? null;
+			$items   = array();
+			$display = self::display_value( $field, $value );
+			if ( is_array( $display ) ) {
+				$items   = $display;
+				$display = '';
+			}
 			$rows[] = array(
-				'label'     => null !== $field ? $field->label() : $name,
-				'value'     => $value,
-				'multiline' => null !== $field && FieldType::Textarea === $field->type(),
+				'label'     => $field instanceof Field ? $field->label() : $name,
+				'value'     => $display,
+				'multiline' => $field instanceof Field && FieldType::Textarea === $field->type(),
+				'items'     => $items,
 			);
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * Text, a yes/no answer, or a list of choice labels.
+	 *
+	 * @param Field|null               $field Field from the snapshot, when it is known.
+	 * @param string|bool|list<string> $value Stored value.
+	 * @return string|list<string>
+	 */
+	private static function display_value( ?Field $field, string|bool|array $value ): string|array {
+		if ( is_bool( $value ) ) {
+			return $value ? __( 'Yes', 'formstead' ) : __( 'No', 'formstead' );
+		}
+
+		if ( is_array( $value ) ) {
+			return self::choice_labels( $field, $value );
+		}
+
+		if ( $field instanceof Field && FieldType::Choice === $field->type() ) {
+			$labels = self::choice_labels( $field, array( $value ) );
+			return $labels[0] ?? $value;
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Choice labels in the order configured on the field.
+	 *
+	 * A stored value that is no longer an option keeps the raw value.
+	 *
+	 * @param Field|null $field    Choice field, when it is known.
+	 * @param string[]   $selected Stored values.
+	 * @return list<string>
+	 */
+	private static function choice_labels( ?Field $field, array $selected ): array {
+		if ( ! $field instanceof Field ) {
+			return array_values( $selected );
+		}
+
+		$labels  = array();
+		$pending = array_fill_keys( $selected, true );
+		foreach ( $field->settings()->options() as $option ) {
+			if ( isset( $pending[ $option['value'] ] ) ) {
+				$labels[] = $option['label'];
+				unset( $pending[ $option['value'] ] );
+			}
+		}
+		foreach ( $selected as $value ) {
+			if ( isset( $pending[ $value ] ) ) {
+				$labels[] = $value;
+			}
+		}
+
+		return $labels;
 	}
 
 	/**
@@ -155,7 +231,7 @@ final class SubmissionsPage {
 			return '';
 		}
 
-		$value = (string) reset( $payload );
+		$value = self::plain_text( reset( $payload ) );
 		$flat  = preg_replace( '/\s+/', ' ', $value );
 		$flat  = trim( is_string( $flat ) ? $flat : $value );
 		if ( mb_strlen( $flat ) <= 80 ) {
@@ -163,6 +239,22 @@ final class SubmissionsPage {
 		}
 
 		return mb_substr( $flat, 0, 80 ) . '…';
+	}
+
+	/**
+	 * One line of text for a stored value.
+	 *
+	 * @param mixed $value Stored value, or false from an empty reset.
+	 */
+	private static function plain_text( mixed $value ): string {
+		if ( is_bool( $value ) ) {
+			return $value ? __( 'Yes', 'formstead' ) : __( 'No', 'formstead' );
+		}
+		if ( is_array( $value ) ) {
+			return implode( ', ', $value );
+		}
+
+		return is_string( $value ) ? $value : '';
 	}
 
 	/**

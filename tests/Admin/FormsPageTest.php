@@ -11,6 +11,9 @@ namespace Formstead\Tests\Admin;
 // phpcs:disable WordPress.Security.ValidatedSanitizedInput -- the screen sanitizes input; the test posts raw values.
 
 use Formstead\Admin\FormsPage;
+use Formstead\Forms\Field;
+use Formstead\Forms\FieldType;
+use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Forms\PublicId;
 use WP_UnitTestCase;
@@ -129,6 +132,70 @@ final class FormsPageTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An edit that still has the opened schema version is stored.
+	 */
+	public function test_edit_with_the_opened_version_saves(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->insert_contact_form();
+
+		$this->post_form();
+		$_POST['form_id']        = (string) $saved->id();
+		$_POST['schema_version'] = (string) $saved->schema_version();
+		$_POST['name']           = 'Support';
+		$_REQUEST                = $_POST;
+
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 'Support', $loaded->name() );
+		$this->assertSame( 1, $loaded->schema_version() );
+	}
+
+	/**
+	 * A save from an older editor version changes nothing and asks for a reload.
+	 */
+	public function test_stale_schema_version_keeps_the_saved_form(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved  = $this->insert_contact_form();
+		$bumped = ( new FormRepository() )->update(
+			new Form(
+				$saved->id(),
+				$saved->public_id(),
+				$saved->name(),
+				true,
+				array( new Field( 'email', 'Work email', FieldType::Email, true, 255 ) ),
+				$saved->schema_version(),
+				$saved->success_url(),
+				$saved->created_at(),
+				$saved->updated_at()
+			)
+		);
+		$this->assertInstanceOf( Form::class, $bumped );
+
+		$this->post_form();
+		$_POST['form_id']            = (string) $saved->id();
+		$_POST['schema_version']     = '1';
+		$_POST['name']               = 'Renamed';
+		$_POST['fields'][0]['label'] = 'Other';
+		$_REQUEST                    = $_POST;
+
+		FormsPage::handle_load();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 'Contact', $loaded->name() );
+		$this->assertSame( 2, $loaded->schema_version() );
+		$this->assertSame( 'Work email', $loaded->fields()[0]->label() );
+
+		ob_start();
+		FormsPage::render();
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'Reload the screen', $html );
+		$this->assertStringContainsString( 'name="schema_version" value="1"', $html );
+	}
+
+	/**
 	 * A repeated max length arrives as an array and does not raise a warning.
 	 */
 	public function test_non_text_max_length_does_not_warn(): void {
@@ -177,6 +244,28 @@ final class FormsPageTest extends WP_UnitTestCase {
 		} finally {
 			remove_filter( 'wp_redirect', $filter );
 		}
+	}
+
+	/**
+	 * Store the contact form the edit tests start from.
+	 */
+	private function insert_contact_form(): Form {
+		$saved = ( new FormRepository() )->insert(
+			new Form(
+				0,
+				'',
+				'Contact',
+				true,
+				array( new Field( 'email', 'Email', FieldType::Email, true, 255 ) ),
+				1,
+				'https://example.com/thanks',
+				'',
+				''
+			)
+		);
+		$this->assertInstanceOf( Form::class, $saved );
+
+		return $saved;
 	}
 
 	/**

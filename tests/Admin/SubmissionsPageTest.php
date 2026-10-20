@@ -91,9 +91,9 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The list shows the current label, and a removed field keeps its stored name.
+	 * An old submission keeps the label from its snapshot. A later one uses the new label.
 	 */
-	public function test_detail_uses_the_current_label_or_the_raw_name(): void {
+	public function test_detail_uses_the_snapshot_label_or_the_raw_name(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$forms      = new FormRepository();
 		$form       = $this->save_form( 'Contact', 'note', 'Note', FieldType::Text, false );
@@ -105,7 +105,7 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 				'retired' => 'kept',
 			)
 		);
-		$this->assertNotInstanceOf( \WP_Error::class, $saved );
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $saved );
 
 		$updated = $forms->update(
 			new Form(
@@ -122,11 +122,19 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 		);
 		$this->assertNotInstanceOf( \WP_Error::class, $updated );
 
-		$_GET = array( 'submission' => (string) $saved );
+		$_GET = array( 'submission' => (string) $saved->id() );
 		$html = $this->render();
-		$this->assertStringContainsString( 'Message', $html );
+		$this->assertStringContainsString( 'Note', $html );
+		$this->assertStringNotContainsString( 'Message', $html );
 		$this->assertStringContainsString( 'retired', $html );
 		$this->assertStringContainsString( 'kept', $html );
+
+		$later = $repository->insert( $updated, array( 'note' => 'after-the-change' ) );
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $later );
+		$_GET = array( 'submission' => (string) $later->id() );
+		$html = $this->render();
+		$this->assertStringContainsString( 'Message', $html );
+		$this->assertStringContainsString( 'after-the-change', $html );
 	}
 
 	/**
@@ -221,8 +229,8 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 	private function store_submission( string $note ): int {
 		$form  = $this->save_form( 'Contact', 'note', 'Note', FieldType::Textarea, false );
 		$saved = ( new SubmissionRepository() )->insert( $form, array( 'note' => $note ) );
-		$this->assertNotInstanceOf( \WP_Error::class, $saved );
-		return $saved;
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $saved );
+		return $saved->id();
 	}
 
 	/**
