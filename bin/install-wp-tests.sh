@@ -29,6 +29,10 @@ if [[ "/tmp/wordpress" != "$WP_CORE_DIR" ]]; then
 	mv /tmp/wordpress "$WP_CORE_DIR"
 fi
 
+root="$(cd "$(dirname "$0")/.." && pwd)"
+mkdir -p "${WP_CORE_DIR}/wp-content/plugins"
+ln -sfn "$root" "${WP_CORE_DIR}/wp-content/plugins/formstead"
+
 curl -fsSL "https://github.com/WordPress/wordpress-develop/archive/refs/tags/${WP_VERSION}.tar.gz" | tar -xz -C /tmp
 develop="/tmp/wordpress-develop-${WP_VERSION}/tests/phpunit"
 mkdir -p "$WP_TESTS_DIR"
