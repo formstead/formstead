@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 EXCLUDE_DIRECTORIES='tests,examples,bin,.github,.cursor,.claude,.codex,.agents,notes,coverage,test-results,playwright-report,.idea'
-EXCLUDE_FILES='.gitignore,.distignore,.wp-env.json,.wp-env.override.json,.nvmrc,package.json,package-lock.json,composer.lock,compose.yaml,CONTRIBUTING.md,CHANGELOG.md,phpunit.xml.dist,phpcs.xml.dist,phpstan.neon.dist,.phpunit.result.cache,.phpcs.cache,.phpstan.cache,formstead.zip,.DS_Store,skills-lock.json,AGENTS.md,CLAUDE.md,.cursorrules'
+EXCLUDE_FILES='.gitignore,.distignore,.wp-env.json,.wp-env.override.json,.nvmrc,package.json,package-lock.json,composer.json,composer.lock,compose.yaml,CONTRIBUTING.md,CHANGELOG.md,README.md,phpunit.xml.dist,phpcs.xml.dist,phpstan.neon.dist,.phpunit.result.cache,.phpcs.cache,.phpstan.cache,formstead.zip,.DS_Store,skills-lock.json,AGENTS.md,CLAUDE.md,.cursorrules'
 
 CHECK_JSON="$(mktemp)"
 trap 'rm -f "$CHECK_JSON"' EXIT
