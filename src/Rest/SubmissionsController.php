@@ -11,6 +11,7 @@ use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Security\Limits;
 use Formstead\Security\RateLimiter;
+use Formstead\Submissions\ReceiptId;
 use Formstead\Submissions\SubmissionRepository;
 use Formstead\Submissions\SubmissionValidator;
 use WP_Error;
@@ -96,6 +97,11 @@ final class SubmissionsController {
 			return SubmissionResponder::failure( $mode, RequestError::PayloadTooLarge );
 		}
 
+		if ( self::honeypot_filled( $params ) ) {
+			$forms->record_honeypot( $form->id() );
+			return SubmissionResponder::accepted( $mode, ReceiptId::generate(), $form->success_url() );
+		}
+
 		$result = ( new SubmissionValidator() )->validate( $form, $params );
 		if ( ! $result->is_valid() ) {
 			return SubmissionResponder::invalid( $mode, $form, $result );
@@ -150,6 +156,21 @@ final class SubmissionsController {
 
 		$body = $request->get_body();
 		return is_string( $body ) && strlen( $body ) > $limit;
+	}
+
+	/**
+	 * Whether the reserved honeypot field was filled in.
+	 *
+	 * Only a non-empty string counts. An empty value is a normal submission.
+	 *
+	 * @param array<string, mixed> $params Parsed body.
+	 */
+	private static function honeypot_filled( array $params ): bool {
+		if ( ! array_key_exists( '_fs_honeypot', $params ) || ! is_string( $params['_fs_honeypot'] ) ) {
+			return false;
+		}
+
+		return '' !== trim( $params['_fs_honeypot'] );
 	}
 
 	/**
