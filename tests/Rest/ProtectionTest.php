@@ -107,6 +107,28 @@ final class ProtectionTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * JSON deeper than WordPress can parse is too large, not malformed.
+	 *
+	 * @dataProvider modes
+	 * @param string $mode `html` or `json`.
+	 */
+	public function test_json_past_the_parser_depth_returns_413( string $mode ): void {
+		$form   = $this->save_form();
+		$nested = '"a@b.co"';
+		for ( $index = 0; $index < 600; $index++ ) {
+			$nested = '[' . $nested . ']';
+		}
+
+		$request = $this->request( $form->public_id(), $mode, '{"email":' . $nested . '}' );
+		$request->set_header( 'Content-Type', 'application/json' );
+
+		$response = rest_do_request( $request );
+
+		$this->assert_error( $response, $mode, 413, 'payload_too_large' );
+		$this->assertSame( array(), $this->rows() );
+	}
+
+	/**
 	 * A filled honeypot looks like success and stores nothing.
 	 *
 	 * @dataProvider modes
