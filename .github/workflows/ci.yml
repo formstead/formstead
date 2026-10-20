@@ -181,6 +181,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
+      mailpit:
+        image: axllent/mailpit:v1.27.11
+        ports:
+          - 8025:8025
+          - 1025:1025
       mariadb:
         image: mariadb:10.11
         env:
@@ -264,6 +269,11 @@ jobs:
           fi
           echo "Plugin Check reported no errors."
 
+      - name: Point package mail at Mailpit
+        run: |
+          mkdir -p wordpress/wp-content/mu-plugins
+          cp bin/ci/package-mailpit.php wordpress/wp-content/mu-plugins/formstead-mailpit.php
+
       - name: Hit front, admin, and uninstall over PHP's built-in server
         run: |
           php -S 127.0.0.1:8080 -t wordpress >/tmp/php-server.log 2>&1 &
@@ -337,27 +347,127 @@ jobs:
           endpoint="$(wp eval "echo rest_url( 'formstead/v1/forms/${public_id}/submissions' );" --path=wordpress)"
           echo "endpoint:${endpoint}"
 
-          success_headers="$(mktemp)"
-          success_code="$(curl -s -D "$success_headers" -o /tmp/formstead-success-body -w '%{http_code}' \
+          # Two requests with one key. The built-in server handles one request at a time;
+          # the database race is covered in PHPUnit.
+          idem_key="package-same-key"
+          idem_headers_a="$(mktemp)"
+          idem_headers_b="$(mktemp)"
+          curl -s -D "$idem_headers_a" -o /tmp/formstead-idem-a -w '%{http_code}' \
             -H 'Content-Type: application/x-www-form-urlencoded' \
-            --data 'email=a@b.co' \
-            "$endpoint")"
-          echo "post_ok:${success_code}"
-          if [[ "$success_code" != "303" ]]; then
-            echo "Expected 303 from a valid POST." >&2
-            cat "$success_headers" >&2
+            -H "Idempotency-Key: ${idem_key}" \
+            --data 'email=idem-secret@example.com' \
+            "$endpoint" > /tmp/formstead-idem-code-a &
+          pid_a=$!
+          curl -s -D "$idem_headers_b" -o /tmp/formstead-idem-b -w '%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -H "Idempotency-Key: ${idem_key}" \
+            --data 'email=idem-secret@example.com' \
+            "$endpoint" > /tmp/formstead-idem-code-b &
+          pid_b=$!
+          wait "$pid_a"
+          wait "$pid_b"
+          code_a="$(tr -d '[:space:]' < /tmp/formstead-idem-code-a)"
+          code_b="$(tr -d '[:space:]' < /tmp/formstead-idem-code-b)"
+          echo "post_idem_a:${code_a}"
+          echo "post_idem_b:${code_b}"
+          if [[ "$code_a" != "303" || "$code_b" != "303" ]]; then
+            echo "Expected both idempotent posts to return 303." >&2
+            cat "$idem_headers_a" >&2
+            cat "$idem_headers_b" >&2
             exit 1
           fi
-          if ! grep -Eq '^Location: https://example.com/thanks[[:space:]]*$' "$success_headers"; then
-            echo "Location was not the configured success URL." >&2
-            cat "$success_headers" >&2
+          if ! grep -Eq '^Location: https://example.com/thanks[[:space:]]*$' "$idem_headers_a"; then
+            echo "First idempotent response did not redirect to the success URL." >&2
+            cat "$idem_headers_a" >&2
+            exit 1
+          fi
+          if ! grep -Eq '^Location: https://example.com/thanks[[:space:]]*$' "$idem_headers_b"; then
+            echo "Second idempotent response did not redirect to the success URL." >&2
+            cat "$idem_headers_b" >&2
+            exit 1
+          fi
+          replay_count=0
+          if grep -Eq '^Idempotent-Replayed: true[[:space:]]*$' "$idem_headers_a"; then
+            replay_count=$((replay_count + 1))
+          fi
+          if grep -Eq '^Idempotent-Replayed: true[[:space:]]*$' "$idem_headers_b"; then
+            replay_count=$((replay_count + 1))
+          fi
+          if [[ "$replay_count" != "1" ]]; then
+            echo "Expected one replayed response, found ${replay_count}." >&2
             exit 1
           fi
           row_count="$(submission_count)"
           if [[ "$row_count" != "1" ]]; then
-            echo "Expected 1 submission, found ${row_count}." >&2
+            echo "Expected 1 submission from the shared key, found ${row_count}." >&2
             exit 1
           fi
+
+          conflict_code="$(curl -s -o /tmp/formstead-conflict -w '%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -H "Idempotency-Key: ${idem_key}" \
+            --data 'email=other-secret@example.com' \
+            "$endpoint")"
+          echo "post_conflict:${conflict_code}"
+          if [[ "$conflict_code" != "409" ]]; then
+            echo "Expected 409 when the same key is reused with different content." >&2
+            cat /tmp/formstead-conflict >&2
+            exit 1
+          fi
+          if grep -q 'other-secret@example.com' /tmp/formstead-conflict; then
+            echo "409 page echoed the submitted value." >&2
+            exit 1
+          fi
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "1" ]]; then
+            echo "Conflicting POST stored a row. Count is ${row_count}." >&2
+            exit 1
+          fi
+
+          wp formstead deliveries run --path=wordpress
+          for _attempt in $(seq 1 20); do
+            if curl -sf -o /tmp/formstead-mailpit.json "http://127.0.0.1:8025/api/v1/messages"; then
+              total="$(python3 -c 'import json; print(json.load(open("/tmp/formstead-mailpit.json")).get("total", 0))')"
+              if [[ "$total" != "0" ]]; then
+                break
+              fi
+            fi
+            sleep 0.5
+          done
+          python3 - <<'PY'
+import json, sys
+data = json.load(open("/tmp/formstead-mailpit.json"))
+messages = data.get("messages") or []
+if data.get("total") != 1 or len(messages) != 1:
+    print("Expected one Mailpit message.", file=sys.stderr)
+    print(data, file=sys.stderr)
+    sys.exit(1)
+subject = str(messages[0].get("Subject") or "")
+if "idem-secret@example.com" in subject or "\n" in subject or "\r" in subject:
+    print("Subject contains the submitted value or a line break.", file=sys.stderr)
+    sys.exit(1)
+if "Contact" not in subject:
+    print("Subject did not include the form name.", file=sys.stderr)
+    print(subject, file=sys.stderr)
+    sys.exit(1)
+message_id = str(messages[0].get("ID") or "")
+open("/tmp/formstead-mailpit-id", "w", encoding="utf-8").write(message_id)
+PY
+          message_id="$(tr -d '[:space:]' < /tmp/formstead-mailpit-id)"
+          curl -sf "http://127.0.0.1:8025/api/v1/message/${message_id}" -o /tmp/formstead-mailpit-message.json
+          python3 - <<'PY'
+import json, sys
+data = json.load(open("/tmp/formstead-mailpit-message.json"))
+text = str(data.get("Text") or "")
+if "idem-secret@example.com" in text:
+    print("Message body included the submitted value.", file=sys.stderr)
+    sys.exit(1)
+if "page=formstead" not in text or "submission=" not in text:
+    print("Message body did not link to the inbox.", file=sys.stderr)
+    print(text, file=sys.stderr)
+    sys.exit(1)
+print("Mailpit stored one notification.")
+PY
 
           invalid_headers="$(mktemp)"
           invalid_code="$(curl -s -D "$invalid_headers" -o /tmp/formstead-invalid-body -w '%{http_code}' \

@@ -10,6 +10,7 @@
 use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
+use Formstead\Forms\FormNotifications;
 use Formstead\Forms\FormProtection;
 use Formstead\Forms\FormRepository;
 
@@ -35,7 +36,9 @@ function formstead_ci_seed_form() {
 		'https://example.com/thanks',
 		'',
 		'',
-		new FormProtection( array( 'https://forms.example' ), null, null )
+		new FormProtection( array( 'https://forms.example' ), null, null ),
+		0,
+		new FormNotifications( array( 'owner@example.com' ), 'email', false )
 	);
 
 	$saved = ( new FormRepository() )->insert( $form );
