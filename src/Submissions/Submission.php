@@ -34,9 +34,16 @@ final class Submission {
 	private int $schema_version;
 
 	/**
+	 * Public receipt id. Empty only for a row that has not been backfilled.
+	 *
+	 * @var string
+	 */
+	private string $receipt_id;
+
+	/**
 	 * Field values keyed by field name.
 	 *
-	 * @var array<string, string>
+	 * @var array<string, string|bool|list<string>>
 	 */
 	private array $payload;
 
@@ -57,17 +64,19 @@ final class Submission {
 	/**
 	 * Create a submission.
 	 *
-	 * @param int                   $id             Database id.
-	 * @param int                   $form_id        Form id.
-	 * @param int                   $schema_version Schema version copied from the form.
-	 * @param array<string, string> $payload       Stored field values.
-	 * @param string                $status         Inbox status.
-	 * @param string                $created_at     UTC creation time.
+	 * @param int                                     $id             Database id.
+	 * @param int                                     $form_id        Form id.
+	 * @param int                                     $schema_version Schema version copied from the form.
+	 * @param string                                  $receipt_id     Public receipt id.
+	 * @param array<string, string|bool|list<string>> $payload        Stored field values.
+	 * @param string                                  $status         Inbox status.
+	 * @param string                                  $created_at     UTC creation time.
 	 */
-	public function __construct( int $id, int $form_id, int $schema_version, array $payload, string $status, string $created_at ) {
+	public function __construct( int $id, int $form_id, int $schema_version, string $receipt_id, array $payload, string $status, string $created_at ) {
 		$this->id             = $id;
 		$this->form_id        = $form_id;
 		$this->schema_version = $schema_version;
+		$this->receipt_id     = $receipt_id;
 		$this->payload        = $payload;
 		$this->status         = $status;
 		$this->created_at     = $created_at;
@@ -95,9 +104,16 @@ final class Submission {
 	}
 
 	/**
+	 * Public receipt id.
+	 */
+	public function receipt_id(): string {
+		return $this->receipt_id;
+	}
+
+	/**
 	 * Stored field values.
 	 *
-	 * @return array<string, string>
+	 * @return array<string, string|bool|list<string>>
 	 */
 	public function payload(): array {
 		return $this->payload;

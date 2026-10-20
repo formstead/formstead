@@ -105,7 +105,7 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 				'retired' => 'kept',
 			)
 		);
-		$this->assertNotInstanceOf( \WP_Error::class, $saved );
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $saved );
 
 		$updated = $forms->update(
 			new Form(
@@ -122,7 +122,7 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 		);
 		$this->assertNotInstanceOf( \WP_Error::class, $updated );
 
-		$_GET = array( 'submission' => (string) $saved );
+		$_GET = array( 'submission' => (string) $saved->id() );
 		$html = $this->render();
 		$this->assertStringContainsString( 'Message', $html );
 		$this->assertStringContainsString( 'retired', $html );
@@ -221,8 +221,8 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 	private function store_submission( string $note ): int {
 		$form  = $this->save_form( 'Contact', 'note', 'Note', FieldType::Textarea, false );
 		$saved = ( new SubmissionRepository() )->insert( $form, array( 'note' => $note ) );
-		$this->assertNotInstanceOf( \WP_Error::class, $saved );
-		return $saved;
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $saved );
+		return $saved->id();
 	}
 
 	/**

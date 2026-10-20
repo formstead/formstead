@@ -142,6 +142,78 @@ final class FormInputTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A number field keeps its canonical bounds and scale.
+	 */
+	public function test_number_field_stores_bounds_and_scale(): void {
+		$input             = $this->input();
+		$input['fields'][] = array(
+			'name'  => 'qty',
+			'label' => 'Quantity',
+			'type'  => 'number',
+			'min'   => '01.50',
+			'max'   => '10',
+			'scale' => '2',
+		);
+
+		$result = FormInput::validate( $input );
+		$this->assertTrue( $result->is_valid() );
+		$field = $result->form()->fields()[2];
+		$this->assertSame( FieldType::Number, $field->type() );
+		$this->assertSame( '1.5', $field->settings()->min() );
+		$this->assertSame( '10', $field->settings()->max() );
+		$this->assertSame( 2, $field->settings()->scale() );
+	}
+
+	/**
+	 * A choice field parses value|Label lines.
+	 */
+	public function test_choice_field_parses_options(): void {
+		$input             = $this->input();
+		$input['fields'][] = array(
+			'name'     => 'color',
+			'label'    => 'Color',
+			'type'     => 'choice',
+			'options'  => "red|Red\nblue\n",
+			'multiple' => '1',
+		);
+
+		$result = FormInput::validate( $input );
+		$this->assertTrue( $result->is_valid() );
+		$field = $result->form()->fields()[2];
+		$this->assertSame(
+			array(
+				array(
+					'value' => 'red',
+					'label' => 'Red',
+				),
+				array(
+					'value' => 'blue',
+					'label' => 'blue',
+				),
+			),
+			$field->settings()->options()
+		);
+		$this->assertTrue( $field->settings()->multiple() );
+	}
+
+	/**
+	 * A choice without options is rejected.
+	 */
+	public function test_choice_field_requires_an_option(): void {
+		$input             = $this->input();
+		$input['fields'][] = array(
+			'name'    => 'color',
+			'label'   => 'Color',
+			'type'    => 'choice',
+			'options' => '   ',
+		);
+
+		$result = FormInput::validate( $input );
+
+		$this->assertArrayHasKey( 'fields.2.options', $result->errors() );
+	}
+
+	/**
 	 * Posted values for a valid contact form.
 	 *
 	 * @return array<string, mixed>
