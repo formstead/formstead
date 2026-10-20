@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Activation creates the forms and submissions tables and grants the four Formstead capabilities to administrators.
+- Forms can be stored with a public id, field schema, and an absolute success URL.
 
 ### Changed
 
