@@ -41,3 +41,11 @@ function formstead_tests_load_plugin() {
 tests_add_filter( 'muplugins_loaded', 'formstead_tests_load_plugin' );
 
 require $formstead_tests_dir . '/includes/bootstrap.php';
+
+// Install the schema before the suite transaction starts, so ordinary tests
+// write real rows that the suite can roll back. DDL during a test commits.
+$formstead_migration = Formstead\Database\Migrator::run();
+if ( $formstead_migration instanceof WP_Error ) {
+	fwrite( STDERR, 'Formstead test schema install failed: ' . $formstead_migration->get_error_code() . "\n" );
+	exit( 1 );
+}
