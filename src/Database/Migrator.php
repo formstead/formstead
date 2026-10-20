@@ -96,7 +96,8 @@ final class Migrator {
 	public static function tables_exist(): bool {
 		return self::table_exists( Schema::forms_table() )
 			&& self::table_exists( Schema::form_versions_table() )
-			&& self::table_exists( Schema::submissions_table() );
+			&& self::table_exists( Schema::submissions_table() )
+			&& self::table_exists( Schema::rate_limits_table() );
 	}
 
 	/**

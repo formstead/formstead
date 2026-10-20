@@ -76,17 +76,33 @@ final class Form {
 	private string $updated_at;
 
 	/**
+	 * Origin allowlist and rate-limit overrides.
+	 *
+	 * @var FormProtection
+	 */
+	private FormProtection $protection;
+
+	/**
+	 * Submissions rejected by the honeypot and not stored.
+	 *
+	 * @var int
+	 */
+	private int $honeypot_rejections;
+
+	/**
 	 * Create a form.
 	 *
-	 * @param int     $id             Database id, or zero for a new form.
-	 * @param string  $public_id      Public id, or an empty string for a new form.
-	 * @param string  $name           Form name.
-	 * @param bool    $is_enabled     Whether submissions are accepted.
-	 * @param Field[] $fields         Configured fields.
-	 * @param int     $schema_version Current field-schema version.
-	 * @param string  $success_url    Absolute success URL.
-	 * @param string  $created_at     UTC creation time.
-	 * @param string  $updated_at     UTC update time.
+	 * @param int                 $id                  Database id, or zero for a new form.
+	 * @param string              $public_id           Public id, or an empty string for a new form.
+	 * @param string              $name                Form name.
+	 * @param bool                $is_enabled          Whether submissions are accepted.
+	 * @param Field[]             $fields              Configured fields.
+	 * @param int                 $schema_version      Current field-schema version.
+	 * @param string              $success_url         Absolute success URL.
+	 * @param string              $created_at          UTC creation time.
+	 * @param string              $updated_at          UTC update time.
+	 * @param FormProtection|null $protection          Origin allowlist and rate overrides. Null uses the defaults.
+	 * @param int                 $honeypot_rejections Rejected honeypot submissions.
 	 */
 	public function __construct(
 		int $id,
@@ -97,17 +113,21 @@ final class Form {
 		int $schema_version,
 		string $success_url,
 		string $created_at,
-		string $updated_at
+		string $updated_at,
+		?FormProtection $protection = null,
+		int $honeypot_rejections = 0
 	) {
-		$this->id             = $id;
-		$this->public_id      = $public_id;
-		$this->name           = $name;
-		$this->is_enabled     = $is_enabled;
-		$this->fields         = $fields;
-		$this->schema_version = $schema_version;
-		$this->success_url    = $success_url;
-		$this->created_at     = $created_at;
-		$this->updated_at     = $updated_at;
+		$this->id                  = $id;
+		$this->public_id           = $public_id;
+		$this->name                = $name;
+		$this->is_enabled          = $is_enabled;
+		$this->fields              = $fields;
+		$this->schema_version      = $schema_version;
+		$this->success_url         = $success_url;
+		$this->created_at          = $created_at;
+		$this->updated_at          = $updated_at;
+		$this->protection          = $protection ?? FormProtection::none();
+		$this->honeypot_rejections = max( 0, $honeypot_rejections );
 	}
 
 	/**
@@ -173,6 +193,20 @@ final class Form {
 	 */
 	public function updated_at(): string {
 		return $this->updated_at;
+	}
+
+	/**
+	 * Origin allowlist and rate-limit overrides.
+	 */
+	public function protection(): FormProtection {
+		return $this->protection;
+	}
+
+	/**
+	 * Submissions rejected by the honeypot and not stored.
+	 */
+	public function honeypot_rejections(): int {
+		return $this->honeypot_rejections;
 	}
 
 	/**
