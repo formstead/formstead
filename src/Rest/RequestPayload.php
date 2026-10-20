@@ -95,6 +95,8 @@ final class RequestPayload {
 			RequestError::PayloadTooLarge => __( 'This submission is too large.', 'formstead' ),
 			RequestError::OriginNotAllowed => __( 'This form does not accept submissions from that site.', 'formstead' ),
 			RequestError::RateLimited => __( 'Too many submissions. Please wait and try again.', 'formstead' ),
+			RequestError::InvalidIdempotencyKey => __( 'The idempotency key is not valid.', 'formstead' ),
+			RequestError::IdempotencyConflict => __( 'This idempotency key was already used for a different submission.', 'formstead' ),
 		};
 	}
 }
