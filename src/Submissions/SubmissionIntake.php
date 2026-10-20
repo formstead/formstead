@@ -9,6 +9,8 @@ namespace Formstead\Submissions;
 
 use Formstead\Database\Rollback;
 use Formstead\Database\Transaction;
+use Formstead\Delivery\DeliveryRepository;
+use Formstead\Delivery\Scheduler;
 use Formstead\Forms\Form;
 use WP_Error;
 
@@ -37,6 +39,10 @@ final class SubmissionIntake {
 		( new IdempotencyRepository() )->maybe_prune( time() );
 
 		if ( $result instanceof IntakeResult ) {
+			if ( $result->is_accepted() && is_int( $result->delivery_id() ) ) {
+				Scheduler::schedule( $result->delivery_id() );
+			}
+
 			return $result;
 		}
 
@@ -99,6 +105,15 @@ final class SubmissionIntake {
 			}
 		}
 
-		return IntakeResult::accepted( $saved );
+		$delivery_id = null;
+		if ( $form->notifications()->has_recipients() ) {
+			$created = ( new DeliveryRepository() )->create( $saved->id() );
+			if ( $created instanceof WP_Error ) {
+				return $created;
+			}
+			$delivery_id = $created;
+		}
+
+		return IntakeResult::accepted( $saved, $delivery_id );
 	}
 }
