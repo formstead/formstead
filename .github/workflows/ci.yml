@@ -1,0 +1,219 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: PHPUnit, PHPCS, PHPStan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Cache Composer packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - name: Start wp-env
+        run: npx wp-env start
+
+      - name: Install Composer dependencies
+        run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
+
+      - name: PHPUnit
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit
+
+      - name: PHPCS
+        run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs
+
+      - name: PHPStan
+        run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G
+
+  package:
+    name: ZIP and Plugin Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.3"
+          extensions: mysqli, zip
+          tools: composer, wp-cli:2.12.0
+          coverage: none
+
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Build ZIP
+        run: bash bin/build-zip.sh
+
+      - name: Download WordPress
+        run: wp core download --version=7.1.3 --path=wordpress --force
+
+      - name: Create wp-config
+        run: |
+          wp config create \
+            --path=wordpress \
+            --dbname=wordpress \
+            --dbuser=root \
+            --dbpass=root \
+            --dbhost=127.0.0.1 \
+            --extra-php <<'PHP'
+          define( 'WP_DEBUG', true );
+          define( 'WP_DEBUG_LOG', true );
+          define( 'WP_DEBUG_DISPLAY', false );
+          PHP
+
+      - name: Install WordPress
+        run: |
+          wp core install \
+            --path=wordpress \
+            --url=http://127.0.0.1:8080 \
+            --title=Formstead \
+            --admin_user=admin \
+            --admin_password=password \
+            --admin_email=admin@example.com \
+            --skip-email
+
+      - name: Install Formstead from ZIP
+        run: wp plugin install formstead.zip --activate --path=wordpress
+
+      # Keep 2.1.0 in sync with the plugin-check ZIP URL in .wp-env.json.
+      # That file is strict JSON, so the pin cannot be commented there.
+      - name: Install Plugin Check
+        run: wp plugin install plugin-check --version=2.1.0 --activate --path=wordpress
+
+      - name: Run Plugin Check
+        run: |
+          # The default Actions shell is `bash -e` without pipefail, so a failing
+          # `wp plugin check` would otherwise be hidden by `tee`.
+          set -o pipefail
+          PCP_DIR="$(wp plugin path plugin-check --dir --path=wordpress)"
+          wp plugin check formstead \
+            --path=wordpress \
+            --require="${PCP_DIR}/cli.php" \
+            --format=json | tee plugin-check.json
+          if grep -q '"type":"ERROR"' plugin-check.json; then
+            echo "Plugin Check reported errors."
+            exit 1
+          fi
+          echo "Plugin Check reported no errors."
+
+      - name: Hit front, admin, and uninstall over PHP's built-in server
+        run: |
+          php -S 127.0.0.1:8080 -t wordpress >/tmp/php-server.log 2>&1 &
+          for i in $(seq 1 20); do
+            if curl -sf -o /dev/null http://127.0.0.1:8080/; then
+              break
+            fi
+            sleep 0.5
+          done
+
+          assert_ok() {
+            local label="$1"
+            local url="$2"
+            local result
+            # No -L: a redirect to wp-login.php stays a non-200. url_effective is only the requested URL.
+            result="$(curl -s -b "$JAR" -o /dev/null -w '%{http_code} %{url_effective}' "$url")"
+            echo "${label}:${result}"
+            local code="${result%% *}"
+            if [[ "$code" != "200" ]]; then
+              echo "${label} did not return 200 at ${url}." >&2
+              exit 1
+            fi
+          }
+
+          assert_debug_log() {
+            if [[ -s wordpress/wp-content/debug.log ]]; then
+              echo "debug.log is not empty:"
+              cat wordpress/wp-content/debug.log
+              exit 1
+            fi
+            echo "debug.log is absent or empty."
+          }
+
+          JAR="$(mktemp)"
+          curl -sf -o /dev/null -w 'front:%{http_code} %{url_effective}\n' http://127.0.0.1:8080/
+          curl -sf -c "$JAR" -b "$JAR" -o /dev/null -w 'login:%{http_code} %{url_effective}\n' http://127.0.0.1:8080/wp-login.php
+          # The login form sets this cookie in JavaScript. curl does not run it, and an empty test cookie rejects the POST.
+          printf '127.0.0.1\tFALSE\t/\tFALSE\t0\twordpress_test_cookie\t1\n' >> "$JAR"
+          login_post="$(curl -s -c "$JAR" -b "$JAR" -o /dev/null -w '%{http_code} %{redirect_url}' \
+            -d 'log=admin&pwd=password&wp-submit=Log+In&redirect_to=http%3A%2F%2F127.0.0.1%3A8080%2Fwp-admin%2F&testcookie=1' \
+            http://127.0.0.1:8080/wp-login.php)"
+          echo "login_post:${login_post}"
+          if [[ "$login_post" != 302* || "$login_post" != *wp-admin* || "$login_post" == *wp-login.php* ]]; then
+            echo "Login did not redirect to wp-admin." >&2
+            exit 1
+          fi
+
+          assert_ok admin http://127.0.0.1:8080/wp-admin/
+          assert_ok plugins http://127.0.0.1:8080/wp-admin/plugins.php
+          assert_debug_log
+
+          wp plugin deactivate formstead --path=wordpress
+          wp plugin uninstall formstead --path=wordpress
+          assert_debug_log
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: formstead
+          path: formstead.zip
+
+  legacy-php-lint:
+    name: PHP 7.4 syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up PHP 7.4
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "7.4"
+          coverage: none
+          tools: none
+
+      - name: Lint formstead.php on PHP 7.4
+        run: php -l formstead.php
+

@@ -1,0 +1,22 @@
+{
+	"name": "formstead",
+	"private": true,
+	"description": "Development tools for the Formstead WordPress plugin.",
+	"engines": {
+		"node": ">=22"
+	},
+	"devDependencies": {
+		"@wordpress/env": "^11.17.0"
+	},
+	"scripts": {
+		"start": "wp-env start",
+		"stop": "wp-env stop",
+		"destroy": "wp-env destroy",
+		"composer": "wp-env run cli --env-cwd=wp-content/plugins/formstead composer",
+		"test": "wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit",
+		"lint": "wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs",
+		"analyse": "wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G",
+		"plugin-check": "bash bin/plugin-check.sh",
+		"check": "bash bin/check.sh"
+	}
+}

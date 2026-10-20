@@ -1,0 +1,9 @@
+parameters:
+	level: 8
+	paths:
+		- formstead.php
+		- uninstall.php
+		- src
+	bootstrapFiles:
+		- tests/phpstan-bootstrap.php
+	treatPhpDocTypesAsCertain: false
