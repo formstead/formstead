@@ -54,7 +54,7 @@ abstract class MigrationTestCase extends SchemaTestCase {
 	private function reset_formstead_schema(): void {
 		global $wpdb;
 
-		foreach ( array( Schema::forms_table(), Schema::form_versions_table(), Schema::submissions_table(), Schema::rate_limits_table() ) as $table ) {
+		foreach ( Schema::tables() as $table ) {
 			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
 		}
 

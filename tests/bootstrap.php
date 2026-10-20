@@ -55,6 +55,9 @@ tests_add_filter( 'muplugins_loaded', 'formstead_tests_load_plugin' );
 
 require $formstead_tests_dir . '/includes/bootstrap.php';
 
+// START TRANSACTION would commit the suite transaction. See notes/roadmap.md section 7a.
+Formstead\Database\Transaction::use_savepoints( true );
+
 // Install the schema before the suite transaction starts, so ordinary tests
 // write real rows that the suite can roll back. DDL during a test commits.
 $formstead_migration = Formstead\Database\Migrator::run();

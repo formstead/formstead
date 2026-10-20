@@ -90,19 +90,27 @@ final class Form {
 	private int $honeypot_rejections;
 
 	/**
+	 * Email notification settings.
+	 *
+	 * @var FormNotifications
+	 */
+	private FormNotifications $notifications;
+
+	/**
 	 * Create a form.
 	 *
-	 * @param int                 $id                  Database id, or zero for a new form.
-	 * @param string              $public_id           Public id, or an empty string for a new form.
-	 * @param string              $name                Form name.
-	 * @param bool                $is_enabled          Whether submissions are accepted.
-	 * @param Field[]             $fields              Configured fields.
-	 * @param int                 $schema_version      Current field-schema version.
-	 * @param string              $success_url         Absolute success URL.
-	 * @param string              $created_at          UTC creation time.
-	 * @param string              $updated_at          UTC update time.
-	 * @param FormProtection|null $protection          Origin allowlist and rate overrides. Null uses the defaults.
-	 * @param int                 $honeypot_rejections Rejected honeypot submissions.
+	 * @param int                    $id                  Database id, or zero for a new form.
+	 * @param string                 $public_id           Public id, or an empty string for a new form.
+	 * @param string                 $name                Form name.
+	 * @param bool                   $is_enabled          Whether submissions are accepted.
+	 * @param Field[]                $fields              Configured fields.
+	 * @param int                    $schema_version      Current field-schema version.
+	 * @param string                 $success_url         Absolute success URL.
+	 * @param string                 $created_at          UTC creation time.
+	 * @param string                 $updated_at          UTC update time.
+	 * @param FormProtection|null    $protection          Origin allowlist and rate overrides. Null uses the defaults.
+	 * @param int                    $honeypot_rejections Rejected honeypot submissions.
+	 * @param FormNotifications|null $notifications      Email settings. Null sends no mail.
 	 */
 	public function __construct(
 		int $id,
@@ -115,7 +123,8 @@ final class Form {
 		string $created_at,
 		string $updated_at,
 		?FormProtection $protection = null,
-		int $honeypot_rejections = 0
+		int $honeypot_rejections = 0,
+		?FormNotifications $notifications = null
 	) {
 		$this->id                  = $id;
 		$this->public_id           = $public_id;
@@ -128,6 +137,7 @@ final class Form {
 		$this->updated_at          = $updated_at;
 		$this->protection          = $protection ?? FormProtection::none();
 		$this->honeypot_rejections = max( 0, $honeypot_rejections );
+		$this->notifications       = $notifications ?? FormNotifications::none();
 	}
 
 	/**
@@ -207,6 +217,13 @@ final class Form {
 	 */
 	public function honeypot_rejections(): int {
 		return $this->honeypot_rejections;
+	}
+
+	/**
+	 * Email notification settings.
+	 */
+	public function notifications(): FormNotifications {
+		return $this->notifications;
 	}
 
 	/**
