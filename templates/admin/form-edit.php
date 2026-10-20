@@ -21,15 +21,34 @@ $errors  = isset( $errors ) && is_array( $errors ) ? $errors : array();
 $updated = isset( $updated ) && $updated;
 $form    = isset( $form ) && $form instanceof Form ? $form : null;
 
-$form_id          = isset( $values['form_id'] ) ? (int) $values['form_id'] : 0;
-$schema_version   = isset( $values['schema_version'] ) ? (int) $values['schema_version'] : 0;
-$name             = isset( $values['name'] ) ? (string) $values['name'] : '';
-$is_enabled       = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
-$success_url      = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
-$allowed_origins  = isset( $values['allowed_origins'] ) ? (string) $values['allowed_origins'] : '';
-$rate_per_minute  = isset( $values['rate_per_minute'] ) ? (string) $values['rate_per_minute'] : '';
-$rate_per_hour    = isset( $values['rate_per_hour'] ) ? (string) $values['rate_per_hour'] : '';
-$rows             = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
+$form_id              = isset( $values['form_id'] ) ? (int) $values['form_id'] : 0;
+$schema_version       = isset( $values['schema_version'] ) ? (int) $values['schema_version'] : 0;
+$name                 = isset( $values['name'] ) ? (string) $values['name'] : '';
+$is_enabled           = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
+$success_url          = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
+$allowed_origins      = isset( $values['allowed_origins'] ) ? (string) $values['allowed_origins'] : '';
+$rate_per_minute      = isset( $values['rate_per_minute'] ) ? (string) $values['rate_per_minute'] : '';
+$rate_per_hour        = isset( $values['rate_per_hour'] ) ? (string) $values['rate_per_hour'] : '';
+$notify_recipients    = isset( $values['notify_recipients'] ) ? (string) $values['notify_recipients'] : '';
+$reply_to_field       = isset( $values['reply_to_field'] ) ? (string) $values['reply_to_field'] : '';
+$mail_include_content = isset( $values['mail_include_content'] ) && '1' === (string) $values['mail_include_content'];
+$rows                 = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
+$email_fields         = array();
+foreach ( $rows as $formstead_row ) {
+	if ( ! is_array( $formstead_row ) ) {
+		continue;
+	}
+	$row_type = isset( $formstead_row['type'] ) ? (string) $formstead_row['type'] : '';
+	$row_name = isset( $formstead_row['name'] ) ? (string) $formstead_row['name'] : '';
+	if ( FieldType::Email->value !== $row_type || '' === $row_name ) {
+		continue;
+	}
+	$row_label      = isset( $formstead_row['label'] ) ? (string) $formstead_row['label'] : '';
+	$email_fields[] = array(
+		'name'  => $row_name,
+		'label' => '' !== $row_label ? $row_label : $row_name,
+	);
+}
 $endpoint         = $form instanceof Form ? rest_url( 'formstead/v1/forms/' . $form->public_id() . '/submissions' ) : '';
 $honeypot_snippet = '<input type="text" name="_fs_honeypot" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">';
 $next_index       = count( $rows );
@@ -142,6 +161,49 @@ $next_index       = count( $rows );
 					</td>
 				</tr>
 			<?php endif; ?>
+		</table>
+
+		<h2><?php echo esc_html__( 'Email', 'formstead' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><label for="formstead-recipients"><?php echo esc_html__( 'Recipients', 'formstead' ); ?></label></th>
+				<td>
+					<textarea name="notify_recipients" id="formstead-recipients" rows="4" class="large-text code"><?php echo esc_textarea( $notify_recipients ); ?></textarea>
+					<?php if ( isset( $errors['notify_recipients'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['notify_recipients'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'One address per line, up to 10. Leave this empty to store submissions without sending email.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="formstead-reply-to"><?php echo esc_html__( 'Reply-To', 'formstead' ); ?></label></th>
+				<td>
+					<select name="reply_to_field" id="formstead-reply-to">
+						<option value=""><?php echo esc_html__( 'None', 'formstead' ); ?></option>
+						<?php foreach ( $email_fields as $email_field ) : ?>
+							<option value="<?php echo esc_attr( $email_field['name'] ); ?>" <?php selected( $reply_to_field, $email_field['name'] ); ?>>
+								<?php echo esc_html( $email_field['label'] ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+					<?php if ( isset( $errors['reply_to_field'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['reply_to_field'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'Uses the submitted value of an email field. An invalid value is left off the message.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php echo esc_html__( 'Message', 'formstead' ); ?></th>
+				<td>
+					<label for="formstead-include-content">
+						<input name="mail_include_content" id="formstead-include-content" type="checkbox" value="1" <?php checked( $mail_include_content ); ?>>
+						<?php echo esc_html__( 'Include submission content', 'formstead' ); ?>
+					</label>
+					<p class="description"><?php echo esc_html__( 'The message always links to this submission. The subject never includes submitted values.', 'formstead' ); ?></p>
+				</td>
+			</tr>
 		</table>
 
 		<h2><?php echo esc_html__( 'Fields', 'formstead' ); ?></h2>

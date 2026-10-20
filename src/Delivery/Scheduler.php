@@ -114,7 +114,7 @@ final class Scheduler {
 	public static function worker(): DeliveryWorker {
 		$channel = apply_filters( 'formstead_delivery_channel', null );
 		if ( ! $channel instanceof Channel ) {
-			$channel = new UnconfiguredChannel();
+			$channel = new EmailChannel();
 		}
 
 		return new DeliveryWorker( $channel );

@@ -229,7 +229,7 @@ final class FormsPage {
 	 * percent-encoded address survives; FormInput rejects a URL that
 	 * `esc_url_raw()` would change.
 	 *
-	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, fields: array<int, array<string, string>>}
 	 */
 	private static function input_from_post(): array {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_load() before this runs.
@@ -246,17 +246,25 @@ final class FormsPage {
 		$minute = self::text_value( isset( $_POST['rate_per_minute'] ) ? wp_unslash( $_POST['rate_per_minute'] ) : '' );
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput accepts only a whole number inside the ceiling.
 		$hour = self::text_value( isset( $_POST['rate_per_hour'] ) ? wp_unslash( $_POST['rate_per_hour'] ) : '' );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput accepts only valid email addresses.
+		$recipients = self::options_value( isset( $_POST['notify_recipients'] ) ? wp_unslash( $_POST['notify_recipients'] ) : '' );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput accepts only the name of an email field.
+		$reply_to = self::text_value( isset( $_POST['reply_to_field'] ) ? wp_unslash( $_POST['reply_to_field'] ) : '' );
+		$include  = isset( $_POST['mail_include_content'] ) ? '1' : '';
 
 		return array(
-			'form_id'         => $form_id,
-			'schema_version'  => $version,
-			'name'            => $name,
-			'is_enabled'      => $enabled,
-			'success_url'     => $url,
-			'allowed_origins' => $origins,
-			'rate_per_minute' => $minute,
-			'rate_per_hour'   => $hour,
-			'fields'          => self::posted_fields(),
+			'form_id'              => $form_id,
+			'schema_version'       => $version,
+			'name'                 => $name,
+			'is_enabled'           => $enabled,
+			'success_url'          => $url,
+			'allowed_origins'      => $origins,
+			'rate_per_minute'      => $minute,
+			'rate_per_hour'        => $hour,
+			'notify_recipients'    => $recipients,
+			'reply_to_field'       => $reply_to,
+			'mail_include_content' => $include,
+			'fields'               => self::posted_fields(),
 		);
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 	}
@@ -366,20 +374,23 @@ final class FormsPage {
 	 * Values for the edit form.
 	 *
 	 * @param Form|null $form Saved form, or null for a new form.
-	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, fields: array<int, array<string, string>>}
 	 */
 	private static function values_from_form( ?Form $form ): array {
 		if ( ! $form instanceof Form ) {
 			return array(
-				'form_id'         => 0,
-				'schema_version'  => 1,
-				'name'            => '',
-				'is_enabled'      => '1',
-				'success_url'     => '',
-				'allowed_origins' => '',
-				'rate_per_minute' => '',
-				'rate_per_hour'   => '',
-				'fields'          => array(),
+				'form_id'              => 0,
+				'schema_version'       => 1,
+				'name'                 => '',
+				'is_enabled'           => '1',
+				'success_url'          => '',
+				'allowed_origins'      => '',
+				'rate_per_minute'      => '',
+				'rate_per_hour'        => '',
+				'notify_recipients'    => self::default_recipient(),
+				'reply_to_field'       => '',
+				'mail_include_content' => '',
+				'fields'               => array(),
 			);
 		}
 
@@ -391,17 +402,36 @@ final class FormsPage {
 		$minute = $form->protection()->rate_per_minute();
 		$hour   = $form->protection()->rate_per_hour();
 
+		$reply_to = $form->notifications()->reply_to_field();
+
 		return array(
-			'form_id'         => $form->id(),
-			'schema_version'  => $form->schema_version(),
-			'name'            => $form->name(),
-			'is_enabled'      => $form->is_enabled() ? '1' : '',
-			'success_url'     => $form->success_url(),
-			'allowed_origins' => implode( "\n", $form->protection()->allowed_origins() ),
-			'rate_per_minute' => null === $minute ? '' : (string) $minute,
-			'rate_per_hour'   => null === $hour ? '' : (string) $hour,
-			'fields'          => $rows,
+			'form_id'              => $form->id(),
+			'schema_version'       => $form->schema_version(),
+			'name'                 => $form->name(),
+			'is_enabled'           => $form->is_enabled() ? '1' : '',
+			'success_url'          => $form->success_url(),
+			'allowed_origins'      => implode( "\n", $form->protection()->allowed_origins() ),
+			'rate_per_minute'      => null === $minute ? '' : (string) $minute,
+			'rate_per_hour'        => null === $hour ? '' : (string) $hour,
+			'notify_recipients'    => implode( "\n", $form->notifications()->recipients() ),
+			'reply_to_field'       => is_string( $reply_to ) ? $reply_to : '',
+			'mail_include_content' => $form->notifications()->includes_content() ? '1' : '',
+			'fields'               => $rows,
 		);
+	}
+
+	/**
+	 * Address shown in the recipient box of a new form.
+	 *
+	 * An existing form keeps its stored list, which is empty until someone sets it.
+	 */
+	private static function default_recipient(): string {
+		$email = get_option( 'admin_email' );
+		if ( ! is_string( $email ) || ! is_email( $email ) ) {
+			return '';
+		}
+
+		return $email;
 	}
 
 	/**

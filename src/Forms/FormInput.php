@@ -42,8 +42,9 @@ final class FormInput {
 			$errors['success_url'] = __( 'Enter an absolute http or https URL.', 'formstead' );
 		}
 
-		$fields     = self::fields( $input, $errors );
-		$protection = self::protection( $input, $errors );
+		$fields        = self::fields( $input, $errors );
+		$protection    = self::protection( $input, $errors );
+		$notifications = self::notifications( $input, $fields, $errors );
 
 		if ( array() !== $errors ) {
 			return new FormInputResult( null, $errors );
@@ -60,7 +61,8 @@ final class FormInput {
 			$existing instanceof Form ? $existing->created_at() : '',
 			$existing instanceof Form ? $existing->updated_at() : '',
 			$protection,
-			$existing instanceof Form ? $existing->honeypot_rejections() : 0
+			$existing instanceof Form ? $existing->honeypot_rejections() : 0,
+			$notifications
 		);
 
 		return new FormInputResult( $form, array() );
@@ -82,6 +84,87 @@ final class FormInput {
 		}
 
 		return isset( $input['schema_version'] ) ? (int) $input['schema_version'] : 0;
+	}
+
+	/**
+	 * Recipients, the reply-to field, and whether the body includes the submission.
+	 *
+	 * An empty recipient list is valid: the form stores submissions and sends no mail.
+	 *
+	 * @param array<string, mixed>  $input  Posted form values.
+	 * @param Field[]               $fields Valid fields.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 */
+	private static function notifications( array $input, array $fields, array &$errors ): FormNotifications {
+		return new FormNotifications(
+			self::recipients( $input, $errors ),
+			self::reply_to_field( $input, $fields, $errors ),
+			self::is_checked( $input['mail_include_content'] ?? null )
+		);
+	}
+
+	/**
+	 * Recipient addresses, one per non-empty line.
+	 *
+	 * @param array<string, mixed>  $input  Posted form values.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 * @return list<string>
+	 */
+	private static function recipients( array $input, array &$errors ): array {
+		$text  = isset( $input['notify_recipients'] ) && is_string( $input['notify_recipients'] ) ? $input['notify_recipients'] : '';
+		$lines = preg_split( '/\R/', $text );
+		$list  = array();
+		$seen  = array();
+
+		foreach ( is_array( $lines ) ? $lines : array() as $line ) {
+			$line = trim( $line );
+			if ( '' === $line ) {
+				continue;
+			}
+
+			$address = sanitize_email( $line );
+			if ( ! is_string( $address ) || ! is_email( $line ) || ! is_email( $address ) ) {
+				$errors['notify_recipients'] = __( 'Enter up to 10 valid email addresses, one per line.', 'formstead' );
+				return array();
+			}
+
+			$key = strtolower( $address );
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+
+			$seen[ $key ] = true;
+			$list[]       = $address;
+			if ( count( $list ) > 10 ) {
+				$errors['notify_recipients'] = __( 'Enter up to 10 valid email addresses, one per line.', 'formstead' );
+				return array();
+			}
+		}
+
+		return $list;
+	}
+
+	/**
+	 * Email field used as Reply-To, or null when none is chosen.
+	 *
+	 * @param array<string, mixed>  $input  Posted form values.
+	 * @param Field[]               $fields Valid fields.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 */
+	private static function reply_to_field( array $input, array $fields, array &$errors ): ?string {
+		$name = isset( $input['reply_to_field'] ) && is_string( $input['reply_to_field'] ) ? trim( $input['reply_to_field'] ) : '';
+		if ( '' === $name ) {
+			return null;
+		}
+
+		foreach ( $fields as $field ) {
+			if ( $field->name() === $name && FieldType::Email === $field->type() ) {
+				return $name;
+			}
+		}
+
+		$errors['reply_to_field'] = __( 'Choose an email field.', 'formstead' );
+		return null;
 	}
 
 	/**
