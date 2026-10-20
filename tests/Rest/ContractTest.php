@@ -14,6 +14,7 @@ use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Rest\HtmlResponse;
+use Formstead\Security\OriginPolicy;
 use Formstead\Submissions\ReceiptId;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -33,6 +34,7 @@ final class ContractTest extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		OriginPolicy::reset();
 		rest_get_server();
 	}
 
@@ -76,7 +78,7 @@ final class ContractTest extends WP_UnitTestCase {
 
 		$this->assertInstanceOf( WP_REST_Response::class, $response );
 		$this->assertSame( $status, $response->get_status() );
-		$this->assertSame( 'Accept', $response->get_headers()['Vary'] );
+		$this->assertSame( 'Accept, Origin', $response->get_headers()['Vary'] );
 		$this->assertSame( 'no-store', $response->get_headers()['Cache-Control'] );
 
 		if ( 'html' === $mode && 'accepted' !== $code ) {

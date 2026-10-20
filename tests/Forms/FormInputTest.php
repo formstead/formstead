@@ -214,6 +214,40 @@ final class FormInputTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Origins are normalized and an empty rate uses the global limit.
+	 */
+	public function test_protection_settings_are_normalized(): void {
+		$input                    = $this->input();
+		$input['allowed_origins'] = "https://Forms.Example:443\nhttp://forms.example:8080\n";
+		$input['rate_per_minute'] = '2';
+		$input['rate_per_hour']   = '';
+
+		$result = FormInput::validate( $input );
+
+		$this->assertTrue( $result->is_valid() );
+		$protection = $result->form()->protection();
+		$this->assertSame( array( 'https://forms.example', 'http://forms.example:8080' ), $protection->allowed_origins() );
+		$this->assertSame( 2, $protection->rate_per_minute() );
+		$this->assertNull( $protection->rate_per_hour() );
+	}
+
+	/**
+	 * A path, a literal null origin, and a rate above the ceiling are rejected.
+	 */
+	public function test_invalid_protection_settings_are_rejected(): void {
+		$input                    = $this->input();
+		$input['allowed_origins'] = "https://forms.example/path\nnull";
+		$input['rate_per_minute'] = '61';
+		$input['rate_per_hour']   = '0';
+
+		$result = FormInput::validate( $input );
+
+		$this->assertArrayHasKey( 'allowed_origins', $result->errors() );
+		$this->assertArrayHasKey( 'rate_per_minute', $result->errors() );
+		$this->assertArrayHasKey( 'rate_per_hour', $result->errors() );
+	}
+
+	/**
 	 * Posted values for a valid contact form.
 	 *
 	 * @return array<string, mixed>

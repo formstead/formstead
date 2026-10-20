@@ -21,14 +21,18 @@ $errors  = isset( $errors ) && is_array( $errors ) ? $errors : array();
 $updated = isset( $updated ) && $updated;
 $form    = isset( $form ) && $form instanceof Form ? $form : null;
 
-$form_id        = isset( $values['form_id'] ) ? (int) $values['form_id'] : 0;
-$schema_version = isset( $values['schema_version'] ) ? (int) $values['schema_version'] : 0;
-$name           = isset( $values['name'] ) ? (string) $values['name'] : '';
-$is_enabled     = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
-$success_url    = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
-$rows           = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
-$endpoint       = $form instanceof Form ? rest_url( 'formstead/v1/forms/' . $form->public_id() . '/submissions' ) : '';
-$next_index     = count( $rows );
+$form_id          = isset( $values['form_id'] ) ? (int) $values['form_id'] : 0;
+$schema_version   = isset( $values['schema_version'] ) ? (int) $values['schema_version'] : 0;
+$name             = isset( $values['name'] ) ? (string) $values['name'] : '';
+$is_enabled       = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
+$success_url      = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
+$allowed_origins  = isset( $values['allowed_origins'] ) ? (string) $values['allowed_origins'] : '';
+$rate_per_minute  = isset( $values['rate_per_minute'] ) ? (string) $values['rate_per_minute'] : '';
+$rate_per_hour    = isset( $values['rate_per_hour'] ) ? (string) $values['rate_per_hour'] : '';
+$rows             = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
+$endpoint         = $form instanceof Form ? rest_url( 'formstead/v1/forms/' . $form->public_id() . '/submissions' ) : '';
+$honeypot_snippet = '<input type="text" name="_fs_honeypot" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">';
+$next_index       = count( $rows );
 ?>
 <div class="wrap">
 	<h1><?php echo $form instanceof Form ? esc_html__( 'Edit form', 'formstead' ) : esc_html__( 'Add form', 'formstead' ); ?></h1>
@@ -78,12 +82,63 @@ $next_index     = count( $rows );
 					<?php endif; ?>
 				</td>
 			</tr>
-			<?php if ( '' !== $endpoint ) : ?>
+			<tr>
+				<th scope="row"><label for="formstead-origins"><?php echo esc_html__( 'Allowed origins', 'formstead' ); ?></label></th>
+				<td>
+					<textarea name="allowed_origins" id="formstead-origins" rows="4" class="large-text code"><?php echo esc_textarea( $allowed_origins ); ?></textarea>
+					<?php if ( isset( $errors['allowed_origins'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['allowed_origins'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'One http or https origin per line, without a path. Leave this empty to allow only this site.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="formstead-rate-minute"><?php echo esc_html__( 'Submissions per minute', 'formstead' ); ?></label></th>
+				<td>
+					<input name="rate_per_minute" id="formstead-rate-minute" type="number" min="1" max="60" class="small-text" value="<?php echo esc_attr( $rate_per_minute ); ?>">
+					<?php if ( isset( $errors['rate_per_minute'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['rate_per_minute'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'Per IP address. Leave empty to use the global limit of 5.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="formstead-rate-hour"><?php echo esc_html__( 'Submissions per hour', 'formstead' ); ?></label></th>
+				<td>
+					<input name="rate_per_hour" id="formstead-rate-hour" type="number" min="1" max="10000" class="small-text" value="<?php echo esc_attr( $rate_per_hour ); ?>">
+					<?php if ( isset( $errors['rate_per_hour'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['rate_per_hour'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'For this form, from every address. Leave empty to use the global limit of 100.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<?php if ( '' !== $endpoint && $form instanceof Form ) : ?>
 				<tr>
 					<th scope="row"><label for="formstead-endpoint"><?php echo esc_html__( 'Endpoint URL', 'formstead' ); ?></label></th>
 					<td>
 						<input id="formstead-endpoint" type="text" class="large-text code" readonly value="<?php echo esc_attr( $endpoint ); ?>">
 						<p class="description"><?php echo esc_html__( 'The public identifier is not a secret. Anyone with this URL can submit the form.', 'formstead' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php echo esc_html__( 'Honeypot', 'formstead' ); ?></th>
+					<td>
+						<p>
+							<?php
+							echo esc_html(
+								sprintf(
+									/* translators: %s: number of rejected submissions. */
+									__( 'Rejected submissions: %s. These are not stored.', 'formstead' ),
+									number_format_i18n( $form->honeypot_rejections() )
+								)
+							);
+							?>
+						</p>
+						<label for="formstead-honeypot-snippet"><?php echo esc_html__( 'Add this hidden field to the form.', 'formstead' ); ?></label>
+						<textarea id="formstead-honeypot-snippet" class="large-text code" rows="2" readonly><?php echo esc_textarea( $honeypot_snippet ); ?></textarea>
 					</td>
 				</tr>
 			<?php endif; ?>

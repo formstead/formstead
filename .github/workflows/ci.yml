@@ -222,6 +222,7 @@ jobs:
           define( 'WP_DEBUG', true );
           define( 'WP_DEBUG_LOG', true );
           define( 'WP_DEBUG_DISPLAY', false );
+          define( 'FORMSTEAD_RATE_PER_MINUTE', 100 );
           PHP
 
       - name: Install WordPress
@@ -284,19 +285,26 @@ jobs:
           }
 
           assert_debug_log() {
-            if [[ -s wordpress/wp-content/debug.log ]]; then
+            if [[ ! -s wordpress/wp-content/debug.log ]]; then
+              echo "debug.log is absent or empty."
+              return
+            fi
+            # wp-cli 2.12 logs its own PHP deprecations through WordPress while this step also runs wp.
+            local plugin_lines
+            plugin_lines="$(grep -v 'phar:///usr/local/bin/wp-cli/' wordpress/wp-content/debug.log || true)"
+            if [[ -n "${plugin_lines//[[:space:]]/}" ]]; then
               echo "debug.log is not empty:"
               cat wordpress/wp-content/debug.log
               exit 1
             fi
-            echo "debug.log is absent or empty."
+            echo "debug.log has only wp-cli deprecations."
           }
 
           prefix="$(wp db prefix --path=wordpress)"
           assert_schema() {
             local found table
             found="$(wp db query "SHOW TABLES" --skip-column-names --path=wordpress)"
-            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions" "${prefix}formstead_form_versions"; do
+            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions" "${prefix}formstead_form_versions" "${prefix}formstead_rate_limits"; do
               if ! grep -Fxq "$table" <<<"$found"; then
                 echo "Missing table ${table}." >&2
                 printf '%s\n' "$found" >&2
@@ -312,8 +320,8 @@ jobs:
 
           assert_schema
           db_version="$(wp option get formstead_db_version --path=wordpress)"
-          if [[ "$db_version" != "2" ]]; then
-            echo "Expected formstead_db_version 2, got ${db_version}." >&2
+          if [[ "$db_version" != "3" ]]; then
+            echo "Expected formstead_db_version 3, got ${db_version}." >&2
             exit 1
           fi
 
@@ -460,6 +468,126 @@ jobs:
           row_count="$(submission_count)"
           if [[ "$row_count" != "3" ]]; then
             echo "Expected 3 submissions after JSON and multipart success, found ${row_count}." >&2
+            exit 1
+          fi
+
+          preflight_headers="$(mktemp)"
+          preflight_code="$(curl -s -D "$preflight_headers" -o /dev/null -w '%{http_code}' \
+            -X OPTIONS \
+            -H 'Origin: https://forms.example' \
+            -H 'Access-Control-Request-Method: POST' \
+            "$endpoint")"
+          assert_status preflight 204 "$preflight_code"
+          if ! grep -Eq '^Access-Control-Allow-Origin: https://forms.example[[:space:]]*$' "$preflight_headers"; then
+            echo "Allowed preflight did not grant the origin." >&2
+            cat "$preflight_headers" >&2
+            exit 1
+          fi
+          if grep -Eqi '^Access-Control-Allow-Credentials:' "$preflight_headers"; then
+            echo "Preflight sent Access-Control-Allow-Credentials." >&2
+            exit 1
+          fi
+
+          denied_headers="$(mktemp)"
+          denied_code="$(curl -s -D "$denied_headers" -o /tmp/formstead-denied -w '%{http_code}' \
+            -H 'Origin: https://evil.example' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'email=a@b.co' \
+            "$endpoint")"
+          assert_status post_foreign 403 "$denied_code"
+          if grep -Eqi '^Access-Control-Allow-Origin:' "$denied_headers"; then
+            echo "Rejected origin was granted CORS." >&2
+            cat "$denied_headers" >&2
+            exit 1
+          fi
+          if grep -Eqi '^Access-Control-Allow-Credentials:' "$denied_headers"; then
+            echo "Rejected origin sent Access-Control-Allow-Credentials." >&2
+            exit 1
+          fi
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "3" ]]; then
+            echo "Rejected origin stored a row. Count is ${row_count}." >&2
+            exit 1
+          fi
+
+          assert_no_credentials() {
+            local label="$1"
+            local headers="$2"
+            if grep -Eqi '^Access-Control-Allow-Credentials:' "$headers"; then
+              echo "${label} sent Access-Control-Allow-Credentials." >&2
+              cat "$headers" >&2
+              exit 1
+            fi
+          }
+
+          allowed_headers="$(mktemp)"
+          allowed_code="$(curl -s -D "$allowed_headers" -o /dev/null -w '%{http_code}' \
+            -H 'Origin: https://forms.example' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'email=a@b.co' \
+            "$endpoint")"
+          assert_status post_allowed_origin 303 "$allowed_code"
+          if ! grep -Eq '^Access-Control-Allow-Origin: https://forms.example[[:space:]]*$' "$allowed_headers"; then
+            echo "Allowed origin was not granted CORS." >&2
+            cat "$allowed_headers" >&2
+            exit 1
+          fi
+          assert_no_credentials "Allowed origin" "$allowed_headers"
+
+          allowed_invalid_headers="$(mktemp)"
+          allowed_invalid_code="$(curl -s -D "$allowed_invalid_headers" -o /tmp/formstead-allowed-invalid -w '%{http_code}' \
+            -H 'Origin: https://forms.example' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'extra=dropped-secret' \
+            "$endpoint")"
+          assert_status post_allowed_invalid 422 "$allowed_invalid_code"
+          assert_no_credentials "Invalid allowed origin" "$allowed_invalid_headers"
+          if grep -q 'dropped-secret' /tmp/formstead-allowed-invalid; then
+            echo "Allowed-origin 422 echoed the submitted value." >&2
+            exit 1
+          fi
+
+          allowed_json_headers="$(mktemp)"
+          allowed_json_code="$(curl -s -D "$allowed_json_headers" -o /tmp/formstead-allowed-json -w '%{http_code}' \
+            -H 'Origin: https://forms.example' \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            --data '{"email":"a@b.co"}' \
+            "$endpoint")"
+          assert_status post_allowed_json 201 "$allowed_json_code"
+          if ! grep -Eq '^Access-Control-Allow-Origin: https://forms.example[[:space:]]*$' "$allowed_json_headers"; then
+            echo "Allowed JSON response did not grant the origin." >&2
+            cat "$allowed_json_headers" >&2
+            exit 1
+          fi
+          assert_no_credentials "Allowed JSON" "$allowed_json_headers"
+          if grep -q 'a@b.co' /tmp/formstead-allowed-json; then
+            echo "Allowed JSON success echoed the submitted value." >&2
+            exit 1
+          fi
+
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "5" ]]; then
+            echo "Expected 5 submissions after allowed-origin posts, found ${row_count}." >&2
+            exit 1
+          fi
+
+          core_headers="$(mktemp)"
+          core_endpoint="$(wp eval "echo rest_url( 'wp/v2/types' );" --path=wordpress)"
+          core_code="$(curl -s -D "$core_headers" -o /dev/null -w '%{http_code}' \
+            -X OPTIONS \
+            -H 'Origin: https://other.example' \
+            -H 'Access-Control-Request-Method: GET' \
+            "$core_endpoint")"
+          assert_status core_preflight 200 "$core_code"
+          if ! grep -Eq '^Access-Control-Allow-Origin: https://other.example[[:space:]]*$' "$core_headers"; then
+            echo "wp/v2 lost the core CORS origin header." >&2
+            cat "$core_headers" >&2
+            exit 1
+          fi
+          if ! grep -Eqi '^Access-Control-Allow-Credentials: true[[:space:]]*$' "$core_headers"; then
+            echo "wp/v2 lost the core credentialed CORS header." >&2
+            cat "$core_headers" >&2
             exit 1
           fi
 

@@ -127,8 +127,10 @@ final class MigratorTest extends MigrationTestCase {
 		$forms       = Schema::forms_table();
 		$submissions = Schema::submissions_table();
 		$versions    = Schema::form_versions_table();
+		$limits      = Schema::rate_limits_table();
 		$charset     = $wpdb->get_charset_collate();
 
+		$wpdb->query( "DROP TABLE IF EXISTS {$limits}" );
 		$wpdb->query( "DROP TABLE IF EXISTS {$versions}" );
 		$wpdb->query( "DROP TABLE IF EXISTS {$submissions}" );
 		$wpdb->query( "DROP TABLE IF EXISTS {$forms}" );
@@ -208,6 +210,94 @@ final class MigratorTest extends MigrationTestCase {
 			$wpdb->prepare( "SELECT id FROM {$versions} WHERE form_id = %d AND version = %d", $form_id, 1 )
 		);
 		$this->assertNull( $older );
+	}
+
+	/**
+	 * Schema version 2 gains protection columns and the rate-limit table.
+	 *
+	 * Existing forms keep their rows. There is no backfill.
+	 */
+	public function test_upgrade_from_version_2_adds_protection_columns(): void {
+		global $wpdb;
+
+		$forms       = Schema::forms_table();
+		$versions    = Schema::form_versions_table();
+		$submissions = Schema::submissions_table();
+		$limits      = Schema::rate_limits_table();
+		$charset     = $wpdb->get_charset_collate();
+
+		$wpdb->query( "DROP TABLE IF EXISTS {$limits}" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$versions}" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$submissions}" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$forms}" );
+
+		$wpdb->query(
+			"CREATE TABLE {$forms} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				public_id varchar(19) NOT NULL,
+				name varchar(190) NOT NULL,
+				is_enabled tinyint(1) NOT NULL DEFAULT 1,
+				fields longtext NOT NULL,
+				schema_version int(10) unsigned NOT NULL DEFAULT 1,
+				success_url varchar(2048) NOT NULL,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY public_id (public_id)
+			) {$charset} ENGINE=InnoDB"
+		);
+		$wpdb->query(
+			"CREATE TABLE {$versions} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				form_id bigint(20) unsigned NOT NULL,
+				version int(10) unsigned NOT NULL,
+				fields longtext NOT NULL,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY form_version (form_id,version)
+			) {$charset} ENGINE=InnoDB"
+		);
+		$wpdb->query(
+			"CREATE TABLE {$submissions} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				form_id bigint(20) unsigned NOT NULL,
+				schema_version int(10) unsigned NOT NULL,
+				receipt_id varchar(20) DEFAULT NULL,
+				payload longtext NOT NULL,
+				status varchar(20) NOT NULL DEFAULT 'new',
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY receipt_id (receipt_id),
+				KEY form_status_created (form_id,status,created_at)
+			) {$charset} ENGINE=InnoDB"
+		);
+
+		$wpdb->insert(
+			$forms,
+			array(
+				'public_id'      => 'fs_abcdefghijklmnop',
+				'name'           => 'Contact',
+				'is_enabled'     => 1,
+				'fields'         => '[]',
+				'schema_version' => 1,
+				'success_url'    => 'https://example.com/thanks',
+				'created_at'     => '2026-10-20 10:00:00',
+				'updated_at'     => '2026-10-20 11:00:00',
+			)
+		);
+
+		update_option( Schema::VERSION_OPTION, 2, true );
+
+		$this->assertNull( Migrator::maybe_migrate() );
+		$this->assertSame( Schema::VERSION, (int) get_option( Schema::VERSION_OPTION ) );
+		$this->assertTrue( Migrator::tables_exist() );
+
+		$row = $wpdb->get_row( "SELECT allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections FROM {$forms}", ARRAY_A );
+		$this->assertIsArray( $row );
+		$this->assertNull( $row['allowed_origins'] );
+		$this->assertNull( $row['rate_per_minute'] );
+		$this->assertNull( $row['rate_per_hour'] );
+		$this->assertSame( '0', (string) $row['honeypot_rejections'] );
 	}
 
 	/**

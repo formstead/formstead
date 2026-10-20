@@ -7,6 +7,7 @@
 
 namespace Formstead\Rest;
 
+use Formstead\Security\Limits;
 use WP_Error;
 use WP_REST_Request;
 
@@ -34,7 +35,10 @@ final class RequestPayload {
 		}
 
 		if ( 'application/json' === $media ) {
-			$object = JsonBody::object( $request->get_body() );
+			$object = JsonBody::object( $request->get_body(), Limits::JSON_DEPTH );
+			if ( $object instanceof RequestError ) {
+				return self::error( $object );
+			}
 			if ( ! is_array( $object ) ) {
 				return self::error( RequestError::MalformedBody );
 			}
@@ -88,6 +92,9 @@ final class RequestPayload {
 			RequestError::FilesNotSupported => __( 'File uploads are not supported.', 'formstead' ),
 			RequestError::InvalidFields => __( 'Check the form and try again.', 'formstead' ),
 			RequestError::StorageFailed => __( 'The submission could not be saved. Please try again.', 'formstead' ),
+			RequestError::PayloadTooLarge => __( 'This submission is too large.', 'formstead' ),
+			RequestError::OriginNotAllowed => __( 'This form does not accept submissions from that site.', 'formstead' ),
+			RequestError::RateLimited => __( 'Too many submissions. Please wait and try again.', 'formstead' ),
 		};
 	}
 }

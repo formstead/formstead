@@ -47,7 +47,7 @@ final class FormRepository {
 
 		$table = Schema::forms_table();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, identifier.
-		$rows = $wpdb->get_results( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at FROM {$table} ORDER BY updated_at DESC, id DESC", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections FROM {$table} ORDER BY updated_at DESC, id DESC", ARRAY_A );
 
 		if ( ! is_array( $rows ) ) {
 			return array();
@@ -85,16 +85,20 @@ final class FormRepository {
 			$saved     = $wpdb->insert(
 				$table,
 				array(
-					'public_id'      => $public_id,
-					'name'           => $form->name(),
-					'is_enabled'     => $form->is_enabled() ? 1 : 0,
-					'fields'         => $fields,
-					'schema_version' => 1,
-					'success_url'    => $form->success_url(),
-					'created_at'     => $now,
-					'updated_at'     => $now,
+					'public_id'           => $public_id,
+					'name'                => $form->name(),
+					'is_enabled'          => $form->is_enabled() ? 1 : 0,
+					'fields'              => $fields,
+					'schema_version'      => 1,
+					'success_url'         => $form->success_url(),
+					'created_at'          => $now,
+					'updated_at'          => $now,
+					'allowed_origins'     => $form->protection()->origins_json(),
+					'rate_per_minute'     => $form->protection()->rate_per_minute(),
+					'rate_per_hour'       => $form->protection()->rate_per_hour(),
+					'honeypot_rejections' => 0,
 				),
-				array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s' )
+				array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d' )
 			);
 			$duplicate = false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
 			$wpdb->suppress_errors( $previous );
@@ -117,7 +121,9 @@ final class FormRepository {
 					1,
 					$form->success_url(),
 					$now,
-					$now
+					$now,
+					$form->protection(),
+					0
 				);
 			}
 
@@ -181,18 +187,21 @@ final class FormRepository {
 		$saved = $wpdb->update(
 			Schema::forms_table(),
 			array(
-				'name'           => $form->name(),
-				'is_enabled'     => $form->is_enabled() ? 1 : 0,
-				'fields'         => FieldCodec::encode( $form->fields() ),
-				'schema_version' => $version,
-				'success_url'    => $form->success_url(),
-				'updated_at'     => $now,
+				'name'            => $form->name(),
+				'is_enabled'      => $form->is_enabled() ? 1 : 0,
+				'fields'          => FieldCodec::encode( $form->fields() ),
+				'schema_version'  => $version,
+				'success_url'     => $form->success_url(),
+				'updated_at'      => $now,
+				'allowed_origins' => $form->protection()->origins_json(),
+				'rate_per_minute' => $form->protection()->rate_per_minute(),
+				'rate_per_hour'   => $form->protection()->rate_per_hour(),
 			),
 			array(
 				'id'             => $form->id(),
 				'schema_version' => $form->schema_version(),
 			),
-			array( '%s', '%d', '%s', '%d', '%s', '%s' ),
+			array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d', '%d' ),
 			array( '%d', '%d' )
 		);
 		$wpdb->suppress_errors( $previous );
@@ -229,8 +238,36 @@ final class FormRepository {
 			$version,
 			$form->success_url(),
 			$current->created_at(),
-			$now
+			$now,
+			$form->protection(),
+			$current->honeypot_rejections()
 		);
+	}
+
+	/**
+	 * Count one honeypot rejection. The submission itself is not stored.
+	 *
+	 * A failed update still looks like success to the sender. The counter is
+	 * not required for that response, and the failure is not logged.
+	 *
+	 * @param int $form_id Form id.
+	 */
+	public function record_honeypot( int $form_id ): void {
+		global $wpdb;
+
+		if ( $form_id < 1 ) {
+			return;
+		}
+
+		$table = Schema::forms_table();
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET honeypot_rejections = honeypot_rejections + 1 WHERE id = %d",
+				$form_id
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	/**
@@ -275,10 +312,10 @@ final class FormRepository {
 		$row   = null;
 		if ( 'id' === $column ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at FROM {$table} WHERE id = %d", $value ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections FROM {$table} WHERE id = %d", $value ), ARRAY_A );
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at FROM {$table} WHERE public_id = %s", $value ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections FROM {$table} WHERE public_id = %s", $value ), ARRAY_A );
 		}
 
 		return $this->hydrate( is_array( $row ) ? $row : null );
@@ -294,7 +331,13 @@ final class FormRepository {
 			return null;
 		}
 
-		$fields = FieldCodec::decode( (string) ( $row['fields'] ?? '' ) );
+		$fields     = FieldCodec::decode( (string) ( $row['fields'] ?? '' ) );
+		$origins    = $row['allowed_origins'] ?? null;
+		$protection = FormProtection::from_stored(
+			is_string( $origins ) ? $origins : null,
+			$row['rate_per_minute'] ?? null,
+			$row['rate_per_hour'] ?? null
+		);
 
 		return new Form(
 			(int) ( $row['id'] ?? 0 ),
@@ -305,7 +348,9 @@ final class FormRepository {
 			(int) ( $row['schema_version'] ?? 1 ),
 			(string) ( $row['success_url'] ?? '' ),
 			(string) ( $row['created_at'] ?? '' ),
-			(string) ( $row['updated_at'] ?? '' )
+			(string) ( $row['updated_at'] ?? '' ),
+			$protection,
+			(int) ( $row['honeypot_rejections'] ?? 0 )
 		);
 	}
 

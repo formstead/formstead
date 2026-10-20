@@ -7,6 +7,9 @@
 
 namespace Formstead\Forms;
 
+use Formstead\Security\Limits;
+use Formstead\Security\OriginPolicy;
+
 /**
  * Validates admin input and builds a form, or returns field errors.
  */
@@ -39,7 +42,8 @@ final class FormInput {
 			$errors['success_url'] = __( 'Enter an absolute http or https URL.', 'formstead' );
 		}
 
-		$fields = self::fields( $input, $errors );
+		$fields     = self::fields( $input, $errors );
+		$protection = self::protection( $input, $errors );
 
 		if ( array() !== $errors ) {
 			return new FormInputResult( null, $errors );
@@ -54,7 +58,9 @@ final class FormInput {
 			self::schema_version( $input, $existing ),
 			$success_url,
 			$existing instanceof Form ? $existing->created_at() : '',
-			$existing instanceof Form ? $existing->updated_at() : ''
+			$existing instanceof Form ? $existing->updated_at() : '',
+			$protection,
+			$existing instanceof Form ? $existing->honeypot_rejections() : 0
 		);
 
 		return new FormInputResult( $form, array() );
@@ -76,6 +82,98 @@ final class FormInput {
 		}
 
 		return isset( $input['schema_version'] ) ? (int) $input['schema_version'] : 0;
+	}
+
+	/**
+	 * Origin allowlist and rate overrides from the editor.
+	 *
+	 * An empty rate uses the global limit. Invalid lines are rejected rather than dropped.
+	 *
+	 * @param array<string, mixed>  $input  Posted form values.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 */
+	private static function protection( array $input, array &$errors ): FormProtection {
+		return new FormProtection(
+			self::origins( $input, $errors ),
+			self::rate_override( $input, 'rate_per_minute', Limits::CEILING_RATE_PER_MINUTE, __( 'Enter a per-minute limit from 1 to 60.', 'formstead' ), $errors ),
+			self::rate_override( $input, 'rate_per_hour', Limits::CEILING_RATE_PER_HOUR, __( 'Enter a per-hour limit from 1 to 10000.', 'formstead' ), $errors )
+		);
+	}
+
+	/**
+	 * Normalized origins, one per non-empty line.
+	 *
+	 * @param array<string, mixed>  $input  Posted form values.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 * @return list<string>
+	 */
+	private static function origins( array $input, array &$errors ): array {
+		$text  = isset( $input['allowed_origins'] ) && is_string( $input['allowed_origins'] ) ? $input['allowed_origins'] : '';
+		$lines = preg_split( '/\R/', $text );
+		$list  = array();
+		$seen  = array();
+		$count = 0;
+
+		foreach ( is_array( $lines ) ? $lines : array() as $line ) {
+			$line = trim( $line );
+			if ( '' === $line ) {
+				continue;
+			}
+
+			++$count;
+			if ( $count > 20 ) {
+				$errors['allowed_origins'] = __( 'Enter up to 20 origins.', 'formstead' );
+				return array();
+			}
+
+			$origin = OriginPolicy::normalize( $line );
+			if ( null === $origin ) {
+				$errors['allowed_origins'] = __( 'Enter one http or https origin per line, without a path.', 'formstead' );
+				return array();
+			}
+
+			if ( isset( $seen[ $origin ] ) ) {
+				continue;
+			}
+
+			$seen[ $origin ] = true;
+			$list[]          = $origin;
+		}
+
+		return $list;
+	}
+
+	/**
+	 * A rate override, or null when the field is empty.
+	 *
+	 * @param array<string, mixed>  $input   Posted form values.
+	 * @param string                $key     Input key.
+	 * @param int                   $ceiling Hard ceiling.
+	 * @param string                $message Error message.
+	 * @param array<string, string> $errors  Error map, updated in place.
+	 */
+	private static function rate_override( array $input, string $key, int $ceiling, string $message, array &$errors ): ?int {
+		if ( ! isset( $input[ $key ] ) || ! is_string( $input[ $key ] ) ) {
+			return null;
+		}
+
+		$text = trim( $input[ $key ] );
+		if ( '' === $text ) {
+			return null;
+		}
+
+		if ( 1 !== preg_match( '/^[0-9]+$/', $text ) ) {
+			$errors[ $key ] = $message;
+			return null;
+		}
+
+		$number = (int) $text;
+		if ( $number < 1 || $number > $ceiling ) {
+			$errors[ $key ] = $message;
+			return null;
+		}
+
+		return $number;
 	}
 
 	/**
