@@ -1,6 +1,6 @@
 <?php
 /**
- * Database schema version 3.
+ * Database schema version 4.
  *
  * @package Formstead
  */
@@ -15,7 +15,7 @@ namespace Formstead\Database;
  */
 final class Schema {
 
-	public const VERSION = 3;
+	public const VERSION = 4;
 
 	public const VERSION_OPTION = 'formstead_db_version';
 
@@ -58,6 +58,40 @@ final class Schema {
 	}
 
 	/**
+	 * Idempotency keys, including the site prefix.
+	 */
+	public static function idempotency_keys_table(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . 'formstead_idempotency_keys';
+	}
+
+	/**
+	 * Delivery tasks, including the site prefix.
+	 */
+	public static function deliveries_table(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . 'formstead_deliveries';
+	}
+
+	/**
+	 * Every Formstead table, including the site prefix.
+	 *
+	 * @return list<string>
+	 */
+	public static function tables(): array {
+		return array(
+			self::forms_table(),
+			self::form_versions_table(),
+			self::submissions_table(),
+			self::rate_limits_table(),
+			self::idempotency_keys_table(),
+			self::deliveries_table(),
+		);
+	}
+
+	/**
 	 * CREATE TABLE statements, one per table.
 	 *
 	 * Table names are identifiers, so they cannot be placeholders.
@@ -72,6 +106,8 @@ final class Schema {
 		$versions    = self::form_versions_table();
 		$submissions = self::submissions_table();
 		$rate_limits = self::rate_limits_table();
+		$keys        = self::idempotency_keys_table();
+		$deliveries  = self::deliveries_table();
 
 		// Table names are identifiers, so they cannot be placeholders.
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -90,6 +126,9 @@ final class Schema {
 				rate_per_minute smallint(5) unsigned DEFAULT NULL,
 				rate_per_hour int(10) unsigned DEFAULT NULL,
 				honeypot_rejections bigint(20) unsigned NOT NULL DEFAULT 0,
+				notify_recipients text,
+				reply_to_field varchar(64) DEFAULT NULL,
+				mail_include_content tinyint(1) NOT NULL DEFAULT 0,
 				PRIMARY KEY  (id),
 				UNIQUE KEY public_id (public_id)
 			) {$charset} ENGINE=InnoDB;",
@@ -120,6 +159,33 @@ final class Schema {
 				expires_at bigint(20) unsigned NOT NULL,
 				PRIMARY KEY  (bucket),
 				KEY expires_at (expires_at)
+			) {$charset} ENGINE=InnoDB;",
+			"CREATE TABLE {$keys} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				form_id bigint(20) unsigned NOT NULL,
+				key_hash char(64) NOT NULL,
+				body_hash char(64) NOT NULL,
+				submission_id bigint(20) unsigned NOT NULL,
+				expires_at bigint(20) unsigned NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY form_key (form_id,key_hash),
+				KEY expires_at (expires_at)
+			) {$charset} ENGINE=InnoDB;",
+			"CREATE TABLE {$deliveries} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				submission_id bigint(20) unsigned NOT NULL,
+				channel varchar(20) NOT NULL,
+				status varchar(20) NOT NULL DEFAULT 'pending',
+				attempts smallint(5) unsigned NOT NULL DEFAULT 0,
+				next_attempt_at datetime NOT NULL,
+				locked_until datetime DEFAULT NULL,
+				lock_token char(32) DEFAULT NULL,
+				last_error varchar(64) DEFAULT NULL,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY status_next (status,next_attempt_at),
+				KEY submission_id (submission_id)
 			) {$charset} ENGINE=InnoDB;",
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
