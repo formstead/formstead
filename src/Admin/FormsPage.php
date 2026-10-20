@@ -229,11 +229,12 @@ final class FormsPage {
 	 * percent-encoded address survives; FormInput rejects a URL that
 	 * `esc_url_raw()` would change.
 	 *
-	 * @return array{form_id: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
 	 */
 	private static function input_from_post(): array {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_load() before this runs.
 		$form_id = isset( $_POST['form_id'] ) ? absint( wp_unslash( $_POST['form_id'] ) ) : 0;
+		$version = isset( $_POST['schema_version'] ) ? absint( wp_unslash( $_POST['schema_version'] ) ) : 0;
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- posted_name() strips tags and keeps percent-encoded text.
 		$name = self::posted_name( isset( $_POST['name'] ) ? wp_unslash( $_POST['name'] ) : '' );
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput rejects URLs that esc_url_raw() would change.
@@ -241,11 +242,12 @@ final class FormsPage {
 		$enabled = isset( $_POST['is_enabled'] ) ? '1' : '';
 
 		return array(
-			'form_id'     => $form_id,
-			'name'        => $name,
-			'is_enabled'  => $enabled,
-			'success_url' => $url,
-			'fields'      => self::posted_fields(),
+			'form_id'        => $form_id,
+			'schema_version' => $version,
+			'name'           => $name,
+			'is_enabled'     => $enabled,
+			'success_url'    => $url,
+			'fields'         => self::posted_fields(),
 		);
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 	}
@@ -332,16 +334,17 @@ final class FormsPage {
 	 * Values for the edit form.
 	 *
 	 * @param Form|null $form Saved form, or null for a new form.
-	 * @return array{form_id: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
 	 */
 	private static function values_from_form( ?Form $form ): array {
 		if ( ! $form instanceof Form ) {
 			return array(
-				'form_id'     => 0,
-				'name'        => '',
-				'is_enabled'  => '1',
-				'success_url' => '',
-				'fields'      => array(),
+				'form_id'        => 0,
+				'schema_version' => 1,
+				'name'           => '',
+				'is_enabled'     => '1',
+				'success_url'    => '',
+				'fields'         => array(),
 			);
 		}
 
@@ -351,11 +354,12 @@ final class FormsPage {
 		}
 
 		return array(
-			'form_id'     => $form->id(),
-			'name'        => $form->name(),
-			'is_enabled'  => $form->is_enabled() ? '1' : '',
-			'success_url' => $form->success_url(),
-			'fields'      => $rows,
+			'form_id'        => $form->id(),
+			'schema_version' => $form->schema_version(),
+			'name'           => $form->name(),
+			'is_enabled'     => $form->is_enabled() ? '1' : '',
+			'success_url'    => $form->success_url(),
+			'fields'         => $rows,
 		);
 	}
 
