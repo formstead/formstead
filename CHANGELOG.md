@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Activation creates the forms and submissions tables and grants the four Formstead capabilities to administrators.
+
 ### Changed
 
 - The PHP 7.4 syntax job uses the pinned setup-php action instead of a floating `php:7.4-cli` image.

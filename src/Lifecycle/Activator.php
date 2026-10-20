@@ -7,10 +7,11 @@
 
 namespace Formstead\Lifecycle;
 
+use Formstead\Database\Migrator;
 use WP_Error;
 
 /**
- * Guards activation. Schema creation belongs to a later stage.
+ * Guards activation and installs the schema.
  */
 final class Activator {
 
@@ -28,6 +29,19 @@ final class Activator {
 				esc_html__( 'Formstead activation failed', 'formstead' ),
 				array(
 					'response'  => 403,
+					'back_link' => true,
+				)
+			);
+		}
+
+		$migration = Migrator::run();
+
+		if ( $migration instanceof WP_Error ) {
+			wp_die(
+				esc_html( $migration->get_error_message() ),
+				esc_html__( 'Formstead activation failed', 'formstead' ),
+				array(
+					'response'  => 500,
 					'back_link' => true,
 				)
 			);
