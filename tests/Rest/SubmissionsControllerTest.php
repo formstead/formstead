@@ -14,6 +14,7 @@ use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Rest\HtmlResponder;
 use Formstead\Rest\HtmlResponse;
+use Formstead\Security\OriginPolicy;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_UnitTestCase;
@@ -39,6 +40,7 @@ final class SubmissionsControllerTest extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		OriginPolicy::reset();
 		$this->forms = new FormRepository();
 		rest_get_server();
 	}
