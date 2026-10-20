@@ -10,6 +10,7 @@ namespace Formstead\Rest;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Security\Limits;
+use Formstead\Security\OriginPolicy;
 use Formstead\Security\RateLimiter;
 use Formstead\Submissions\ReceiptId;
 use Formstead\Submissions\SubmissionRepository;
@@ -77,6 +78,10 @@ final class SubmissionsController {
 			return SubmissionResponder::failure( $mode, RequestError::FormNotFound );
 		}
 
+		if ( ! OriginPolicy::allows( $form, $request ) ) {
+			return SubmissionResponder::failure( $mode, RequestError::OriginNotAllowed );
+		}
+
 		$retry = ( new RateLimiter() )->consume( $form );
 		if ( is_int( $retry ) ) {
 			return SubmissionResponder::failure(
@@ -118,7 +123,8 @@ final class SubmissionsController {
 	/**
 	 * Reject an oversized body before the route callback reads it.
 	 *
-	 * A request that already has a result, including `OPTIONS`, is left alone.
+	 * Runs after the CORS preflight filter. A request that already has a
+	 * result, including `OPTIONS`, is left alone.
 	 *
 	 * @param mixed $result  Current dispatch result.
 	 * @param mixed $server  REST server. Unused.
@@ -139,7 +145,8 @@ final class SubmissionsController {
 			return $result;
 		}
 
-		return SubmissionResponder::failure( ResponseMode::from_request( $request ), RequestError::PayloadTooLarge );
+		$response = SubmissionResponder::failure( ResponseMode::from_request( $request ), RequestError::PayloadTooLarge );
+		return Cors::apply( $response, $request );
 	}
 
 	/**

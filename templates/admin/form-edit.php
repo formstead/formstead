@@ -26,6 +26,9 @@ $schema_version   = isset( $values['schema_version'] ) ? (int) $values['schema_v
 $name             = isset( $values['name'] ) ? (string) $values['name'] : '';
 $is_enabled       = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
 $success_url      = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
+$allowed_origins  = isset( $values['allowed_origins'] ) ? (string) $values['allowed_origins'] : '';
+$rate_per_minute  = isset( $values['rate_per_minute'] ) ? (string) $values['rate_per_minute'] : '';
+$rate_per_hour    = isset( $values['rate_per_hour'] ) ? (string) $values['rate_per_hour'] : '';
 $rows             = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
 $endpoint         = $form instanceof Form ? rest_url( 'formstead/v1/forms/' . $form->public_id() . '/submissions' ) : '';
 $honeypot_snippet = '<input type="text" name="_fs_honeypot" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">';
@@ -76,6 +79,39 @@ $next_index       = count( $rows );
 						<p class="description"><?php echo esc_html( $errors['success_url'] ); ?></p>
 					<?php else : ?>
 						<p class="description"><?php echo esc_html__( 'Absolute http or https URL. The form never redirects to an address from the request.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="formstead-origins"><?php echo esc_html__( 'Allowed origins', 'formstead' ); ?></label></th>
+				<td>
+					<textarea name="allowed_origins" id="formstead-origins" rows="4" class="large-text code"><?php echo esc_textarea( $allowed_origins ); ?></textarea>
+					<?php if ( isset( $errors['allowed_origins'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['allowed_origins'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'One http or https origin per line, without a path. Leave this empty to allow only this site.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="formstead-rate-minute"><?php echo esc_html__( 'Submissions per minute', 'formstead' ); ?></label></th>
+				<td>
+					<input name="rate_per_minute" id="formstead-rate-minute" type="number" min="1" max="60" class="small-text" value="<?php echo esc_attr( $rate_per_minute ); ?>">
+					<?php if ( isset( $errors['rate_per_minute'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['rate_per_minute'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'Per IP address. Leave empty to use the global limit of 5.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="formstead-rate-hour"><?php echo esc_html__( 'Submissions per hour', 'formstead' ); ?></label></th>
+				<td>
+					<input name="rate_per_hour" id="formstead-rate-hour" type="number" min="1" max="10000" class="small-text" value="<?php echo esc_attr( $rate_per_hour ); ?>">
+					<?php if ( isset( $errors['rate_per_hour'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['rate_per_hour'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'For this form, from every address. Leave empty to use the global limit of 100.', 'formstead' ); ?></p>
 					<?php endif; ?>
 				</td>
 			</tr>
