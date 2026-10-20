@@ -13,8 +13,9 @@ use Formstead\Forms\Form;
 /**
  * Counts submissions in a per-minute IP bucket and a per-hour form bucket.
  *
- * The stored key is an HMAC. A database error does not block the submission
- * and does not log the client address.
+ * The minute bucket is checked first. Once it is over its limit, the hourly
+ * form bucket is left unchanged. The stored key is an HMAC. A database error
+ * on one bucket skips that bucket and does not log the client address.
  */
 final class RateLimiter {
 
@@ -32,8 +33,9 @@ final class RateLimiter {
 	 * Consume one submission from the form's windows.
 	 *
 	 * Returns the seconds until the caller may retry, or null when the
-	 * submission may proceed. Null is also returned when the counter cannot
-	 * be saved, so a database failure does not turn into a false rejection.
+	 * submission may proceed. A bucket whose counter cannot be saved is
+	 * skipped, so a database failure does not turn into a false rejection
+	 * and does not erase a limit that another bucket already reached.
 	 *
 	 * @param Form $form Form being submitted.
 	 */
@@ -52,19 +54,31 @@ final class RateLimiter {
 		foreach ( $checks as $check ) {
 			$hits = $this->increment( $check['bucket'], $check['expires'] );
 			if ( null === $hits ) {
-				return null;
+				continue;
 			}
 
 			if ( $hits > $check['limit'] ) {
-				$retry = null === $retry ? $check['retry'] : max( $retry, $check['retry'] );
+				$retry = $check['retry'];
+				break;
 			}
 		}
 
+		$this->maybe_prune( $now );
+
+		return $retry;
+	}
+
+	/**
+	 * Delete a batch of expired counters on about one request in fifty.
+	 *
+	 * Runs after a rejection too, so a blocked address still ages old rows out.
+	 *
+	 * @param int $now Unix time.
+	 */
+	private function maybe_prune( int $now ): void {
 		if ( 1 === wp_rand( 1, self::PRUNE_EVERY ) ) {
 			$this->prune_expired( $now );
 		}
-
-		return $retry;
 	}
 
 	/**
