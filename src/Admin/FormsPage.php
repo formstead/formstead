@@ -222,18 +222,22 @@ final class FormsPage {
 	}
 
 	/**
-	 * Posted form values, sanitized for validation and redisplay.
+	 * Posted form values for validation and redisplay.
 	 *
 	 * The nonce was verified in `handle_load()` before this runs.
+	 * The name loses HTML tags. The success URL is left unchanged so a
+	 * percent-encoded address survives; FormInput rejects a URL that
+	 * `esc_url_raw()` would change.
 	 *
 	 * @return array{form_id: int, name: string, is_enabled: string, success_url: string, fields: array<int, array<string, string>>}
 	 */
 	private static function input_from_post(): array {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_load() before this runs.
-		// sanitize_text_field() leaves a normal URL unchanged and keeps characters FormInput rejects.
 		$form_id = isset( $_POST['form_id'] ) ? absint( wp_unslash( $_POST['form_id'] ) ) : 0;
-		$name    = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
-		$url     = isset( $_POST['success_url'] ) ? sanitize_text_field( wp_unslash( $_POST['success_url'] ) ) : '';
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- posted_name() strips tags and keeps percent-encoded text.
+		$name = self::posted_name( isset( $_POST['name'] ) ? wp_unslash( $_POST['name'] ) : '' );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput rejects URLs that esc_url_raw() would change.
+		$url     = self::text_value( isset( $_POST['success_url'] ) ? wp_unslash( $_POST['success_url'] ) : '' );
 		$enabled = isset( $_POST['is_enabled'] ) ? '1' : '';
 
 		return array(
@@ -249,6 +253,10 @@ final class FormsPage {
 	/**
 	 * Field rows from the request.
 	 *
+	 * Names and types are trimmed only, so a value outside the field-name
+	 * pattern is rejected instead of rewritten. Anything that is not text
+	 * becomes an empty string.
+	 *
 	 * @return array<int, array<string, string>>
 	 */
 	private static function posted_fields(): array {
@@ -257,7 +265,8 @@ final class FormsPage {
 			return array();
 		}
 
-		$posted = map_deep( wp_unslash( $_POST['fields'] ), 'sanitize_text_field' );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each row is normalized in posted_row().
+		$posted = wp_unslash( $_POST['fields'] );
 		if ( ! is_array( $posted ) ) {
 			return array();
 		}
@@ -268,18 +277,55 @@ final class FormsPage {
 				continue;
 			}
 
-			$fields[] = array(
-				'name'       => isset( $row['name'] ) ? sanitize_key( (string) $row['name'] ) : '',
-				'label'      => isset( $row['label'] ) ? sanitize_text_field( (string) $row['label'] ) : '',
-				'type'       => isset( $row['type'] ) ? sanitize_key( (string) $row['type'] ) : '',
-				'required'   => isset( $row['required'] ) ? '1' : '',
-				'max_length' => isset( $row['max_length'] ) ? sanitize_text_field( (string) $row['max_length'] ) : '',
-				'remove'     => isset( $row['remove'] ) ? '1' : '',
-			);
+			$fields[] = self::posted_row( $row );
 		}
 
 		return $fields;
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
+	}
+
+	/**
+	 * Form name with tags removed. Percent-encoded text is kept.
+	 *
+	 * @param mixed $value Posted name.
+	 */
+	private static function posted_name( mixed $value ): string {
+		return trim( wp_strip_all_tags( self::text_value( $value ) ) );
+	}
+
+	/**
+	 * One posted field row.
+	 *
+	 * @param array<mixed> $row Posted row.
+	 * @return array<string, string>
+	 */
+	private static function posted_row( array $row ): array {
+		return array(
+			'name'       => self::text_value( $row['name'] ?? null ),
+			'label'      => self::label_value( $row['label'] ?? null ),
+			'type'       => self::text_value( $row['type'] ?? null ),
+			'required'   => isset( $row['required'] ) ? '1' : '',
+			'max_length' => self::text_value( $row['max_length'] ?? null ),
+			'remove'     => isset( $row['remove'] ) ? '1' : '',
+		);
+	}
+
+	/**
+	 * Posted text, or an empty string when the value is not text.
+	 *
+	 * @param mixed $value Posted value.
+	 */
+	private static function text_value( mixed $value ): string {
+		return is_string( $value ) ? trim( $value ) : '';
+	}
+
+	/**
+	 * Field label, with tags and control characters removed.
+	 *
+	 * @param mixed $value Posted label.
+	 */
+	private static function label_value( mixed $value ): string {
+		return is_string( $value ) ? sanitize_text_field( $value ) : '';
 	}
 
 	/**
