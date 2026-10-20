@@ -27,23 +27,33 @@ final class IntakeResult {
 	private ?Submission $submission;
 
 	/**
+	 * Delivery created with an accepted submission, or null.
+	 *
+	 * @var int|null
+	 */
+	private ?int $delivery_id;
+
+	/**
 	 * Create an intake result.
 	 *
-	 * @param string          $state      Result state.
-	 * @param Submission|null $submission Related submission.
+	 * @param string          $state       Result state.
+	 * @param Submission|null $submission  Related submission.
+	 * @param int|null        $delivery_id Delivery created with the submission.
 	 */
-	private function __construct( string $state, ?Submission $submission ) {
-		$this->state      = $state;
-		$this->submission = $submission;
+	private function __construct( string $state, ?Submission $submission, ?int $delivery_id = null ) {
+		$this->state       = $state;
+		$this->submission  = $submission;
+		$this->delivery_id = $delivery_id;
 	}
 
 	/**
 	 * A new submission was stored.
 	 *
-	 * @param Submission $submission Stored submission.
+	 * @param Submission $submission  Stored submission.
+	 * @param int|null   $delivery_id Delivery created with the submission.
 	 */
-	public static function accepted( Submission $submission ): self {
-		return new self( 'accepted', $submission );
+	public static function accepted( Submission $submission, ?int $delivery_id = null ): self {
+		return new self( 'accepted', $submission, $delivery_id );
 	}
 
 	/**
@@ -102,5 +112,12 @@ final class IntakeResult {
 	 */
 	public function submission(): ?Submission {
 		return $this->submission;
+	}
+
+	/**
+	 * Delivery created with an accepted submission, or null.
+	 */
+	public function delivery_id(): ?int {
+		return $this->delivery_id;
 	}
 }

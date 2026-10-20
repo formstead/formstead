@@ -20,3 +20,32 @@ if ( ! defined( 'FORMSTEAD_MIN_PHP' ) ) {
 if ( ! defined( 'FORMSTEAD_MIN_WP' ) ) {
 	define( 'FORMSTEAD_MIN_WP', '7.0' );
 }
+
+if ( ! class_exists( 'WP_CLI' ) ) {
+	/**
+	 * Stand-in for the WP-CLI command class during analysis.
+	 *
+	 * phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
+	 */
+	class WP_CLI {
+
+		/**
+		 * Register a command.
+		 *
+		 * @param string          $name    Command name.
+		 * @param callable|string $command Command class or callback.
+		 */
+		public static function add_command( $name, $command ): void {
+			unset( $name, $command );
+		}
+
+		/**
+		 * Print a line.
+		 *
+		 * @param string $message Message.
+		 */
+		public static function log( $message ): void {
+			unset( $message );
+		}
+	}
+}

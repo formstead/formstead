@@ -7,16 +7,19 @@
 
 namespace Formstead\Lifecycle;
 
+use Formstead\Delivery\Scheduler;
+
 /**
- * Runs on deactivation. Scheduled events are unscheduled in a later stage.
+ * Runs on deactivation. Data and capabilities are kept.
  */
 final class Deactivator {
 
 	/**
 	 * Run on plugin deactivation.
 	 *
-	 * Intentionally empty: data and capabilities are kept, and there are no cron events yet.
+	 * Scheduled sends are removed. Stored submissions and deliveries stay.
 	 */
 	public static function deactivate(): void {
+		Scheduler::clear();
 	}
 }
