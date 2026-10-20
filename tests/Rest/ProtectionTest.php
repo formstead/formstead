@@ -359,6 +359,49 @@ final class ProtectionTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `FORMSTEAD_TRUSTED_PROXIES` is honored without the filter.
+	 *
+	 * The constant cannot be removed from this process, and PHPUnit's separate
+	 * process loads the WordPress test config twice. A short script defines it
+	 * once and resolves the address.
+	 */
+	public function test_trusted_proxy_constant_uses_the_forwarded_address(): void {
+		$script = tempnam( sys_get_temp_dir(), 'formstead' );
+		$this->assertIsString( $script );
+		$autoload = dirname( __DIR__, 2 ) . '/vendor/autoload.php';
+		$code     = str_replace(
+			'__AUTOLOAD__',
+			addcslashes( $autoload, "'\\" ),
+			<<<'PHP'
+<?php
+define( 'FORMSTEAD_TRUSTED_PROXIES', '203.0.113.10' );
+function apply_filters( $hook, $value ) { return $value; }
+function wp_unslash( $value ) { return is_string( $value ) ? stripslashes( $value ) : $value; }
+require '__AUTOLOAD__';
+$_SERVER['REMOTE_ADDR'] = '203.0.113.10';
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.8';
+echo \Formstead\Security\ClientAddress::subject(), "\n";
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.9';
+echo \Formstead\Security\ClientAddress::subject(), "\n";
+$_SERVER['REMOTE_ADDR'] = '203.0.113.11';
+echo \Formstead\Security\ClientAddress::subject(), "\n";
+PHP
+		);
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- local script for this test.
+		file_put_contents( $script, $code );
+
+		$output = array();
+		$exit   = 0;
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- runs the constant in a process that can define it.
+		exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $script ), $output, $exit );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- local script for this test.
+		unlink( $script );
+
+		$this->assertSame( 0, $exit, implode( "\n", $output ) );
+		$this->assertSame( array( '198.51.100.8', '198.51.100.9', '203.0.113.11' ), $output );
+	}
+
+	/**
 	 * A failure while counting does not reject the submission or log the address.
 	 */
 	public function test_counter_failure_still_stores_the_submission(): void {
