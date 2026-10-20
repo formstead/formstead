@@ -16,7 +16,16 @@ rsync -a \
 	--exclude vendor/ \
 	"$ROOT/" "$PLUGIN_DIR/"
 
-COMPOSER_ROOT_VERSION="${COMPOSER_ROOT_VERSION:-0.0.1}" \
+# composer.json and composer.lock stay out of the ZIP, but install needs both.
+cp "$ROOT/composer.json" "$ROOT/composer.lock" "$PLUGIN_DIR/"
+
+VERSION="$(sed -n 's/^ \* Version:[[:space:]]*//p' "$ROOT/formstead.php" | head -n 1)"
+if [[ -z "$VERSION" ]]; then
+	echo "Could not read Version from formstead.php." >&2
+	exit 1
+fi
+
+COMPOSER_ROOT_VERSION="$VERSION" \
 	composer install \
 	--working-dir="$PLUGIN_DIR" \
 	--no-dev \
@@ -24,8 +33,7 @@ COMPOSER_ROOT_VERSION="${COMPOSER_ROOT_VERSION:-0.0.1}" \
 	--no-interaction \
 	--prefer-dist
 
-# Lockfile is a development artifact; the ZIP only needs production autoload.
-rm -f "$PLUGIN_DIR/composer.lock"
+rm -f "$PLUGIN_DIR/composer.json" "$PLUGIN_DIR/composer.lock"
 
 if [[ ! -f "$PLUGIN_DIR/formstead.php" ]] || [[ ! -f "$PLUGIN_DIR/vendor/autoload.php" ]]; then
 	echo "ZIP staging is missing formstead.php or vendor/autoload.php." >&2
@@ -38,7 +46,7 @@ rm -f "$OUTPUT"
 	zip -r "$OUTPUT" formstead
 )
 
-if unzip -l "$OUTPUT" | grep -E 'formstead/(tests/|bin/|node_modules/|\.github/)|formstead/composer\.lock|\.wp-env|phpunit\.xml|phpcs\.xml|phpstan\.neon'; then
+if unzip -l "$OUTPUT" | grep -E 'formstead/(tests/|bin/|node_modules/|\.github/)|formstead/composer\.(lock|json)|formstead/README\.md|\.wp-env|phpunit\.xml|phpcs\.xml|phpstan\.neon'; then
 	echo "Distributable ZIP contains development files." >&2
 	exit 1
 fi
