@@ -7,6 +7,8 @@
 
 namespace Formstead\Admin;
 
+use Formstead\Delivery\DeliveryRepository;
+use Formstead\Delivery\DeliveryStatus;
 use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
@@ -90,6 +92,7 @@ final class SubmissionsPage {
 		$submission = ( new SubmissionRepository() )->find( $submission_id );
 		$form       = $submission instanceof Submission ? ( new FormRepository() )->find_by_id( $submission->form_id() ) : null;
 		$rows       = $submission instanceof Submission ? self::detail_rows( $submission, $form ) : array();
+		$deliveries = $submission instanceof Submission ? self::delivery_rows( $submission->id() ) : array();
 
 		include dirname( FORMSTEAD_FILE ) . '/templates/admin/submission-detail.php';
 	}
@@ -159,6 +162,30 @@ final class SubmissionsPage {
 				'value'     => $display,
 				'multiline' => $field instanceof Field && FieldType::Textarea === $field->type(),
 				'items'     => $items,
+			);
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * Delivery rows for the submission screen.
+	 *
+	 * Status text describes the hand-off. It does not claim the mailbox received the message.
+	 *
+	 * @param int $submission_id Submission id.
+	 * @return array<int, array{channel: string, status: string, attempts: string, last_error: string, next_attempt_at: string}>
+	 */
+	private static function delivery_rows( int $submission_id ): array {
+		$rows = array();
+		foreach ( ( new DeliveryRepository() )->for_submission( $submission_id ) as $delivery ) {
+			$pending = DeliveryStatus::PENDING === $delivery->status();
+			$rows[]  = array(
+				'channel'         => 'email' === $delivery->channel() ? __( 'Email', 'formstead' ) : $delivery->channel(),
+				'status'          => DeliveryStatus::label( $delivery->status() ),
+				'attempts'        => (string) $delivery->attempts(),
+				'last_error'      => $delivery->last_error(),
+				'next_attempt_at' => $pending ? $delivery->next_attempt_at() : '',
 			);
 		}
 
