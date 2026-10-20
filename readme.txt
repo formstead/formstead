@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.1.1
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Receive form submissions from static and headless sites on an existing WordPress
 
 Formstead receives form submissions from static and headless sites on an existing WordPress install. Plain HTML, Astro, and Next.js post to WordPress. WordPress stores submissions in a private inbox. The site frontend stays with its author.
 
-Version 0.1.1 accepts a public form POST and lists the submissions in the admin.
+Version 0.2.0 accepts URL-encoded, multipart, and JSON submissions. `Accept: application/json` returns a receipt id. Older submissions stay tied to the field schema they were saved with.
 
 Network activation on WordPress Multisite is not supported.
 
@@ -35,6 +35,12 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.2.0 =
+* Accept number, checkbox, and choice fields, including several choices.
+* Answer `Accept: application/json` with a receipt id, and answer other clients with the HTML page or redirect.
+* Reject an unsupported content type, a file upload, and malformed JSON.
+* Keep a snapshot of each field schema so older submissions keep their labels.
 
 = 0.1.1 =
 * Keep a percent-encoded success URL and an invalid field name unchanged until validation.

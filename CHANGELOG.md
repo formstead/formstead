@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
+### Added
+
+- Number, checkbox, and choice fields. A choice can allow more than one value.
+- `Accept: application/json` returns `201` and a receipt id. Field errors use stable codes.
+- URL-encoded, multipart, and JSON bodies. An unsupported type returns `415`, a file part returns `415`, and malformed JSON returns `400`.
+- Immutable field-schema snapshots. A submission keeps the labels from the schema it was saved with.
+- Pull requests run on PHP 8.3 with WordPress 7.1 and on PHP 8.5 with WordPress 7.0. The nightly run covers PHP 8.3–8.5 with WordPress 7.0 and 7.1, plus MySQL 8.0.
+
+### Changed
+
+- An optional empty value is left out of the stored submission. A checkbox is always stored as true or false.
+- Submissions saved before 0.2.0 only have a snapshot of the schema that was current at upgrade. An older version uses the current labels when the field still exists, and the raw field name when it does not.
+
 ## [0.1.1] - 2026-10-20
 
 ### Fixed
@@ -62,7 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/formstead/formstead/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/formstead/formstead/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/formstead/formstead/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/formstead/formstead/compare/v0.0.1...v0.0.2

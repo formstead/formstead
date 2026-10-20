@@ -8,7 +8,7 @@ License: [GPL-2.0-or-later](LICENSE).
 
 ## Status
 
-`0.1.1` accepts the first POST. A form on the same site can submit to the public endpoint. WordPress stores the submission and lists it for people who can read submissions. The plugin activates on WordPress 7.0+ with PHP 8.3+.
+`0.2.0` accepts URL-encoded, multipart, and JSON submissions. A client that sends `Accept: application/json` receives a receipt id. Other clients are redirected or shown an HTML page. WordPress stores the submission against the field schema that was current at the time and lists it for people who can read submissions. The plugin activates on WordPress 7.0+ with PHP 8.3+.
 
 - Public contact: hello@formstead.dev
 - Security reports: [SECURITY.md](SECURITY.md) (`security@formstead.dev`)
