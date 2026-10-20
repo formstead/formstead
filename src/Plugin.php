@@ -31,7 +31,9 @@ final class Plugin {
 	 *
 	 * WordPress 4.6+ loads translations for the `formstead` text domain
 	 * automatically when they are present. A failed migration does not bump
-	 * the schema version.
+	 * the schema version. The public route and the admin menu still register
+	 * when the tables are already there, so a held lock does not turn
+	 * submissions into `rest_no_route`.
 	 */
 	public static function boot(): void {
 		global $wp_version;
@@ -45,7 +47,9 @@ final class Plugin {
 		if ( $error instanceof WP_Error ) {
 			self::$migration_error = $error;
 			add_action( 'admin_notices', array( self::class, 'migration_notice' ) );
-			return;
+			if ( ! Migrator::tables_exist() ) {
+				return;
+			}
 		}
 
 		Menu::register();
