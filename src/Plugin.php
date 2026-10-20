@@ -10,6 +10,8 @@ namespace Formstead;
 use Formstead\Admin\Menu;
 use Formstead\Database\Migrator;
 use Formstead\Lifecycle\Requirements;
+use Formstead\Rest\HtmlResponder;
+use Formstead\Rest\SubmissionsController;
 use WP_Error;
 
 /**
@@ -47,6 +49,8 @@ final class Plugin {
 		}
 
 		Menu::register();
+		SubmissionsController::register();
+		HtmlResponder::register();
 	}
 
 	/**
