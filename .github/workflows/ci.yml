@@ -68,6 +68,10 @@ jobs:
       - name: PHPStan
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G
 
+      - name: Mailpit accepts one notification
+        if: matrix.php == '8.3'
+        run: bash bin/ci/mailpit-check.sh
+
   checks-full:
     name: Nightly (${{ matrix.php }} / ${{ matrix.wp }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
