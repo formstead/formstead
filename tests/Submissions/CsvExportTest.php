@@ -177,10 +177,56 @@ final class CsvExportTest extends \WP_UnitTestCase {
 			array( '%d' )
 		);
 
-		$csv = $this->csv( $form, SubmissionQuery::from_values( $form->id(), SubmissionQuery::VIEW_INBOX, '2026-01-01', '2026-12-31' ) );
+		$from = gmdate( 'Y-m-d', time() - DAY_IN_SECONDS );
+		$to   = gmdate( 'Y-m-d', time() + DAY_IN_SECONDS );
+		$csv  = $this->csv( $form, SubmissionQuery::from_values( $form->id(), SubmissionQuery::VIEW_INBOX, $from, $to ) );
 		$this->assertStringContainsString( 'kept-row', $csv );
 		$this->assertStringNotContainsString( 'spam-row', $csv );
 		$this->assertStringNotContainsString( 'old-row', $csv );
+	}
+
+	/**
+	 * Rows that share a timestamp are exported once each, across batches.
+	 */
+	public function test_export_includes_every_row_that_shares_a_timestamp(): void {
+		global $wpdb;
+
+		$form = ( new FormRepository() )->insert(
+			new Form(
+				0,
+				'',
+				'Contact',
+				true,
+				array( new Field( 'note', 'Note', FieldType::Text, false, 100 ) ),
+				1,
+				'https://example.com/thanks',
+				'',
+				''
+			)
+		);
+		$this->assertInstanceOf( Form::class, $form );
+
+		$repository = new SubmissionRepository();
+		$notes      = array();
+		for ( $index = 0; $index < 5; $index++ ) {
+			$note  = 'shared-' . $index;
+			$saved = $repository->insert( $form, array( 'note' => $note ) );
+			$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $saved );
+			$notes[] = $note;
+		}
+
+		$wpdb->update(
+			Schema::submissions_table(),
+			array( 'created_at' => '2026-10-21 12:00:00' ),
+			array( 'form_id' => $form->id() ),
+			array( '%s' ),
+			array( '%d' )
+		);
+
+		$csv = $this->csv( $form, SubmissionQuery::from_values( $form->id(), SubmissionQuery::VIEW_ALL, '', '' ), 2 );
+		foreach ( $notes as $note ) {
+			$this->assertSame( 1, substr_count( $csv, $note ) );
+		}
 	}
 
 	/**
@@ -188,12 +234,13 @@ final class CsvExportTest extends \WP_UnitTestCase {
 	 *
 	 * @param Form            $form  Form to export.
 	 * @param SubmissionQuery $query Filters.
+	 * @param int             $batch Rows read between flushes.
 	 */
-	private function csv( Form $form, SubmissionQuery $query ): string {
+	private function csv( Form $form, SubmissionQuery $query, int $batch = 500 ): string {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- the CSV is captured in memory.
 		$handle = fopen( 'php://temp', 'wb+' );
 		$this->assertNotFalse( $handle );
-		SubmissionsExport::write( $form, $query, $handle );
+		SubmissionsExport::write( $form, $query, $handle, $batch );
 		rewind( $handle );
 		$csv = stream_get_contents( $handle );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- the CSV is captured in memory.

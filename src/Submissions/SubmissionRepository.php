@@ -121,24 +121,35 @@ final class SubmissionRepository {
 	}
 
 	/**
-	 * Submissions for one export batch, in id order.
+	 * Submissions for one export batch, oldest first.
 	 *
-	 * The caller passes the last id it wrote. The first call passes zero.
+	 * The caller passes the last row it wrote. The first call passes null.
+	 * `created_at` then `id` matches the form index, so rows that share a
+	 * timestamp are not skipped or repeated.
 	 *
-	 * @param SubmissionQuery $query    Inbox filters.
-	 * @param int             $after_id Last exported id.
-	 * @param int             $limit    Batch size.
+	 * @param SubmissionQuery                         $query Inbox filters.
+	 * @param array{created_at: string, id: int}|null $after Cursor from the previous batch.
+	 * @param int                                     $limit Batch size.
 	 * @return Submission[]
 	 */
-	public function iterate_for_export( SubmissionQuery $query, int $after_id, int $limit ): array {
+	public function iterate_for_export( SubmissionQuery $query, ?array $after, int $limit ): array {
 		global $wpdb;
 
 		$limit = max( 1, $limit );
 		$table = Schema::submissions_table();
 		$where = $this->where( $query );
-		$args  = array_merge( $where['args'], array( max( 0, $after_id ), $limit ) );
+		$sql   = "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE {$where['sql']}";
+		$args  = $where['args'];
+		if ( is_array( $after ) ) {
+			$sql   .= ' AND ( created_at > %s OR ( created_at = %s AND id > %d ) )';
+			$args[] = $after['created_at'];
+			$args[] = $after['created_at'];
+			$args[] = $after['id'];
+		}
+		$sql   .= ' ORDER BY created_at ASC, id ASC LIMIT %d';
+		$args[] = $limit;
 
-		$rows = $wpdb->get_results( $this->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE {$where['sql']} AND id > %d ORDER BY id ASC LIMIT %d", $args ), ARRAY_A );
+		$rows = $wpdb->get_results( $this->prepare( $sql, $args ), ARRAY_A );
 
 		return $this->hydrate_rows( $rows );
 	}
@@ -346,12 +357,6 @@ final class SubmissionRepository {
 		return $this->hydrate( is_array( $row ) ? $row : null );
 	}
 
-	/**
-	 * Build submissions from wpdb rows.
-	 *
-	 * @param mixed $rows Rows from wpdb.
-	 * @return Submission[]
-	 */
 	/**
 	 * Prepared WHERE body and its values.
 	 *
