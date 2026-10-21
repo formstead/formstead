@@ -21,6 +21,18 @@ The development site is at http://localhost:8888. Default credentials are `admin
 
 Stop the environment with `npx wp-env stop`. Destroy it, including the database, with `npx wp-env destroy`.
 
+## Mail
+
+Local mail is captured by Mailpit. Start it after `wp-env`:
+
+```sh
+npm run mail:up
+```
+
+Open http://localhost:8025 to read messages. The development container sends SMTP to the Mailpit container on port 1025. Stop it with `npm run mail:down`.
+
+If 8025 or 1025 is already in use, set `FORMSTEAD_MAILPIT_UI_PORT` and `FORMSTEAD_MAILPIT_SMTP_PORT` before `npm run mail:up`. The container still receives mail on port 1025.
+
 ## Tests and quality checks
 
 `npm run check` is a fast local check before you push. It runs PHPUnit, PHPCS, PHPStan, and Plugin Check inside `wp-env`. Plugin Check skips development paths that `.distignore` keeps out of the ZIP.

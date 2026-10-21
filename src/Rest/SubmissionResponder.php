@@ -25,18 +25,26 @@ final class SubmissionResponder {
 	 * @param ResponseMode $mode       Response mode.
 	 * @param string       $receipt_id Public receipt id.
 	 * @param string       $location   Configured success URL, used by the HTML mode.
+	 * @param bool         $replayed   Whether this repeats an earlier acceptance.
 	 */
-	public static function accepted( ResponseMode $mode, string $receipt_id, string $location ): WP_REST_Response {
+	public static function accepted( ResponseMode $mode, string $receipt_id, string $location, bool $replayed = false ): WP_REST_Response {
 		if ( $mode->is_json() ) {
-			return self::json(
+			$response = self::json(
 				array( 'receipt_id' => $receipt_id ),
 				201
 			);
+			if ( $replayed ) {
+				$response->header( 'Idempotent-Replayed', 'true' );
+			}
+			return $response;
 		}
 
 		$response = new WP_REST_Response( null, 303 );
 		$response->header( 'Location', $location );
 		self::mark( $response );
+		if ( $replayed ) {
+			$response->header( 'Idempotent-Replayed', 'true' );
+		}
 		return $response;
 	}
 
@@ -80,6 +88,8 @@ final class SubmissionResponder {
 			RequestError::PayloadTooLarge => __( 'Submission too large', 'formstead' ),
 			RequestError::OriginNotAllowed => __( 'Submission not accepted', 'formstead' ),
 			RequestError::RateLimited => __( 'Too many submissions', 'formstead' ),
+			RequestError::InvalidIdempotencyKey => __( 'Invalid idempotency key', 'formstead' ),
+			RequestError::IdempotencyConflict => __( 'Already submitted', 'formstead' ),
 			default => $message,
 		};
 

@@ -74,6 +74,11 @@ final class Migrator {
 				);
 			}
 
+			$engine = self::storage_engine_error();
+			if ( $engine instanceof WP_Error ) {
+				return $engine;
+			}
+
 			if ( $installed < 2 ) {
 				$upgraded = self::upgrade_to_2();
 				if ( $upgraded instanceof WP_Error ) {
@@ -94,10 +99,41 @@ final class Migrator {
 	 * Whether every Formstead table is present.
 	 */
 	public static function tables_exist(): bool {
-		return self::table_exists( Schema::forms_table() )
-			&& self::table_exists( Schema::form_versions_table() )
-			&& self::table_exists( Schema::submissions_table() )
-			&& self::table_exists( Schema::rate_limits_table() );
+		foreach ( Schema::tables() as $table ) {
+			if ( ! self::table_exists( $table ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * An error when any Formstead table is not InnoDB.
+	 *
+	 * Called after dbDelta(). A server that ignores `ENGINE=InnoDB` must not
+	 * record the schema as ready, because deliveries need a real transaction.
+	 */
+	public static function storage_engine_error(): ?WP_Error {
+		global $wpdb;
+
+		foreach ( Schema::tables() as $table ) {
+			$engine = $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s',
+					$table
+				)
+			);
+
+			if ( ! is_string( $engine ) || 'innodb' !== strtolower( $engine ) ) {
+				return new WP_Error(
+					'formstead_migration_engine',
+					__( 'Formstead requires the InnoDB storage engine.', 'formstead' )
+				);
+			}
+		}
+
+		return null;
 	}
 
 	/**

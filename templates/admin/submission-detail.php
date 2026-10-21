@@ -7,6 +7,7 @@
  * @var Submission|null                                              $submission Stored submission, or null.
  * @var Form|null                                                    $form       Current form, or null.
  * @var array<int, array{label: string, value: string, multiline: bool, items: list<string>}> $rows Fields to show.
+ * @var array<int, array{channel: string, status: string, attempts: string, last_error: string, next_attempt_at: string}> $deliveries Email deliveries.
  */
 
 use Formstead\Admin\Menu;
@@ -18,6 +19,7 @@ defined( 'ABSPATH' ) || exit;
 $submission = isset( $submission ) && $submission instanceof Submission ? $submission : null;
 $form       = isset( $form ) && $form instanceof Form ? $form : null;
 $rows       = isset( $rows ) && is_array( $rows ) ? $rows : array();
+$deliveries = isset( $deliveries ) && is_array( $deliveries ) ? $deliveries : array();
 $form_name  = $form instanceof Form ? $form->name() : '';
 ?>
 <div class="wrap">
@@ -33,6 +35,44 @@ $form_name  = $form instanceof Form ? $form->name() : '';
 				<?php echo esc_html( ' — ' . $form_name ); ?>
 			<?php endif; ?>
 		</p>
+		<h2><?php echo esc_html__( 'Email', 'formstead' ); ?></h2>
+		<?php if ( array() === $deliveries ) : ?>
+			<p><?php echo esc_html__( 'No email was queued for this submission.', 'formstead' ); ?></p>
+		<?php else : ?>
+			<table class="widefat striped">
+				<thead>
+					<tr>
+						<th scope="col"><?php echo esc_html__( 'Channel', 'formstead' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Status', 'formstead' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Attempts', 'formstead' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Last error', 'formstead' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Next attempt', 'formstead' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $deliveries as $delivery ) : ?>
+						<?php
+						if ( ! is_array( $delivery ) ) {
+							continue;
+						}
+						$channel    = isset( $delivery['channel'] ) ? (string) $delivery['channel'] : '';
+						$status     = isset( $delivery['status'] ) ? (string) $delivery['status'] : '';
+						$attempts   = isset( $delivery['attempts'] ) ? (string) $delivery['attempts'] : '';
+						$last_error = isset( $delivery['last_error'] ) ? (string) $delivery['last_error'] : '';
+						$next       = isset( $delivery['next_attempt_at'] ) ? (string) $delivery['next_attempt_at'] : '';
+						?>
+						<tr>
+							<td><?php echo esc_html( $channel ); ?></td>
+							<td><?php echo esc_html( $status ); ?></td>
+							<td><?php echo esc_html( $attempts ); ?></td>
+							<td><?php echo '' !== $last_error ? esc_html( $last_error ) : esc_html__( 'None', 'formstead' ); ?></td>
+							<td><?php echo '' !== $next ? esc_html( $next ) : esc_html__( 'None', 'formstead' ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
+
 		<table class="widefat striped">
 			<tbody>
 				<?php foreach ( $rows as $row ) : ?>

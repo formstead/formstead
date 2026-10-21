@@ -16,6 +16,8 @@
 /examples/**
 /bin
 /bin/**
+/dev
+/dev/**
 /*.dist
 /package.json
 /package-lock.json

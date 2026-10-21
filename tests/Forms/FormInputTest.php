@@ -248,6 +248,40 @@ final class FormInputTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Recipients are stored, and a reply-to value must name an email field.
+	 */
+	public function test_notification_recipients_are_validated(): void {
+		$input                         = $this->input();
+		$input['fields'][]             = array(
+			'name'       => 'email',
+			'label'      => 'Email',
+			'type'       => 'email',
+			'required'   => '',
+			'max_length' => '',
+		);
+		$input['notify_recipients']    = "Owner@Example.com\nowner@example.com\nsecond@example.com";
+		$input['reply_to_field']       = 'email';
+		$input['mail_include_content'] = '1';
+
+		$result = FormInput::validate( $input );
+		$form   = $result->form();
+
+		$this->assertTrue( $result->is_valid() );
+		$this->assertNotNull( $form );
+		$this->assertSame( array( 'Owner@Example.com', 'second@example.com' ), $form->notifications()->recipients() );
+		$this->assertSame( 'email', $form->notifications()->reply_to_field() );
+		$this->assertTrue( $form->notifications()->includes_content() );
+
+		$input['notify_recipients'] = "owner@example.com\nnot-an-email";
+		$input['reply_to_field']    = 'name';
+		$rejected                   = FormInput::validate( $input );
+
+		$this->assertArrayHasKey( 'notify_recipients', $rejected->errors() );
+		$this->assertArrayHasKey( 'reply_to_field', $rejected->errors() );
+		$this->assertNull( $rejected->form() );
+	}
+
+	/**
 	 * Posted values for a valid contact form.
 	 *
 	 * @return array<string, mixed>

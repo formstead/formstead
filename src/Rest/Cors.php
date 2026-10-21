@@ -128,7 +128,7 @@ final class Cors {
 			$server->send_header( 'Access-Control-Allow-Origin', $origin );
 			$server->send_header( 'Access-Control-Allow-Methods', 'POST, OPTIONS' );
 			$server->send_header( 'Access-Control-Allow-Headers', 'Content-Type, Idempotency-Key' );
-			$server->send_header( 'Access-Control-Expose-Headers', 'Retry-After' );
+			$server->send_header( 'Access-Control-Expose-Headers', 'Retry-After, Idempotent-Replayed' );
 			$server->send_header( 'Access-Control-Max-Age', '600' );
 		}
 
@@ -164,7 +164,7 @@ final class Cors {
 		$response->header( 'Access-Control-Allow-Origin', $origin );
 		$response->header( 'Access-Control-Allow-Methods', 'POST, OPTIONS' );
 		$response->header( 'Access-Control-Allow-Headers', 'Content-Type, Idempotency-Key' );
-		$response->header( 'Access-Control-Expose-Headers', 'Retry-After' );
+		$response->header( 'Access-Control-Expose-Headers', 'Retry-After, Idempotent-Replayed' );
 		$response->header( 'Access-Control-Max-Age', '600' );
 	}
 

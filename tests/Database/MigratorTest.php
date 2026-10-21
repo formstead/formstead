@@ -9,6 +9,7 @@ namespace Formstead\Tests\Database;
 
 use Formstead\Database\Migrator;
 use Formstead\Database\Schema;
+use Formstead\Database\Transaction;
 use Formstead\Lifecycle\Activator;
 use Formstead\Security\Capabilities;
 use Formstead\Tests\TestCase\MigrationTestCase;
@@ -298,6 +299,163 @@ final class MigratorTest extends MigrationTestCase {
 		$this->assertNull( $row['rate_per_minute'] );
 		$this->assertNull( $row['rate_per_hour'] );
 		$this->assertSame( '0', (string) $row['honeypot_rejections'] );
+	}
+
+	/**
+	 * Schema version 3 gains notification columns and the delivery tables.
+	 *
+	 * Existing forms keep an empty recipient list, so an upgrade does not start sending mail.
+	 */
+	public function test_upgrade_from_version_3_adds_notification_columns(): void {
+		global $wpdb;
+
+		$forms       = Schema::forms_table();
+		$versions    = Schema::form_versions_table();
+		$submissions = Schema::submissions_table();
+		$limits      = Schema::rate_limits_table();
+		$charset     = $wpdb->get_charset_collate();
+
+		foreach ( Schema::tables() as $table ) {
+			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+		}
+
+		$wpdb->query(
+			"CREATE TABLE {$forms} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				public_id varchar(19) NOT NULL,
+				name varchar(190) NOT NULL,
+				is_enabled tinyint(1) NOT NULL DEFAULT 1,
+				fields longtext NOT NULL,
+				schema_version int(10) unsigned NOT NULL DEFAULT 1,
+				success_url varchar(2048) NOT NULL,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				allowed_origins text,
+				rate_per_minute smallint(5) unsigned DEFAULT NULL,
+				rate_per_hour int(10) unsigned DEFAULT NULL,
+				honeypot_rejections bigint(20) unsigned NOT NULL DEFAULT 0,
+				PRIMARY KEY  (id),
+				UNIQUE KEY public_id (public_id)
+			) {$charset} ENGINE=InnoDB"
+		);
+		$wpdb->query(
+			"CREATE TABLE {$versions} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				form_id bigint(20) unsigned NOT NULL,
+				version int(10) unsigned NOT NULL,
+				fields longtext NOT NULL,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY form_version (form_id,version)
+			) {$charset} ENGINE=InnoDB"
+		);
+		$wpdb->query(
+			"CREATE TABLE {$submissions} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				form_id bigint(20) unsigned NOT NULL,
+				schema_version int(10) unsigned NOT NULL,
+				receipt_id varchar(20) DEFAULT NULL,
+				payload longtext NOT NULL,
+				status varchar(20) NOT NULL DEFAULT 'new',
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY receipt_id (receipt_id),
+				KEY form_status_created (form_id,status,created_at)
+			) {$charset} ENGINE=InnoDB"
+		);
+		$wpdb->query(
+			"CREATE TABLE {$limits} (
+				bucket char(64) NOT NULL,
+				hits int(10) unsigned NOT NULL DEFAULT 0,
+				expires_at bigint(20) unsigned NOT NULL,
+				PRIMARY KEY  (bucket),
+				KEY expires_at (expires_at)
+			) {$charset} ENGINE=InnoDB"
+		);
+
+		$wpdb->insert(
+			$forms,
+			array(
+				'public_id'      => 'fs_abcdefghijklmnop',
+				'name'           => 'Contact',
+				'is_enabled'     => 1,
+				'fields'         => '[]',
+				'schema_version' => 1,
+				'success_url'    => 'https://example.com/thanks',
+				'created_at'     => '2026-10-20 10:00:00',
+				'updated_at'     => '2026-10-20 11:00:00',
+			)
+		);
+
+		update_option( Schema::VERSION_OPTION, 3, true );
+
+		$this->assertNull( Migrator::maybe_migrate() );
+		$this->assertSame( Schema::VERSION, (int) get_option( Schema::VERSION_OPTION ) );
+		$this->assertTrue( Migrator::tables_exist() );
+
+		$row = $wpdb->get_row( "SELECT notify_recipients, reply_to_field, mail_include_content FROM {$forms}", ARRAY_A );
+		$this->assertIsArray( $row );
+		$this->assertNull( $row['notify_recipients'] );
+		$this->assertNull( $row['reply_to_field'] );
+		$this->assertSame( '0', (string) $row['mail_include_content'] );
+	}
+
+	/**
+	 * A table that is not InnoDB fails the migration check.
+	 */
+	public function test_myisam_table_is_rejected(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+
+		$forms = Schema::forms_table();
+		$wpdb->query( "ALTER TABLE {$forms} ENGINE=MyISAM" );
+
+		$error = Migrator::storage_engine_error();
+		$this->assertInstanceOf( WP_Error::class, $error );
+		$this->assertSame( 'formstead_migration_engine', $error->get_error_code() );
+	}
+
+	/**
+	 * A failed transaction keeps the row written before it and drops the row written inside it.
+	 */
+	public function test_transaction_rollback_discards_the_inner_row(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+
+		$table = Schema::rate_limits_table();
+		$wpdb->query( 'START TRANSACTION' );
+		$wpdb->insert(
+			$table,
+			array(
+				'bucket'     => str_repeat( 'a', 64 ),
+				'hits'       => 1,
+				'expires_at' => 10,
+			),
+			array( '%s', '%d', '%d' )
+		);
+
+		$result = Transaction::run(
+			static function () use ( $wpdb, $table ) {
+				$wpdb->insert(
+					$table,
+					array(
+						'bucket'     => str_repeat( 'b', 64 ),
+						'hits'       => 1,
+						'expires_at' => 10,
+					),
+					array( '%s', '%d', '%d' )
+				);
+
+				return new WP_Error( 'formstead_test_rollback', 'rollback' );
+			}
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'formstead_test_rollback', $result->get_error_code() );
+		$this->assertSame( 1, (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ) );
+		$wpdb->query( 'ROLLBACK' );
 	}
 
 	/**

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-21
+
+### Fixed
+
+- Two requests with the same idempotency key no longer deadlock on MySQL. The second request waits, then receives the original result.
+- An idempotency key that ends with a newline is rejected.
+- The notification subject decodes HTML entities in the site name.
+
+## [0.4.0] - 2026-10-20
+
+### Added
+
+- An `Idempotency-Key` header, or the `_fs_idempotency_key` field, returns the original result for 24 hours. The same key with different content returns `409`.
+- Email notifications for a form that has recipients. The message links to the submission. Full content is included only when that option is on. A failed send stays queued and is retried, then marked failed. `wp formstead deliveries run` processes the queue from system cron when the site has little traffic.
+- The submission screen shows whether the notification is waiting, handed to the mail system, failed, or cancelled.
+
+### Changed
+
+- Forms that already exist keep an empty recipient list, so this update does not start sending mail until recipients are saved.
+
 ## [0.3.1] - 2026-10-20
 
 ### Fixed
@@ -98,7 +118,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/formstead/formstead/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/formstead/formstead/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/formstead/formstead/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/formstead/formstead/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/formstead/formstead/compare/v0.1.1...v0.2.0

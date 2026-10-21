@@ -11,6 +11,7 @@ use Formstead\Forms\Field;
 use Formstead\Forms\FieldCodec;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
+use Formstead\Forms\FormNotifications;
 use Formstead\Forms\FormProtection;
 use Formstead\Forms\FormRepository;
 use Formstead\Forms\FormVersionRepository;
@@ -280,6 +281,42 @@ final class FormRepositoryTest extends WP_UnitTestCase {
 		$this->assertSame( array( 'https://forms.example' ), $loaded->protection()->allowed_origins() );
 		$this->assertSame( 2, $loaded->protection()->rate_per_minute() );
 		$this->assertSame( 1, $loaded->honeypot_rejections() );
+	}
+
+	/**
+	 * Notification settings are stored without a new field-schema version.
+	 */
+	public function test_notifications_are_saved_without_bumping_the_schema(): void {
+		$saved = $this->forms->insert( $this->form( 'Contact' ) );
+		$this->assertInstanceOf( Form::class, $saved );
+		$this->assertFalse( $saved->notifications()->has_recipients() );
+
+		$notified = new Form(
+			$saved->id(),
+			$saved->public_id(),
+			$saved->name(),
+			true,
+			$saved->fields(),
+			$saved->schema_version(),
+			$saved->success_url(),
+			$saved->created_at(),
+			$saved->updated_at(),
+			$saved->protection(),
+			$saved->honeypot_rejections(),
+			new FormNotifications( array( 'owner@example.com' ), 'email', true )
+		);
+		$updated  = $this->forms->update( $notified );
+		$this->assertInstanceOf( Form::class, $updated );
+		$this->assertSame( 1, $updated->schema_version() );
+		$this->assertSame( array( 'owner@example.com' ), $updated->notifications()->recipients() );
+		$this->assertSame( 'email', $updated->notifications()->reply_to_field() );
+		$this->assertTrue( $updated->notifications()->includes_content() );
+
+		$loaded = $this->forms->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( array( 'owner@example.com' ), $loaded->notifications()->recipients() );
+		$this->assertSame( 'email', $loaded->notifications()->reply_to_field() );
+		$this->assertTrue( $loaded->notifications()->includes_content() );
 	}
 
 	/**

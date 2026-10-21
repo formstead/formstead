@@ -8,7 +8,9 @@
 namespace Formstead;
 
 use Formstead\Admin\Menu;
+use Formstead\Cli\DeliveriesCommand;
 use Formstead\Database\Migrator;
+use Formstead\Delivery\Scheduler;
 use Formstead\Lifecycle\Requirements;
 use Formstead\Rest\Cors;
 use Formstead\Rest\HtmlResponder;
@@ -57,6 +59,8 @@ final class Plugin {
 		SubmissionsController::register();
 		Cors::register();
 		HtmlResponder::register();
+		Scheduler::register();
+		DeliveriesCommand::register();
 	}
 
 	/**

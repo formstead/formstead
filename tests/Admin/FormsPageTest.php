@@ -290,6 +290,63 @@ final class FormsPageTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A new form shows the site admin address. A saved form keeps an empty list.
+	 */
+	public function test_new_form_prefills_the_admin_email_and_an_existing_form_does_not(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option( 'admin_email', 'owner@example.com' );
+
+		$_GET['action'] = 'new';
+		$html           = $this->render();
+		$this->assertStringContainsString( 'name="notify_recipients"', $html );
+		$this->assertStringContainsString( 'owner@example.com', $html );
+
+		$saved         = $this->insert_contact_form();
+		$_GET          = array( 'form' => (string) $saved->id() );
+		$existing_html = $this->render();
+		$this->assertStringNotContainsString( 'owner@example.com', $existing_html );
+	}
+
+	/**
+	 * Notification settings are saved without changing the field schema.
+	 */
+	public function test_notification_settings_are_saved(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->insert_contact_form();
+		$this->post_form();
+		$_POST['form_id']              = (string) $saved->id();
+		$_POST['schema_version']       = (string) $saved->schema_version();
+		$_POST['notify_recipients']    = "owner@example.com\nsecond@example.com";
+		$_POST['reply_to_field']       = 'email';
+		$_POST['mail_include_content'] = '1';
+		$_REQUEST                      = $_POST;
+
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( array( 'owner@example.com', 'second@example.com' ), $loaded->notifications()->recipients() );
+		$this->assertSame( 'email', $loaded->notifications()->reply_to_field() );
+		$this->assertTrue( $loaded->notifications()->includes_content() );
+		$this->assertSame( $saved->schema_version(), $loaded->schema_version() );
+	}
+
+	/**
+	 * An invalid recipient is shown again and nothing is stored.
+	 */
+	public function test_invalid_recipient_is_rejected(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->post_form();
+		$_POST['notify_recipients'] = "owner@example.com\nnot-an-email";
+		$_REQUEST                   = $_POST;
+
+		FormsPage::handle_load();
+
+		$this->assertSame( array(), ( new FormRepository() )->all() );
+		$this->assertStringContainsString( 'Enter up to 10 valid email addresses', $this->render() );
+	}
+
+	/**
 	 * A repeated max length arrives as an array and does not raise a warning.
 	 */
 	public function test_non_text_max_length_does_not_warn(): void {
@@ -319,6 +376,15 @@ final class FormsPageTest extends WP_UnitTestCase {
 		foreach ( $warnings as $warning ) {
 			$this->assertStringNotContainsString( 'Array to string conversion', $warning );
 		}
+	}
+
+	/**
+	 * Render the forms screen.
+	 */
+	private function render(): string {
+		ob_start();
+		FormsPage::render();
+		return (string) ob_get_clean();
 	}
 
 	/**

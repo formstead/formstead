@@ -68,6 +68,10 @@ jobs:
       - name: PHPStan
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G
 
+      - name: Mailpit accepts one notification
+        if: matrix.php == '8.3'
+        run: bash bin/ci/mailpit-check.sh
+
   checks-full:
     name: Nightly (${{ matrix.php }} / ${{ matrix.wp }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -133,7 +137,6 @@ jobs:
 
   mysql:
     name: PHPUnit on MySQL 8.0
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -177,6 +180,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
+      mailpit:
+        image: axllent/mailpit:v1.27.11
+        ports:
+          - 8025:8025
+          - 1025:1025
       mariadb:
         image: mariadb:10.11
         env:
@@ -260,9 +268,14 @@ jobs:
           fi
           echo "Plugin Check reported no errors."
 
+      - name: Point package mail at Mailpit
+        run: |
+          mkdir -p wordpress/wp-content/mu-plugins
+          cp bin/ci/package-mailpit.php wordpress/wp-content/mu-plugins/formstead-mailpit.php
+
       - name: Hit front, admin, and uninstall over PHP's built-in server
         run: |
-          php -S 127.0.0.1:8080 -t wordpress >/tmp/php-server.log 2>&1 &
+          PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8080 -t wordpress >/tmp/php-server.log 2>&1 &
           for i in $(seq 1 20); do
             if curl -sf -o /dev/null http://127.0.0.1:8080/; then
               break
@@ -304,7 +317,7 @@ jobs:
           assert_schema() {
             local found table
             found="$(wp db query "SHOW TABLES" --skip-column-names --path=wordpress)"
-            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions" "${prefix}formstead_form_versions" "${prefix}formstead_rate_limits"; do
+            for table in "${prefix}formstead_forms" "${prefix}formstead_submissions" "${prefix}formstead_form_versions" "${prefix}formstead_rate_limits" "${prefix}formstead_idempotency_keys" "${prefix}formstead_deliveries"; do
               if ! grep -Fxq "$table" <<<"$found"; then
                 echo "Missing table ${table}." >&2
                 printf '%s\n' "$found" >&2
@@ -320,8 +333,8 @@ jobs:
 
           assert_schema
           db_version="$(wp option get formstead_db_version --path=wordpress)"
-          if [[ "$db_version" != "3" ]]; then
-            echo "Expected formstead_db_version 3, got ${db_version}." >&2
+          if [[ "$db_version" != "4" ]]; then
+            echo "Expected formstead_db_version 4, got ${db_version}." >&2
             exit 1
           fi
 
@@ -333,27 +346,94 @@ jobs:
           endpoint="$(wp eval "echo rest_url( 'formstead/v1/forms/${public_id}/submissions' );" --path=wordpress)"
           echo "endpoint:${endpoint}"
 
-          success_headers="$(mktemp)"
-          success_code="$(curl -s -D "$success_headers" -o /tmp/formstead-success-body -w '%{http_code}' \
+          # Two requests with one key. Several workers make the posts overlap
+          # so the database, not the web server, serializes them.
+          idem_key="package-same-key"
+          idem_headers_a="$(mktemp)"
+          idem_headers_b="$(mktemp)"
+          curl -s -D "$idem_headers_a" -o /tmp/formstead-idem-a -w '%{http_code}' \
             -H 'Content-Type: application/x-www-form-urlencoded' \
-            --data 'email=a@b.co' \
-            "$endpoint")"
-          echo "post_ok:${success_code}"
-          if [[ "$success_code" != "303" ]]; then
-            echo "Expected 303 from a valid POST." >&2
-            cat "$success_headers" >&2
+            -H "Idempotency-Key: ${idem_key}" \
+            --data 'email=idem-secret@example.com' \
+            "$endpoint" > /tmp/formstead-idem-code-a &
+          pid_a=$!
+          curl -s -D "$idem_headers_b" -o /tmp/formstead-idem-b -w '%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -H "Idempotency-Key: ${idem_key}" \
+            --data 'email=idem-secret@example.com' \
+            "$endpoint" > /tmp/formstead-idem-code-b &
+          pid_b=$!
+          wait "$pid_a"
+          wait "$pid_b"
+          code_a="$(tr -d '[:space:]' < /tmp/formstead-idem-code-a)"
+          code_b="$(tr -d '[:space:]' < /tmp/formstead-idem-code-b)"
+          echo "post_idem_a:${code_a}"
+          echo "post_idem_b:${code_b}"
+          if [[ "$code_a" != "303" || "$code_b" != "303" ]]; then
+            echo "Expected both idempotent posts to return 303." >&2
+            cat "$idem_headers_a" >&2
+            cat "$idem_headers_b" >&2
             exit 1
           fi
-          if ! grep -Eq '^Location: https://example.com/thanks[[:space:]]*$' "$success_headers"; then
-            echo "Location was not the configured success URL." >&2
-            cat "$success_headers" >&2
+          if ! grep -Eq '^Location: https://example.com/thanks[[:space:]]*$' "$idem_headers_a"; then
+            echo "First idempotent response did not redirect to the success URL." >&2
+            cat "$idem_headers_a" >&2
+            exit 1
+          fi
+          if ! grep -Eq '^Location: https://example.com/thanks[[:space:]]*$' "$idem_headers_b"; then
+            echo "Second idempotent response did not redirect to the success URL." >&2
+            cat "$idem_headers_b" >&2
+            exit 1
+          fi
+          replay_count=0
+          if grep -Eq '^Idempotent-Replayed: true[[:space:]]*$' "$idem_headers_a"; then
+            replay_count=$((replay_count + 1))
+          fi
+          if grep -Eq '^Idempotent-Replayed: true[[:space:]]*$' "$idem_headers_b"; then
+            replay_count=$((replay_count + 1))
+          fi
+          if [[ "$replay_count" != "1" ]]; then
+            echo "Expected one replayed response, found ${replay_count}." >&2
             exit 1
           fi
           row_count="$(submission_count)"
           if [[ "$row_count" != "1" ]]; then
-            echo "Expected 1 submission, found ${row_count}." >&2
+            echo "Expected 1 submission from the shared key, found ${row_count}." >&2
             exit 1
           fi
+
+          conflict_code="$(curl -s -o /tmp/formstead-conflict -w '%{http_code}' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -H "Idempotency-Key: ${idem_key}" \
+            --data 'email=other-secret@example.com' \
+            "$endpoint")"
+          echo "post_conflict:${conflict_code}"
+          if [[ "$conflict_code" != "409" ]]; then
+            echo "Expected 409 when the same key is reused with different content." >&2
+            cat /tmp/formstead-conflict >&2
+            exit 1
+          fi
+          if grep -q 'other-secret@example.com' /tmp/formstead-conflict; then
+            echo "409 page echoed the submitted value." >&2
+            exit 1
+          fi
+          row_count="$(submission_count)"
+          if [[ "$row_count" != "1" ]]; then
+            echo "Conflicting POST stored a row. Count is ${row_count}." >&2
+            exit 1
+          fi
+
+          wp formstead deliveries run --path=wordpress
+          for _attempt in $(seq 1 20); do
+            if curl -sf -o /tmp/formstead-mailpit.json "http://127.0.0.1:8025/api/v1/messages"; then
+              total="$(python3 -c 'import json; print(json.load(open("/tmp/formstead-mailpit.json")).get("total", 0))')"
+              if [[ "$total" != "0" ]]; then
+                break
+              fi
+            fi
+            sleep 0.5
+          done
+          bash bin/ci/assert-one-mailpit-message.sh 8025 idem-secret@example.com
 
           invalid_headers="$(mktemp)"
           invalid_code="$(curl -s -D "$invalid_headers" -o /tmp/formstead-invalid-body -w '%{http_code}' \

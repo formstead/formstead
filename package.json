@@ -17,6 +17,8 @@
 		"lint": "wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs",
 		"analyse": "wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G",
 		"plugin-check": "bash bin/plugin-check.sh",
-		"check": "bash bin/check.sh"
+		"check": "bash bin/check.sh",
+		"mail:up": "bash bin/mailpit.sh up",
+		"mail:down": "bash bin/mailpit.sh down"
 	}
 }

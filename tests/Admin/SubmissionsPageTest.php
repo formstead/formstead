@@ -10,6 +10,8 @@ namespace Formstead\Tests\Admin;
 // phpcs:disable WordPress.Security.NonceVerification -- the test sets the screen query the inbox reads.
 
 use Formstead\Admin\SubmissionsPage;
+use Formstead\Database\Schema;
+use Formstead\Delivery\DeliveryRepository;
 use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
@@ -184,6 +186,49 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 		$_GET = array( 'submission' => (string) $submission_id );
 		$html = $this->render();
 		$this->assertStringContainsString( $value, $html );
+	}
+
+	/**
+	 * The submission screen shows the delivery status without calling it delivered.
+	 */
+	public function test_detail_shows_the_delivery_status(): void {
+		global $wpdb;
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$submission_id = $this->store_submission( 'visible-note' );
+		$repository    = new DeliveryRepository();
+		$created       = $repository->create( $submission_id );
+		$this->assertIsInt( $created );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			Schema::deliveries_table(),
+			array(
+				'last_error'      => 'mail_failed',
+				'next_attempt_at' => '2026-10-21 00:00:00',
+			),
+			array( 'id' => $created )
+		);
+
+		$_GET = array( 'submission' => (string) $submission_id );
+		$html = $this->render();
+		$this->assertStringContainsString( 'Email', $html );
+		$this->assertStringContainsString( 'Waiting to send', $html );
+		$this->assertStringContainsString( 'mail_failed', $html );
+		$this->assertStringContainsString( '2026-10-21 00:00:00', $html );
+		$this->assertStringNotContainsString( 'Handed to the mail system', $html );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			Schema::deliveries_table(),
+			array(
+				'status'     => 'handed_off',
+				'last_error' => null,
+			),
+			array( 'id' => $created )
+		);
+		$html = $this->render();
+		$this->assertStringContainsString( 'Handed to the mail system', $html );
+		$this->assertStringNotContainsString( '2026-10-21 00:00:00', $html );
 	}
 
 	/**
