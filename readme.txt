@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.7.0
+Stable tag: 0.7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -35,6 +35,11 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.7.1 =
+* End-to-end tests stop only this project's database.
+* The accessibility check opens a submission it has just stored.
+* Parallel checks run in the browser, so `Retry-After` and `Idempotent-Replayed` must be exposed to JavaScript.
 
 = 0.7.0 =
 * HTML and Astro examples show how to post without JavaScript and with `fetch()`. They are in the source repository, not in the installable package.

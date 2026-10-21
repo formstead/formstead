@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-21
+
+### Fixed
+
+- End-to-end tests stop only this project's database container.
+- The accessibility check opens a submission it has just stored.
+- Parallel idempotency and rate-limit checks run in the browser, so `Retry-After` and `Idempotent-Replayed` must be exposed to JavaScript.
+
 ## [0.7.0] - 2026-10-21
 
 ### Added
@@ -172,7 +180,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/formstead/formstead/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/formstead/formstead/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/formstead/formstead/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/formstead/formstead/compare/v0.5.1...v0.6.0
