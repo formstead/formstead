@@ -34,6 +34,21 @@ final class Limits {
 	public const CEILING_RATE_PER_HOUR = 10000;
 
 	/**
+	 * Fill time below this many milliseconds is a spam signal. Zero disables it.
+	 */
+	public const MIN_FILL_MS = 3000;
+
+	public const CEILING_MIN_FILL_MS = 600000;
+
+	/**
+	 * How long an identical submission is treated as a duplicate, in seconds.
+	 * Zero disables the signal.
+	 */
+	public const DUPLICATE_WINDOW = 600;
+
+	public const CEILING_DUPLICATE_WINDOW = 86400;
+
+	/**
 	 * Maximum JSON nesting. Not configurable.
 	 */
 	public const JSON_DEPTH = 8;
@@ -81,9 +96,25 @@ final class Limits {
 	}
 
 	/**
+	 * Fill time, in milliseconds, below which a submission is a spam signal.
+	 *
+	 * Zero disables the signal.
+	 */
+	public static function min_fill_ms(): int {
+		return self::configured()['min_fill_ms'];
+	}
+
+	/**
+	 * Duplicate-content window in seconds. Zero disables the signal.
+	 */
+	public static function duplicate_window(): int {
+		return self::configured()['duplicate_window'];
+	}
+
+	/**
 	 * Effective limits after constants, the filter, and the ceilings.
 	 *
-	 * @return array{max_request_bytes: int, max_fields: int, rate_per_minute: int, rate_per_hour: int}
+	 * @return array{max_request_bytes: int, max_fields: int, rate_per_minute: int, rate_per_hour: int, min_fill_ms: int, duplicate_window: int}
 	 */
 	private static function configured(): array {
 		$defaults = array(
@@ -91,15 +122,18 @@ final class Limits {
 			'max_fields'        => self::constant_int( 'FORMSTEAD_MAX_FIELDS', self::MAX_FIELDS ),
 			'rate_per_minute'   => self::constant_int( 'FORMSTEAD_RATE_PER_MINUTE', self::RATE_PER_MINUTE ),
 			'rate_per_hour'     => self::constant_int( 'FORMSTEAD_RATE_PER_HOUR', self::RATE_PER_HOUR ),
+			'min_fill_ms'       => self::constant_int( 'FORMSTEAD_MIN_FILL_MS', self::MIN_FILL_MS ),
+			'duplicate_window'  => self::constant_int( 'FORMSTEAD_DUPLICATE_WINDOW', self::DUPLICATE_WINDOW ),
 		);
 
 		/**
 		 * Filters the global submission limits.
 		 *
-		 * Keys: `max_request_bytes`, `max_fields`, `rate_per_minute`, `rate_per_hour`.
-		 * Values are clamped to the hard ceilings.
+		 * Keys: `max_request_bytes`, `max_fields`, `rate_per_minute`, `rate_per_hour`,
+		 * `min_fill_ms`, `duplicate_window`. Values are clamped to the hard ceilings.
+		 * `min_fill_ms` and `duplicate_window` may be zero, which turns that signal off.
 		 *
-		 * @param array{max_request_bytes: int, max_fields: int, rate_per_minute: int, rate_per_hour: int} $limits Limits from constants or the built-in defaults.
+		 * @param array{max_request_bytes: int, max_fields: int, rate_per_minute: int, rate_per_hour: int, min_fill_ms: int, duplicate_window: int} $limits Limits from constants or the built-in defaults.
 		 */
 		$filtered = apply_filters( 'formstead_limits', $defaults );
 		if ( ! is_array( $filtered ) ) {
@@ -111,6 +145,8 @@ final class Limits {
 			'max_fields'        => self::clamp( $filtered['max_fields'] ?? $defaults['max_fields'], 1, self::CEILING_FIELDS, self::MAX_FIELDS ),
 			'rate_per_minute'   => self::clamp( $filtered['rate_per_minute'] ?? $defaults['rate_per_minute'], 1, self::CEILING_RATE_PER_MINUTE, self::RATE_PER_MINUTE ),
 			'rate_per_hour'     => self::clamp( $filtered['rate_per_hour'] ?? $defaults['rate_per_hour'], 1, self::CEILING_RATE_PER_HOUR, self::RATE_PER_HOUR ),
+			'min_fill_ms'       => self::clamp( $filtered['min_fill_ms'] ?? $defaults['min_fill_ms'], 0, self::CEILING_MIN_FILL_MS, self::MIN_FILL_MS ),
+			'duplicate_window'  => self::clamp( $filtered['duplicate_window'] ?? $defaults['duplicate_window'], 0, self::CEILING_DUPLICATE_WINDOW, self::DUPLICATE_WINDOW ),
 		);
 	}
 

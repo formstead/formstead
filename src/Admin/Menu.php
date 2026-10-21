@@ -8,6 +8,7 @@
 namespace Formstead\Admin;
 
 use Formstead\Security\Capabilities;
+use Formstead\Submissions\UnreadCounter;
 
 /**
  * Registers the Formstead menu.
@@ -32,15 +33,29 @@ final class Menu {
 	 * Add the inbox and forms screens.
 	 */
 	public static function add_pages(): void {
-		add_menu_page(
+		$unread = UnreadCounter::count();
+		$title  = __( 'Formstead', 'formstead' );
+		if ( $unread > 0 ) {
+			$title .= sprintf(
+				' <span class="awaiting-mod count-%1$d"><span class="pending-count">%2$s</span></span>',
+				$unread,
+				number_format_i18n( $unread )
+			);
+		}
+
+		$inbox_hook = add_menu_page(
 			__( 'Formstead', 'formstead' ),
-			__( 'Formstead', 'formstead' ),
+			$title,
 			Capabilities::READ_SUBMISSIONS,
 			self::MENU_SLUG,
 			array( SubmissionsPage::class, 'render' ),
 			'dashicons-feedback',
 			26
 		);
+
+		if ( is_string( $inbox_hook ) ) {
+			add_action( 'load-' . $inbox_hook, array( SubmissionsPage::class, 'handle_load' ) );
+		}
 
 		$forms_hook = add_submenu_page(
 			self::MENU_SLUG,

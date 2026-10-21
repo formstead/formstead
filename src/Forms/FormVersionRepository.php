@@ -85,6 +85,45 @@ final class FormVersionRepository {
 	}
 
 	/**
+	 * Snapshots for one form, newest version first.
+	 *
+	 * @param int $form_id Form id.
+	 * @return FormVersion[]
+	 */
+	public function for_form( int $form_id ): array {
+		global $wpdb;
+
+		if ( $form_id < 1 ) {
+			return array();
+		}
+
+		$table = Schema::form_versions_table();
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, form_id, version, fields, created_at FROM {$table} WHERE form_id = %d ORDER BY version DESC",
+				$form_id
+			),
+			ARRAY_A
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( ! is_array( $rows ) ) {
+			return array();
+		}
+
+		$versions = array();
+		foreach ( $rows as $row ) {
+			$version = $this->hydrate( is_array( $row ) ? $row : null );
+			if ( $version instanceof FormVersion ) {
+				$versions[] = $version;
+			}
+		}
+
+		return $versions;
+	}
+
+	/**
 	 * Remove a snapshot that was inserted but never published.
 	 *
 	 * @param int $form_id Form id.

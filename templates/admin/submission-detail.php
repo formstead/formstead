@@ -8,11 +8,15 @@
  * @var Form|null                                                    $form       Current form, or null.
  * @var array<int, array{label: string, value: string, multiline: bool, items: list<string>}> $rows Fields to show.
  * @var array<int, array{channel: string, status: string, attempts: string, last_error: string, next_attempt_at: string}> $deliveries Email deliveries.
+ * @var list<array{action: string, label: string}> $actions    Status actions.
+ * @var bool                                        $can_delete Whether the user can delete.
+ * @var string                                      $notice     Result of the previous action.
  */
 
 use Formstead\Admin\Menu;
 use Formstead\Forms\Form;
 use Formstead\Submissions\Submission;
+use Formstead\Submissions\SubmissionStatus;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -20,11 +24,19 @@ $submission = isset( $submission ) && $submission instanceof Submission ? $submi
 $form       = isset( $form ) && $form instanceof Form ? $form : null;
 $rows       = isset( $rows ) && is_array( $rows ) ? $rows : array();
 $deliveries = isset( $deliveries ) && is_array( $deliveries ) ? $deliveries : array();
+$actions    = isset( $actions ) && is_array( $actions ) ? $actions : array();
+$can_delete = isset( $can_delete ) && $can_delete;
+$notice     = isset( $notice ) ? (string) $notice : '';
+$confirm    = 'return confirm(' . wp_json_encode( __( 'Delete this submission permanently?', 'formstead' ) ) . ');';
 $form_name  = $form instanceof Form ? $form->name() : '';
 ?>
 <div class="wrap">
 	<h1><?php echo esc_html__( 'Submission', 'formstead' ); ?></h1>
 	<p><a href="<?php echo esc_url( admin_url( 'admin.php?page=' . Menu::MENU_SLUG ) ); ?>"><?php echo esc_html__( 'Back to submissions', 'formstead' ); ?></a></p>
+
+	<?php if ( '' !== $notice ) : ?>
+		<div class="notice notice-success is-dismissible"><p><?php echo esc_html( $notice ); ?></p></div>
+	<?php endif; ?>
 
 	<?php if ( ! $submission instanceof Submission ) : ?>
 		<p><?php echo esc_html__( 'This submission could not be found.', 'formstead' ); ?></p>
@@ -34,7 +46,26 @@ $form_name  = $form instanceof Form ? $form->name() : '';
 			<?php if ( '' !== $form_name ) : ?>
 				<?php echo esc_html( ' — ' . $form_name ); ?>
 			<?php endif; ?>
+			<?php echo esc_html( ' — ' . SubmissionStatus::label( $submission->status() ) ); ?>
 		</p>
+		<form method="post">
+			<?php wp_nonce_field( 'formstead_submission_' . $submission->id() ); ?>
+			<input type="hidden" name="formstead_single" value="1">
+			<input type="hidden" name="submission_id" value="<?php echo esc_attr( (string) $submission->id() ); ?>">
+			<?php foreach ( $actions as $formstead_action ) : ?>
+				<?php
+				if ( ! is_array( $formstead_action ) ) {
+					continue;
+				}
+				$action_name  = isset( $formstead_action['action'] ) ? (string) $formstead_action['action'] : '';
+				$action_label = isset( $formstead_action['label'] ) ? (string) $formstead_action['label'] : '';
+				?>
+				<button type="submit" class="button" name="formstead_action" value="<?php echo esc_attr( $action_name ); ?>"><?php echo esc_html( $action_label ); ?></button>
+			<?php endforeach; ?>
+			<?php if ( $can_delete ) : ?>
+				<button type="submit" class="button button-link-delete" name="formstead_action" value="delete" onclick="<?php echo esc_attr( $confirm ); ?>"><?php echo esc_html__( 'Delete permanently', 'formstead' ); ?></button>
+			<?php endif; ?>
+		</form>
 		<h2><?php echo esc_html__( 'Email', 'formstead' ); ?></h2>
 		<?php if ( array() === $deliveries ) : ?>
 			<p><?php echo esc_html__( 'No email was queued for this submission.', 'formstead' ); ?></p>

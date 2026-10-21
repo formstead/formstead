@@ -70,9 +70,9 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An administrator sees the row, and opening it leaves the status alone.
+	 * An administrator sees the row, and opening a new submission marks it read.
 	 */
-	public function test_administrator_sees_a_submission_without_changing_its_status(): void {
+	public function test_administrator_sees_a_submission_and_opening_it_marks_it_read(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$submission_id = $this->store_submission( "Line one\nLine two" );
 		$repository    = new SubmissionRepository();
@@ -86,10 +86,31 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 		$this->assertStringContainsString( 'Note', $html );
 		$this->assertStringContainsString( 'Line one<br', $html );
 		$this->assertStringContainsString( 'Line two', $html );
+		$this->assertStringContainsString( 'Mark as unread', $html );
 
 		$loaded = $repository->find( $submission_id );
 		$this->assertNotNull( $loaded );
-		$this->assertSame( 'new', $loaded->status() );
+		$this->assertSame( 'read', $loaded->status() );
+	}
+
+	/**
+	 * Opening spam or an archived submission does not move it back to the inbox.
+	 */
+	public function test_opening_spam_or_archived_submission_keeps_its_status(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$repository = new SubmissionRepository();
+
+		foreach ( array( 'spam', 'archived' ) as $status ) {
+			$submission_id = $this->store_submission( $status . '-value' );
+			$this->assertSame( 1, $repository->set_status( array( $submission_id ), $status ) );
+
+			$_GET = array( 'submission' => (string) $submission_id );
+			$this->render();
+
+			$loaded = $repository->find( $submission_id );
+			$this->assertNotNull( $loaded );
+			$this->assertSame( $status, $loaded->status() );
+		}
 	}
 
 	/**
@@ -137,6 +158,35 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 		$html = $this->render();
 		$this->assertStringContainsString( 'Message', $html );
 		$this->assertStringContainsString( 'after-the-change', $html );
+	}
+
+	/**
+	 * View links are on the list, and their counts follow the form filter.
+	 */
+	public function test_list_shows_view_links_with_counts_for_the_filtered_form(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$first  = $this->save_form( 'First', 'note', 'Note', FieldType::Text, false );
+		$second = $this->save_form( 'Second', 'note', 'Note', FieldType::Text, false );
+		$repo   = new SubmissionRepository();
+
+		$visible = $repo->insert( $first, array( 'note' => 'visible-new' ) );
+		$spam    = $repo->insert( $first, array( 'note' => 'visible-spam' ) );
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $visible );
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $spam );
+		$this->assertSame( 1, $repo->set_status( array( $spam->id() ), 'spam' ) );
+		for ( $index = 0; $index < 4; $index++ ) {
+			$saved = $repo->insert( $second, array( 'note' => 'other-' . $index ) );
+			$this->assertNotInstanceOf( \WP_Error::class, $saved );
+		}
+
+		$_GET = array( 'form_id' => (string) $first->id() );
+		$html = $this->render();
+
+		$this->assertMatchesRegularExpression( '/inbox_view=unread[^"]*"[^>]*>Unread <span class="count">\\(1\\)<\\/span>/', $html );
+		$this->assertMatchesRegularExpression( '/inbox_view=archived[^"]*"[^>]*>Archived <span class="count">\\(0\\)<\\/span>/', $html );
+		$this->assertMatchesRegularExpression( '/inbox_view=spam[^"]*"[^>]*>Spam <span class="count">\\(1\\)<\\/span>/', $html );
+		$this->assertMatchesRegularExpression( '/inbox_view=all[^"]*"[^>]*>All <span class="count">\\(2\\)<\\/span>/', $html );
+		$this->assertStringNotContainsString( 'other-0', $html );
 	}
 
 	/**
@@ -264,6 +314,10 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 				$this->assertStringContainsString( 'not allowed', $exception->getMessage() );
 			}
 		}
+
+		$loaded = ( new SubmissionRepository() )->find( $submission_id );
+		$this->assertNotNull( $loaded );
+		$this->assertSame( 'new', $loaded->status() );
 	}
 
 	/**

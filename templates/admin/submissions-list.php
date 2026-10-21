@@ -4,27 +4,43 @@
  *
  * @package Formstead
  *
- * @var Form[]                                                                 $forms      Forms for the filter.
- * @var int                                                                    $form_id    Selected form id, or zero.
- * @var array<int, array{url: string, created_at: string, form_name: string, excerpt: string}> $rows List rows.
- * @var string                                                                 $pagination Pagination markup from paginate_links().
+ * @var Form[]           $forms  Forms for the filter.
+ * @var SubmissionQuery  $query  Active filters.
+ * @var SubmissionsTable $table      Inbox table.
+ * @var string           $export_url Export URL, or empty when export is unavailable.
+ * @var string           $notice     Result of the previous action.
  */
 
 use Formstead\Admin\Menu;
+use Formstead\Admin\SubmissionsTable;
 use Formstead\Forms\Form;
+use Formstead\Submissions\SubmissionQuery;
 
 defined( 'ABSPATH' ) || exit;
 
 $forms      = isset( $forms ) && is_array( $forms ) ? $forms : array();
-$form_id    = isset( $form_id ) ? (int) $form_id : 0;
-$rows       = isset( $rows ) && is_array( $rows ) ? $rows : array();
-$pagination = isset( $pagination ) ? (string) $pagination : '';
+$query      = isset( $query ) && $query instanceof SubmissionQuery ? $query : SubmissionQuery::from_values( 0, '', '', '' );
+$table      = isset( $table ) && $table instanceof SubmissionsTable ? $table : null;
+$export_url = isset( $export_url ) ? (string) $export_url : '';
+$notice     = isset( $notice ) ? (string) $notice : '';
+$form_id    = (int) $query->form_id();
+$date_from  = $query->date_from() ?? '';
+$date_to    = $query->date_to() ?? '';
 ?>
 <div class="wrap">
-	<h1><?php echo esc_html__( 'Submissions', 'formstead' ); ?></h1>
+	<h1 class="wp-heading-inline"><?php echo esc_html__( 'Submissions', 'formstead' ); ?></h1>
+	<?php if ( '' !== $export_url ) : ?>
+		<a href="<?php echo esc_url( $export_url ); ?>" class="page-title-action"><?php echo esc_html__( 'Export CSV', 'formstead' ); ?></a>
+	<?php endif; ?>
+	<hr class="wp-header-end">
+
+	<?php if ( '' !== $notice ) : ?>
+		<div class="notice notice-success is-dismissible"><p><?php echo esc_html( $notice ); ?></p></div>
+	<?php endif; ?>
 
 	<form method="get">
 		<input type="hidden" name="page" value="<?php echo esc_attr( Menu::MENU_SLUG ); ?>">
+		<input type="hidden" name="inbox_view" value="<?php echo esc_attr( $query->view() ); ?>">
 		<label for="formstead-form-filter"><?php echo esc_html__( 'Form', 'formstead' ); ?></label>
 		<select id="formstead-form-filter" name="form_id">
 			<option value="0"><?php echo esc_html__( 'All forms', 'formstead' ); ?></option>
@@ -37,41 +53,17 @@ $pagination = isset( $pagination ) ? (string) $pagination : '';
 				</option>
 			<?php endforeach; ?>
 		</select>
+		<label for="formstead-date-from"><?php echo esc_html__( 'From', 'formstead' ); ?></label>
+		<input type="date" id="formstead-date-from" name="date_from" value="<?php echo esc_attr( $date_from ); ?>">
+		<label for="formstead-date-to"><?php echo esc_html__( 'To', 'formstead' ); ?></label>
+		<input type="date" id="formstead-date-to" name="date_to" value="<?php echo esc_attr( $date_to ); ?>">
 		<?php submit_button( __( 'Filter', 'formstead' ), 'secondary', '', false ); ?>
 	</form>
 
-	<?php if ( array() === $rows ) : ?>
-		<p><?php echo esc_html__( 'No submissions yet.', 'formstead' ); ?></p>
-	<?php else : ?>
-		<table class="widefat striped">
-			<thead>
-				<tr>
-					<th scope="col"><?php echo esc_html__( 'Date', 'formstead' ); ?></th>
-					<th scope="col"><?php echo esc_html__( 'Form', 'formstead' ); ?></th>
-					<th scope="col"><?php echo esc_html__( 'Submission', 'formstead' ); ?></th>
-				</tr>
-			</thead>
-			<tbody>
-				<?php foreach ( $rows as $row ) : ?>
-					<?php
-					if ( ! is_array( $row ) ) {
-						continue;
-					}
-					$row_url     = isset( $row['url'] ) ? (string) $row['url'] : '';
-					$created_at  = isset( $row['created_at'] ) ? (string) $row['created_at'] : '';
-					$form_name   = isset( $row['form_name'] ) ? (string) $row['form_name'] : '';
-					$row_excerpt = isset( $row['excerpt'] ) ? (string) $row['excerpt'] : '';
-					?>
-					<tr>
-						<td><a href="<?php echo esc_url( $row_url ); ?>"><?php echo esc_html( $created_at ); ?></a></td>
-						<td><?php echo esc_html( $form_name ); ?></td>
-						<td><?php echo esc_html( $row_excerpt ); ?></td>
-					</tr>
-				<?php endforeach; ?>
-			</tbody>
-		</table>
-		<?php if ( '' !== $pagination ) : ?>
-			<div class="tablenav"><div class="tablenav-pages"><?php echo wp_kses_post( $pagination ); ?></div></div>
-		<?php endif; ?>
+	<?php if ( $table instanceof SubmissionsTable ) : ?>
+		<?php $table->views(); ?>
+		<form method="post">
+			<?php $table->display(); ?>
+		</form>
 	<?php endif; ?>
 </div>

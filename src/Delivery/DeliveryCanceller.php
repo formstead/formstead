@@ -24,8 +24,9 @@ final class DeliveryCanceller {
 	 * Handed-off and already finished rows are left as they are.
 	 *
 	 * @param int[] $submission_ids Submission ids.
+	 * @return bool False when the update query fails.
 	 */
-	public function cancel_for_submissions( array $submission_ids ): void {
+	public function cancel_for_submissions( array $submission_ids ): bool {
 		global $wpdb;
 
 		$ids = array();
@@ -35,7 +36,7 @@ final class DeliveryCanceller {
 			}
 		}
 		if ( array() === $ids ) {
-			return;
+			return true;
 		}
 
 		$table        = Schema::deliveries_table();
@@ -45,12 +46,14 @@ final class DeliveryCanceller {
 			$ids
 		);
 
-		$wpdb->query(
+		$updated = $wpdb->query(
 			// phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the IN list is unpacked.
 			$wpdb->prepare(
 				"UPDATE {$table} SET status = %s, locked_until = NULL, lock_token = NULL, last_error = %s, updated_at = %s WHERE status IN ( %s, %s ) AND submission_id IN ( {$placeholders} )",
 				...$values
 			)
 		);
+
+		return false !== $updated;
 	}
 }

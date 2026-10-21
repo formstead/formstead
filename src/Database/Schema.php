@@ -1,6 +1,6 @@
 <?php
 /**
- * Database schema version 4.
+ * Database schema version 5.
  *
  * @package Formstead
  */
@@ -15,7 +15,7 @@ namespace Formstead\Database;
  */
 final class Schema {
 
-	public const VERSION = 4;
+	public const VERSION = 5;
 
 	public const VERSION_OPTION = 'formstead_db_version';
 
@@ -149,9 +149,13 @@ final class Schema {
 				payload longtext NOT NULL,
 				status varchar(20) NOT NULL DEFAULT 'new',
 				created_at datetime NOT NULL,
+				content_hash char(64) DEFAULT NULL,
 				PRIMARY KEY  (id),
 				UNIQUE KEY receipt_id (receipt_id),
-				KEY form_status_created (form_id,status,created_at)
+				KEY form_status_created (form_id,status,created_at),
+				KEY form_created (form_id,created_at),
+				KEY status_created (status,created_at),
+				KEY form_content (form_id,content_hash,created_at)
 			) {$charset} ENGINE=InnoDB;",
 			"CREATE TABLE {$rate_limits} (
 				bucket char(64) NOT NULL,
@@ -169,7 +173,8 @@ final class Schema {
 				expires_at bigint(20) unsigned NOT NULL,
 				PRIMARY KEY  (id),
 				UNIQUE KEY form_key (form_id,key_hash),
-				KEY expires_at (expires_at)
+				KEY expires_at (expires_at),
+				KEY submission_id (submission_id)
 			) {$charset} ENGINE=InnoDB;",
 			"CREATE TABLE {$deliveries} (
 				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
