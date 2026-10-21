@@ -11,7 +11,9 @@ namespace Formstead\Tests\Admin;
 
 use Formstead\Admin\Menu;
 use Formstead\Admin\SettingsPage;
+use Formstead\Database\Migrator;
 use Formstead\Lifecycle\Uninstaller;
+use Formstead\Privacy\IdentityBackfill;
 use Formstead\Retention\RetentionRunner;
 use Formstead\Retention\RetentionScheduler;
 use Formstead\Security\Capabilities;
@@ -32,6 +34,8 @@ final class SettingsPageTest extends WP_UnitTestCase {
 		$_SERVER['REQUEST_METHOD'] = 'GET';
 		delete_option( RetentionRunner::REPORT_OPTION );
 		delete_option( Uninstaller::OPTION );
+		delete_option( Migrator::IDENTITY_BACKFILL_OPTION );
+		IdentityBackfill::clear();
 		RetentionScheduler::clear();
 		if ( function_exists( 'set_current_screen' ) ) {
 			set_current_screen( 'front' );
@@ -80,6 +84,29 @@ final class SettingsPageTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Submissions could not be deleted.', $html );
 		$this->assertStringNotContainsString( 'secret-body', $html );
 		$this->assertStringNotContainsString( 'system cron', $html );
+		$this->assertStringContainsString( 'Identity index', $html );
+		$this->assertStringContainsString( 'The identity index is up to date.', $html );
+	}
+
+	/**
+	 * A waiting backfill tells the reader which command finishes it.
+	 */
+	public function test_a_pending_identity_index_names_the_rebuild_command(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option(
+			Migrator::IDENTITY_BACKFILL_OPTION,
+			array(
+				'status'   => 'pending',
+				'after_id' => 12,
+				'until_id' => 40,
+			),
+			false
+		);
+
+		$html = $this->render();
+
+		$this->assertStringContainsString( 'submission 12 of 40', $html );
+		$this->assertStringContainsString( 'wp formstead identities rebuild', $html );
 	}
 
 	/**

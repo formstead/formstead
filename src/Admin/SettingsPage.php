@@ -8,6 +8,7 @@
 namespace Formstead\Admin;
 
 use Formstead\Lifecycle\Uninstaller;
+use Formstead\Privacy\IdentityBackfill;
 use Formstead\Retention\RetentionPeriods;
 use Formstead\Retention\RetentionRunner;
 use Formstead\Retention\RetentionScheduler;
@@ -78,14 +79,15 @@ final class SettingsPage {
 			);
 		}
 
-		$report          = self::report();
-		$overdue         = self::is_overdue();
-		$spam_days       = RetentionPeriods::spam_days();
-		$delivery_days   = RetentionPeriods::delivery_days();
-		$warning         = self::warning();
-		$next_run        = self::next_run();
-		$delete_data     = Uninstaller::enabled();
-		$can_delete_data = current_user_can( 'activate_plugins' );
+		$report           = self::report();
+		$overdue          = self::is_overdue();
+		$spam_days        = RetentionPeriods::spam_days();
+		$delivery_days    = RetentionPeriods::delivery_days();
+		$warning          = self::warning();
+		$next_run         = self::next_run();
+		$delete_data      = Uninstaller::enabled();
+		$identity_message = IdentityBackfill::message();
+		$can_delete_data  = current_user_can( 'activate_plugins' );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the screen query, not a submission.
 		$updated_flag = isset( $_GET['updated'] ) ? sanitize_text_field( wp_unslash( $_GET['updated'] ) ) : '';
 		$updated      = '1' === $updated_flag;

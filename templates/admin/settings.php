@@ -13,6 +13,7 @@
  * @var bool   $delete_data
  * @var bool   $can_delete_data
  * @var bool   $updated
+ * @var string $identity_message
  */
 
 use Formstead\Admin\Menu;
@@ -20,15 +21,16 @@ use Formstead\Admin\SettingsPage;
 
 defined( 'ABSPATH' ) || exit;
 
-$report          = isset( $report ) && is_array( $report ) ? $report : null;
-$overdue         = isset( $overdue ) && $overdue;
-$spam_days       = isset( $spam_days ) ? (int) $spam_days : 0;
-$delivery_days   = isset( $delivery_days ) ? (int) $delivery_days : 0;
-$warning         = isset( $warning ) ? (string) $warning : '';
-$next_run        = isset( $next_run ) ? (int) $next_run : 0;
-$delete_data     = isset( $delete_data ) && $delete_data;
-$can_delete_data = isset( $can_delete_data ) && $can_delete_data;
-$updated         = isset( $updated ) && $updated;
+$report           = isset( $report ) && is_array( $report ) ? $report : null;
+$overdue          = isset( $overdue ) && $overdue;
+$spam_days        = isset( $spam_days ) ? (int) $spam_days : 0;
+$delivery_days    = isset( $delivery_days ) ? (int) $delivery_days : 0;
+$warning          = isset( $warning ) ? (string) $warning : '';
+$next_run         = isset( $next_run ) ? (int) $next_run : 0;
+$delete_data      = isset( $delete_data ) && $delete_data;
+$can_delete_data  = isset( $can_delete_data ) && $can_delete_data;
+$updated          = isset( $updated ) && $updated;
+$identity_message = isset( $identity_message ) ? (string) $identity_message : '';
 ?>
 <div class="wrap">
 	<h1><?php echo esc_html__( 'Settings', 'formstead' ); ?></h1>
@@ -74,6 +76,9 @@ $updated         = isset( $updated ) && $updated;
 			</td>
 		</tr>
 	</table>
+
+	<h2><?php echo esc_html__( 'Identity index', 'formstead' ); ?></h2>
+	<p><?php echo esc_html( $identity_message ); ?></p>
 
 	<h2><?php echo esc_html__( 'Last run', 'formstead' ); ?></h2>
 	<?php if ( null === $report || $report['finished_at'] < 1 ) : ?>
