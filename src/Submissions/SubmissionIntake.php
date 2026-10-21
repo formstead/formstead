@@ -33,23 +33,36 @@ final class SubmissionIntake {
 	 * @param bool                                    $too_fast Whether the fill-time signal says this is spam.
 	 */
 	public function accept( Form $form, array $values, ?IdempotencyKey $key, bool $too_fast = false ): IntakeResult {
-		$result = Transaction::run(
-			function () use ( $form, $values, $key, $too_fast ) {
-				return $this->store( $form, $values, $key, $too_fast );
+		$result = IntakeResult::failed();
+		for ( $attempt = 0; $attempt < 5; $attempt++ ) {
+			$stored = Transaction::run(
+				function () use ( $form, $values, $key, $too_fast ) {
+					return $this->store( $form, $values, $key, $too_fast );
+				}
+			);
+
+			if ( ! $stored instanceof IntakeResult ) {
+				$result = IntakeResult::failed();
+				break;
 			}
-		);
+
+			$result = $stored;
+			if ( ! $result->is_contended() ) {
+				break;
+			}
+		}
 
 		( new IdempotencyRepository() )->maybe_prune( time() );
 
-		if ( $result instanceof IntakeResult ) {
-			if ( $result->is_accepted() && is_int( $result->delivery_id() ) ) {
-				Scheduler::schedule( $result->delivery_id() );
-			}
-
-			return $result;
+		if ( $result->is_contended() ) {
+			return IntakeResult::failed();
 		}
 
-		return IntakeResult::failed();
+		if ( $result->is_accepted() && is_int( $result->delivery_id() ) ) {
+			Scheduler::schedule( $result->delivery_id() );
+		}
+
+		return $result;
 	}
 
 	/**
@@ -73,6 +86,9 @@ final class SubmissionIntake {
 		$claim = null;
 		if ( $key instanceof IdempotencyKey ) {
 			$claim = $keys->claim( $form->id(), $key->hash(), $body_hash );
+			if ( $claim->is_contended() ) {
+				return new Rollback( IntakeResult::contended() );
+			}
 			if ( $claim->is_failed() ) {
 				return new WP_Error(
 					'formstead_submission_save_failed',
@@ -89,6 +105,9 @@ final class SubmissionIntake {
 				}
 
 				$claim = $keys->reopen( $form->id(), $key->hash(), $body_hash );
+				if ( $claim->is_contended() ) {
+					return new Rollback( IntakeResult::contended() );
+				}
 				if ( ! $claim->is_inserted() ) {
 					return new WP_Error(
 						'formstead_submission_save_failed',

@@ -37,7 +37,7 @@ If 8025 or 1025 is already in use, set `FORMSTEAD_MAILPIT_UI_PORT` and `FORMSTEA
 
 `npm run check` is a fast local check before you push. It runs PHPUnit, PHPCS, PHPStan, and Plugin Check inside `wp-env`. Plugin Check skips development paths that `.distignore` keeps out of the ZIP.
 
-GitHub Actions runs those checks and a separate `package` job that builds the ZIP and installs it on a clean WordPress. Merge only after both `checks` and `package` are green on the pull request.
+GitHub Actions runs those checks, a Playwright `e2e` job, and a separate `package` job that builds the ZIP and installs it on a clean WordPress. Merge only after `checks`, `package`, and `e2e` are green on the pull request.
 
 Branch protection is unavailable on this private repository, so apply that rule by hand. Do not push directly to `main`, including fixes to CI.
 
@@ -62,12 +62,24 @@ npm run composer -- install
 
 PHPUnit must run in `tests-cli`. The `cli` container shares the development database, and the WordPress test installer drops that database.
 
+## Browser tests
+
+Playwright uses the wp-env tests site at http://localhost:8889. `npm test` reinstalls that site and deactivates plugins, so run setup again before the browser tests. The development site on port 8888 is left alone.
+
+```sh
+npx wp-env start
+npm run e2e:setup
+npm run e2e
+```
+
+`npx wp-env start` is required after `.wp-env.json` changes so the tests site defines `FORMSTEAD_E2E`. Tests that read mail also need `npm run mail:up`. Mailpit joins both the development and the tests Docker networks.
+
 ## Pull requests
 
 - One topic per pull request and per commit.
 - Open against `main`.
 - Link the GitHub issue with `Closes #n`.
-- Merge only after the `checks` and `package` jobs are green. Do not push the branch to `main` directly.
+- Merge only after the `checks`, `package`, and `e2e` jobs are green. Do not push the branch to `main` directly.
 - Do not add domain logic in a scaffolding change, and do not mix refactors with behaviour changes.
 
 ## Commits

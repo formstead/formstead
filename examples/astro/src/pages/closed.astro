@@ -1,0 +1,14 @@
+---
+import Base from '../layouts/Base.astro';
+import ContactForm from '../components/ContactForm.astro';
+
+const endpoint = import.meta.env.PUBLIC_FORMSTEAD_CLOSED_ENDPOINT;
+if (!endpoint) {
+	throw new Error('Set PUBLIC_FORMSTEAD_CLOSED_ENDPOINT to a form that does not allow this origin.');
+}
+---
+
+<Base title="Contact">
+	<h1>Contact</h1>
+	<ContactForm endpoint={endpoint} enhance />
+</Base>

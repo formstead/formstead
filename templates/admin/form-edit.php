@@ -251,19 +251,19 @@ $next_index       = count( $rows );
 					?>
 					<tr data-field-row>
 						<td>
-							<input name="fields[<?php echo esc_attr( (string) $index ); ?>][name]" type="text" value="<?php echo esc_attr( $row_name ); ?>" class="code" pattern="[a-z][a-z0-9_]{0,63}" autocomplete="off">
+							<input name="fields[<?php echo esc_attr( (string) $index ); ?>][name]" type="text" value="<?php echo esc_attr( $row_name ); ?>" class="code" pattern="[a-z][a-z0-9_]{0,63}" autocomplete="off" aria-label="<?php echo esc_attr__( 'Name', 'formstead' ); ?>">
 							<?php if ( isset( $errors[ $prefix . '.name' ] ) ) : ?>
 								<p class="description"><?php echo esc_html( $errors[ $prefix . '.name' ] ); ?></p>
 							<?php endif; ?>
 						</td>
 						<td>
-							<input name="fields[<?php echo esc_attr( (string) $index ); ?>][label]" type="text" value="<?php echo esc_attr( $row_label ); ?>">
+							<input name="fields[<?php echo esc_attr( (string) $index ); ?>][label]" type="text" value="<?php echo esc_attr( $row_label ); ?>" aria-label="<?php echo esc_attr__( 'Label', 'formstead' ); ?>">
 							<?php if ( isset( $errors[ $prefix . '.label' ] ) ) : ?>
 								<p class="description"><?php echo esc_html( $errors[ $prefix . '.label' ] ); ?></p>
 							<?php endif; ?>
 						</td>
 						<td>
-							<select name="fields[<?php echo esc_attr( (string) $index ); ?>][type]" data-field-type>
+							<select name="fields[<?php echo esc_attr( (string) $index ); ?>][type]" data-field-type aria-label="<?php echo esc_attr__( 'Type', 'formstead' ); ?>">
 								<option value=""><?php echo esc_html__( 'Select', 'formstead' ); ?></option>
 								<?php foreach ( FieldType::cases() as $type ) : ?>
 									<option value="<?php echo esc_attr( $type->value ); ?>" <?php selected( $row_type, $type->value ); ?>>
@@ -276,10 +276,10 @@ $next_index       = count( $rows );
 							<?php endif; ?>
 						</td>
 						<td>
-							<input name="fields[<?php echo esc_attr( (string) $index ); ?>][required]" type="checkbox" value="1" <?php checked( $required ); ?>>
+							<input name="fields[<?php echo esc_attr( (string) $index ); ?>][required]" type="checkbox" value="1" <?php checked( $required ); ?> aria-label="<?php echo esc_attr__( 'Required', 'formstead' ); ?>">
 						</td>
 						<td>
-							<input name="fields[<?php echo esc_attr( (string) $index ); ?>][max_length]" type="number" min="1" max="10000" value="<?php echo esc_attr( $row_max ); ?>" class="small-text">
+							<input name="fields[<?php echo esc_attr( (string) $index ); ?>][max_length]" type="number" min="1" max="10000" value="<?php echo esc_attr( $row_max ); ?>" class="small-text" aria-label="<?php echo esc_attr__( 'Max length', 'formstead' ); ?>">
 							<?php if ( isset( $errors[ $prefix . '.max_length' ] ) ) : ?>
 								<p class="description"><?php echo esc_html( $errors[ $prefix . '.max_length' ] ); ?></p>
 							<?php endif; ?>
@@ -309,7 +309,7 @@ $next_index       = count( $rows );
 								<?php endif; ?>
 							</div>
 							<div data-settings-for="choice">
-								<textarea name="fields[<?php echo esc_attr( (string) $index ); ?>][options]" rows="4" class="large-text code"><?php echo esc_textarea( $row_options ); ?></textarea>
+								<textarea name="fields[<?php echo esc_attr( (string) $index ); ?>][options]" rows="4" class="large-text code" aria-label="<?php echo esc_attr__( 'Options', 'formstead' ); ?>"><?php echo esc_textarea( $row_options ); ?></textarea>
 								<p class="description"><?php echo esc_html__( 'One option per line, as value|Label. A missing label uses the value.', 'formstead' ); ?></p>
 								<label>
 									<input name="fields[<?php echo esc_attr( (string) $index ); ?>][multiple]" type="checkbox" value="1" <?php checked( $row_multiple ); ?>>
@@ -338,18 +338,18 @@ $next_index       = count( $rows );
 
 		<template id="formstead-field-template">
 			<tr data-field-row>
-				<td><input name="fields[__INDEX__][name]" type="text" value="" class="code" pattern="[a-z][a-z0-9_]{0,63}" autocomplete="off"></td>
-				<td><input name="fields[__INDEX__][label]" type="text" value=""></td>
+				<td><input name="fields[__INDEX__][name]" type="text" value="" class="code" pattern="[a-z][a-z0-9_]{0,63}" autocomplete="off" aria-label="<?php echo esc_attr__( 'Name', 'formstead' ); ?>"></td>
+				<td><input name="fields[__INDEX__][label]" type="text" value="" aria-label="<?php echo esc_attr__( 'Label', 'formstead' ); ?>"></td>
 				<td>
-					<select name="fields[__INDEX__][type]" data-field-type>
+					<select name="fields[__INDEX__][type]" data-field-type aria-label="<?php echo esc_attr__( 'Type', 'formstead' ); ?>">
 						<option value=""><?php echo esc_html__( 'Select', 'formstead' ); ?></option>
 						<?php foreach ( FieldType::cases() as $type ) : ?>
 							<option value="<?php echo esc_attr( $type->value ); ?>"><?php echo esc_html( FormsPage::type_label( $type->value ) ); ?></option>
 						<?php endforeach; ?>
 					</select>
 				</td>
-				<td><input name="fields[__INDEX__][required]" type="checkbox" value="1"></td>
-				<td><input name="fields[__INDEX__][max_length]" type="number" min="1" max="10000" value="" class="small-text"></td>
+				<td><input name="fields[__INDEX__][required]" type="checkbox" value="1" aria-label="<?php echo esc_attr__( 'Required', 'formstead' ); ?>"></td>
+				<td><input name="fields[__INDEX__][max_length]" type="number" min="1" max="10000" value="" class="small-text" aria-label="<?php echo esc_attr__( 'Max length', 'formstead' ); ?>"></td>
 				<td>
 					<div data-settings-for="number">
 						<label><?php echo esc_html__( 'Min', 'formstead' ); ?> <input name="fields[__INDEX__][min]" type="text" value="" class="small-text"></label>
@@ -357,7 +357,7 @@ $next_index       = count( $rows );
 						<label><?php echo esc_html__( 'Decimal places', 'formstead' ); ?> <input name="fields[__INDEX__][scale]" type="number" min="0" max="6" value="" class="small-text"></label>
 					</div>
 					<div data-settings-for="choice">
-						<textarea name="fields[__INDEX__][options]" rows="4" class="large-text code"></textarea>
+						<textarea name="fields[__INDEX__][options]" rows="4" class="large-text code" aria-label="<?php echo esc_attr__( 'Options', 'formstead' ); ?>"></textarea>
 						<label><input name="fields[__INDEX__][multiple]" type="checkbox" value="1"> <?php echo esc_html__( 'Allow more than one', 'formstead' ); ?></label>
 					</div>
 				</td>

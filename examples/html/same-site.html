@@ -1,0 +1,24 @@
+<form method="post" action="__FORMSTEAD_ENDPOINT__">
+	<p>
+		<label for="formstead-email">Email</label><br>
+		<input id="formstead-email" name="email" type="email" autocomplete="email">
+	</p>
+	<p>
+		<label for="formstead-message">Message</label><br>
+		<textarea id="formstead-message" name="message"></textarea>
+	</p>
+	<div class="formstead-honeypot" aria-hidden="true">
+		<label for="formstead-honeypot">Company</label>
+		<input id="formstead-honeypot" name="_fs_honeypot" type="text" tabindex="-1" autocomplete="off">
+	</div>
+	<button type="submit">Send</button>
+</form>
+<style>
+	.formstead-honeypot {
+		position: absolute;
+		left: -10000px;
+		height: 1px;
+		width: 1px;
+		overflow: hidden;
+	}
+</style>

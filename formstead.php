@@ -11,7 +11,7 @@
  * Plugin Name:       Formstead
  * Plugin URI:        https://formstead.dev
  * Description:       Receive form submissions from static and headless sites on an existing WordPress install.
- * Version:           0.6.1
+ * Version:           0.7.1
  * Requires at least: 7.0
  * Requires PHP:      8.3
  * Author:            Formstead
@@ -24,7 +24,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FORMSTEAD_VERSION', '0.6.1' );
+define( 'FORMSTEAD_VERSION', '0.7.1' );
 define( 'FORMSTEAD_FILE', __FILE__ );
 define( 'FORMSTEAD_MIN_PHP', '8.3' );
 define( 'FORMSTEAD_MIN_WP', '7.0' );
