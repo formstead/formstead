@@ -65,6 +65,44 @@ final class FormRepository {
 	}
 
 	/**
+	 * Forms that delete submissions after a number of days.
+	 *
+	 * A period of zero is omitted. Those submissions stay until someone deletes them.
+	 *
+	 * @return list<array{id: int, days: int}>
+	 */
+	public function retention_periods(): array {
+		global $wpdb;
+
+		$table = Schema::forms_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, identifier.
+		$rows = $wpdb->get_results( "SELECT id, retention_days FROM {$table} WHERE retention_days > 0 ORDER BY id ASC", ARRAY_A );
+		if ( ! is_array( $rows ) ) {
+			return array();
+		}
+
+		$periods = array();
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$id   = (int) ( $row['id'] ?? 0 );
+			$days = (int) ( $row['retention_days'] ?? 0 );
+			if ( $id < 1 || $days < 1 ) {
+				continue;
+			}
+
+			$periods[] = array(
+				'id'   => $id,
+				'days' => $days,
+			);
+		}
+
+		return $periods;
+	}
+
+	/**
 	 * Insert a new form and assign its public id.
 	 *
 	 * The public id is generated here and is not taken from `$form`.
