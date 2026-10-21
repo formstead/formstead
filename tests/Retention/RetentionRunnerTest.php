@@ -288,6 +288,110 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A lock older than the TTL is taken over, including a plain timestamp from 0.6.0.
+	 */
+	public function test_a_stale_lock_is_taken_over(): void {
+		$now   = time();
+		$form  = $this->form( 1 );
+		$saved = $this->submission( $form );
+		$this->age( $saved->id(), $now - ( 2 * DAY_IN_SECONDS ) );
+		add_option( RetentionRunner::LOCK_OPTION, $now - RetentionRunner::LOCK_TTL - 1, '', false );
+
+		$report = ( new RetentionRunner() )->run( null, null, $now );
+
+		$this->assertIsArray( $report );
+		$this->assertSame( 1, $report['submissions'] );
+		$this->assertNull( ( new SubmissionRepository() )->find( $saved->id() ) );
+		$this->assertFalse( get_option( RetentionRunner::LOCK_OPTION ) );
+	}
+
+	/**
+	 * Replacing the lock during a batch leaves the new owner's lock in place.
+	 */
+	public function test_a_run_does_not_clear_a_lock_it_no_longer_holds(): void {
+		$now   = time();
+		$form  = $this->form( 1 );
+		$saved = $this->submission( $form );
+		$this->age( $saved->id(), $now - ( 2 * DAY_IN_SECONDS ) );
+
+		$stolen = false;
+		$filter = static function ( $query ) use ( &$stolen ) {
+			if ( $stolen || ! is_string( $query ) || ! str_contains( $query, 'DELETE FROM' ) || ! str_contains( $query, 'formstead_submissions' ) ) {
+				return $query;
+			}
+
+			$stolen = true;
+			update_option( RetentionRunner::LOCK_OPTION, 'foreign-token|' . time(), false );
+			return $query;
+		};
+		add_filter( 'query', $filter );
+
+		try {
+			$report = ( new RetentionRunner() )->run( null, null, $now );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+
+		$this->assertTrue( $stolen );
+		$this->assertIsArray( $report );
+		$lock = get_option( RetentionRunner::LOCK_OPTION );
+		$this->assertIsString( $lock );
+		$this->assertStringStartsWith( 'foreign-token|', $lock );
+	}
+
+	/**
+	 * Each batch moves the lock time forward so a long run keeps the lock.
+	 */
+	public function test_a_batch_refreshes_the_lock_time(): void {
+		$now   = time();
+		$form  = $this->form( 1 );
+		$saved = $this->submission( $form );
+		$this->age( $saved->id(), $now - ( 2 * DAY_IN_SECONDS ) );
+
+		$rewritten = false;
+		$on_added  = static function ( $name, $value ) use ( &$rewritten ): void {
+			if ( RetentionRunner::LOCK_OPTION !== $name || $rewritten || ! is_string( $value ) ) {
+				return;
+			}
+
+			$id = strstr( $value, '|', true );
+			if ( ! is_string( $id ) || '' === $id ) {
+				return;
+			}
+
+			$rewritten = true;
+			update_option( RetentionRunner::LOCK_OPTION, $id . '|' . ( time() - 100 ), false );
+		};
+		$pairs     = array();
+		$on_update = static function ( $old, $updated ) use ( &$pairs ): void {
+			$pairs[] = array( (string) $old, (string) $updated );
+		};
+		add_action( 'added_option', $on_added, 10, 2 );
+		add_action( 'update_option_' . RetentionRunner::LOCK_OPTION, $on_update, 10, 2 );
+
+		try {
+			$report = ( new RetentionRunner() )->run( null, null, $now );
+		} finally {
+			remove_action( 'added_option', $on_added, 10 );
+			remove_action( 'update_option_' . RetentionRunner::LOCK_OPTION, $on_update, 10 );
+		}
+
+		$this->assertIsArray( $report );
+		$this->assertNull( ( new SubmissionRepository() )->find( $saved->id() ) );
+		$refreshed = false;
+		foreach ( $pairs as $pair ) {
+			$old_id = strstr( $pair[0], '|', true );
+			$new_id = strstr( $pair[1], '|', true );
+			$old_at = (int) substr( $pair[0], (int) strrpos( $pair[0], '|' ) + 1 );
+			$new_at = (int) substr( $pair[1], (int) strrpos( $pair[1], '|' ) + 1 );
+			if ( is_string( $old_id ) && $old_id === $new_id && $new_at > $old_at ) {
+				$refreshed = true;
+			}
+		}
+		$this->assertTrue( $refreshed );
+	}
+
+	/**
 	 * Deactivation removes the retention event and the delivery events.
 	 */
 	public function test_deactivation_clears_the_retention_event(): void {

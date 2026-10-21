@@ -113,17 +113,18 @@ final class RetentionRunner {
 	public function run( ?int $batch_limit, ?int $deadline, ?int $now = null ): ?array {
 		$now     = $now ?? time();
 		$started = time();
-		if ( ! $this->acquire_lock( $started ) ) {
+		$token   = $this->acquire_lock( $started );
+		if ( null === $token ) {
 			return null;
 		}
 
 		try {
-			$report                  = $this->purge( $batch_limit, $deadline, $now, $started );
+			$report                  = $this->purge( $batch_limit, $deadline, $now, $started, $token );
 			$report['backlog_since'] = $this->backlog_since( $report['backlog'], $report['finished_at'] );
 			update_option( self::REPORT_OPTION, $report, false );
 			return $report;
 		} finally {
-			delete_option( self::LOCK_OPTION );
+			$this->release_lock( $token );
 		}
 	}
 
@@ -134,9 +135,10 @@ final class RetentionRunner {
 	 * @param int|null $deadline    Unix time at which to stop.
 	 * @param int      $now         Unix time used to decide what has expired.
 	 * @param int      $started     Wall-clock start of this run.
+	 * @param string   $token       Lock token owned by this run.
 	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, errors: list<string>}
 	 */
-	private function purge( ?int $batch_limit, ?int $deadline, int $now, int $started ): array {
+	private function purge( ?int $batch_limit, ?int $deadline, int $now, int $started, string $token ): array {
 		$submissions = 0;
 		$spam        = 0;
 		$deliveries  = 0;
@@ -147,7 +149,7 @@ final class RetentionRunner {
 		$stopped     = false;
 
 		foreach ( $this->forms->retention_periods() as $form ) {
-			$outcome      = $this->delete_batches( 'form', $form['id'], $this->before( $now, $form['days'] ), $batch_limit, $deadline, $batches );
+			$outcome      = $this->delete_batches( 'form', $form['id'], $this->before( $now, $form['days'] ), $batch_limit, $deadline, $batches, $token );
 			$submissions += $outcome['deleted'];
 			$batches      = $outcome['batches'];
 			$errors       = $this->merge_error( $errors, $outcome['error'] );
@@ -158,7 +160,7 @@ final class RetentionRunner {
 		}
 
 		if ( ! $stopped ) {
-			$outcome = $this->delete_batches( 'spam', 0, $this->before( $now, RetentionPeriods::spam_days() ), $batch_limit, $deadline, $batches );
+			$outcome = $this->delete_batches( 'spam', 0, $this->before( $now, RetentionPeriods::spam_days() ), $batch_limit, $deadline, $batches, $token );
 			$spam   += $outcome['deleted'];
 			$batches = $outcome['batches'];
 			$errors  = $this->merge_error( $errors, $outcome['error'] );
@@ -170,7 +172,8 @@ final class RetentionRunner {
 				fn (): int => $this->deliveries->delete_finished_before( $this->before( $now, RetentionPeriods::delivery_days() ), $this->batch_size ),
 				$batch_limit,
 				$deadline,
-				$batches
+				$batches,
+				$token
 			);
 			$deliveries = $outcome['deleted'];
 			$batches    = $outcome['batches'];
@@ -182,7 +185,8 @@ final class RetentionRunner {
 				fn (): int => $this->keys->prune_expired( $now, $this->batch_size ),
 				$batch_limit,
 				$deadline,
-				$batches
+				$batches,
+				$token
 			);
 			$keys    = $outcome['deleted'];
 			$batches = $outcome['batches'];
@@ -194,7 +198,8 @@ final class RetentionRunner {
 				fn (): int => $this->rates->prune_expired( $now, $this->batch_size ),
 				$batch_limit,
 				$deadline,
-				$batches
+				$batches,
+				$token
 			);
 			$rates   = $outcome['deleted'];
 			$batches = $outcome['batches'];
@@ -250,9 +255,10 @@ final class RetentionRunner {
 	 * @param int|null $batch_limit Maximum batches for the whole run.
 	 * @param int|null $deadline    Unix time at which to stop.
 	 * @param int      $batches     Batches already used.
+	 * @param string   $token       Lock token owned by this run.
 	 * @return array{deleted: int, batches: int, stopped: bool, error: string}
 	 */
-	private function delete_batches( string $kind, int $form_id, string $before, ?int $batch_limit, ?int $deadline, int $batches ): array {
+	private function delete_batches( string $kind, int $form_id, string $before, ?int $batch_limit, ?int $deadline, int $batches, string $token ): array {
 		$deleted = 0;
 
 		while ( $this->within_budget( $batches, $batch_limit, $deadline ) ) {
@@ -265,6 +271,7 @@ final class RetentionRunner {
 
 			$result = $this->deleter->delete( $ids );
 			++$batches;
+			$this->touch_lock( $token );
 			if ( $result instanceof WP_Error ) {
 				return array(
 					'deleted' => $deleted,
@@ -326,9 +333,10 @@ final class RetentionRunner {
 	 * @param int|null        $batch_limit Maximum batches for the whole run.
 	 * @param int|null        $deadline    Unix time at which to stop.
 	 * @param int             $batches     Batches already used.
+	 * @param string          $token       Lock token owned by this run.
 	 * @return array{deleted: int, batches: int, stopped: bool}
 	 */
-	private function drain( callable $batch, ?int $batch_limit, ?int $deadline, int $batches ): array {
+	private function drain( callable $batch, ?int $batch_limit, ?int $deadline, int $batches, string $token ): array {
 		$deleted = 0;
 
 		while ( $this->within_budget( $batches, $batch_limit, $deadline ) ) {
@@ -339,6 +347,7 @@ final class RetentionRunner {
 
 			$deleted += $rows;
 			++$batches;
+			$this->touch_lock( $token );
 			if ( $rows < $this->batch_size ) {
 				break;
 			}
@@ -399,19 +408,120 @@ final class RetentionRunner {
 	/**
 	 * Take the lock, or take over a lock older than LOCK_TTL.
 	 *
+	 * The stored value is this run's id and the time it last made progress.
+	 * A plain timestamp, written by 0.6.0, is still read as that time.
+	 * Null means a current lock belongs to another run.
+	 *
 	 * @param int $now Unix time.
 	 */
-	private function acquire_lock( int $now ): bool {
-		if ( add_option( self::LOCK_OPTION, $now, '', false ) ) {
-			return true;
+	private function acquire_lock( int $now ): ?string {
+		$token = $this->lock_token( wp_generate_uuid4(), $now );
+		if ( add_option( self::LOCK_OPTION, $token, '', false ) ) {
+			return $token;
 		}
 
-		$existing = get_option( self::LOCK_OPTION, 0 );
-		if ( is_numeric( $existing ) && ( $now - (int) $existing ) < self::LOCK_TTL ) {
-			return false;
+		$held = $this->lock_time( get_option( self::LOCK_OPTION, 0 ) );
+		if ( $held > 0 && ( $now - $held ) < self::LOCK_TTL ) {
+			return null;
 		}
 
 		delete_option( self::LOCK_OPTION );
-		return add_option( self::LOCK_OPTION, $now, '', false );
+		$token = $this->lock_token( wp_generate_uuid4(), $now );
+		if ( ! add_option( self::LOCK_OPTION, $token, '', false ) ) {
+			return null;
+		}
+
+		return $token;
+	}
+
+	/**
+	 * Move this run's lock time forward after a batch.
+	 *
+	 * A long command would otherwise lose the lock after LOCK_TTL and a second
+	 * run could start. A lock that no longer carries this id is left alone.
+	 *
+	 * @param string $token Lock token returned by acquire_lock().
+	 */
+	private function touch_lock( string $token ): void {
+		$current = get_option( self::LOCK_OPTION, '' );
+		if ( ! $this->owns_lock( $current, $token ) ) {
+			return;
+		}
+
+		update_option( self::LOCK_OPTION, $this->lock_token( $this->lock_id( $token ), time() ), false );
+	}
+
+	/**
+	 * Remove the lock when it still belongs to this run.
+	 *
+	 * @param string $token Lock token returned by acquire_lock().
+	 */
+	private function release_lock( string $token ): void {
+		$current = get_option( self::LOCK_OPTION, '' );
+		if ( $this->owns_lock( $current, $token ) ) {
+			delete_option( self::LOCK_OPTION );
+		}
+	}
+
+	/**
+	 * Whether the stored lock still carries this run's id.
+	 *
+	 * @param mixed  $current Value stored in the lock option.
+	 * @param string $token   Lock token returned by acquire_lock().
+	 */
+	private function owns_lock( mixed $current, string $token ): bool {
+		$id = $this->lock_id( $token );
+		if ( '' === $id || ! is_string( $current ) ) {
+			return false;
+		}
+
+		return str_starts_with( $current, $id . '|' );
+	}
+
+	/**
+	 * Id prefix of a lock token.
+	 *
+	 * @param string $token Lock token.
+	 */
+	private function lock_id( string $token ): string {
+		$id = strstr( $token, '|', true );
+		return is_string( $id ) ? $id : '';
+	}
+
+	/**
+	 * Unix time stored in a lock, or zero when the value has none.
+	 *
+	 * @param mixed $value Stored lock. A 0.6.0 lock is the time alone.
+	 */
+	private function lock_time( mixed $value ): int {
+		if ( is_int( $value ) || ( is_string( $value ) && is_numeric( $value ) ) ) {
+			return (int) $value;
+		}
+
+		if ( ! is_string( $value ) ) {
+			return 0;
+		}
+
+		$separator = strrpos( $value, '|' );
+		if ( false === $separator ) {
+			return 0;
+		}
+
+		$time = substr( $value, $separator + 1 );
+		if ( ! is_numeric( $time ) ) {
+			return 0;
+		}
+
+		return (int) $time;
+	}
+
+	/**
+	 * Lock value for one run at one moment.
+	 *
+	 * @param string $id Lock id.
+	 * @param int    $at Unix time.
+	 */
+	private function lock_token( string $id, int $at ): string {
+		return $id . '|' . $at;
 	}
 }
