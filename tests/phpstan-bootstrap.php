@@ -56,5 +56,24 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 		public static function warning( $message ): void {
 			unset( $message );
 		}
+
+		/**
+		 * Print a success line.
+		 *
+		 * @param string $message Message.
+		 */
+		public static function success( $message ): void {
+			unset( $message );
+		}
+
+		/**
+		 * Print an error and stop the process.
+		 *
+		 * @param string $message Message.
+		 * @param bool   $stop    Whether to stop the process. Kept for the real signature.
+		 */
+		public static function error( $message, $stop = true ): void {
+			unset( $message, $stop );
+		}
 	}
 }

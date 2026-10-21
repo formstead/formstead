@@ -39,18 +39,92 @@ final class RetentionCommand {
 	public function run( array $args, array $assoc_args ): void {
 		unset( $args );
 
-		$report = self::process( $assoc_args );
 		if ( ! class_exists( '\WP_CLI' ) ) {
+			self::process( $assoc_args );
 			return;
 		}
 
+		foreach ( self::messages( self::process( $assoc_args ) ) as $message ) {
+			self::emit( $message );
+		}
+	}
+
+	/**
+	 * Lines the command prints for a report.
+	 *
+	 * Null means another run holds the lock. An error is last, because WP-CLI
+	 * stops the process there and the system cron can see the failure.
+	 *
+	 * @param array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, backlog_since: int, errors: list<string>}|null $report Retention report.
+	 * @return list<array{level: string, text: string}>
+	 */
+	public static function messages( ?array $report ): array {
 		if ( null === $report ) {
-			\WP_CLI::warning( 'Retention is already running.' );
+			return array(
+				self::line( 'warning', 'Retention is already running.' ),
+			);
+		}
+
+		$lines = array(
+			self::line( 'log', sprintf( 'Deleted %d submissions.', $report['submissions'] ) ),
+			self::line( 'log', sprintf( 'Deleted %d spam.', $report['spam'] ) ),
+			self::line( 'log', sprintf( 'Deleted %d deliveries.', $report['deliveries'] ) ),
+			self::line( 'log', sprintf( 'Deleted %d idempotency keys.', $report['keys'] ) ),
+			self::line( 'log', sprintf( 'Deleted %d rate-limit counters.', $report['rate_limits'] ) ),
+		);
+
+		if ( $report['backlog'] ) {
+			$lines[] = self::line( 'warning', 'Expired rows are still waiting.' );
+		}
+
+		if ( array() !== $report['errors'] ) {
+			$lines[] = self::line( 'error', sprintf( 'Retention failed: %s', implode( ', ', $report['errors'] ) ) );
+			return $lines;
+		}
+
+		if ( ! $report['backlog'] ) {
+			$lines[] = self::line( 'success', 'Retention finished.' );
+		}
+
+		return $lines;
+	}
+
+	/**
+	 * Print one line at its level. An error stops the process.
+	 *
+	 * @param array{level: string, text: string} $message Level and text.
+	 */
+	private static function emit( array $message ): void {
+		if ( 'error' === $message['level'] ) {
+			\WP_CLI::error( $message['text'] );
 			return;
 		}
 
-		$deleted = (int) $report['submissions'] + (int) $report['spam'];
-		\WP_CLI::log( sprintf( 'Deleted %d submissions.', $deleted ) );
+		if ( 'warning' === $message['level'] ) {
+			\WP_CLI::warning( $message['text'] );
+			return;
+		}
+
+		if ( 'success' === $message['level'] ) {
+			\WP_CLI::success( $message['text'] );
+			return;
+		}
+
+		\WP_CLI::log( $message['text'] );
+	}
+
+	/**
+	 * One printed line.
+	 *
+	 * @param string $level `log`, `warning`, `success`, or `error`.
+	 * @param string $text  Message.
+	 * @return array{level: string, text: string}
+	 */
+	private static function line( string $level, string $text ): array {
+		return array(
+			'level' => $level,
+			'text'  => $text,
+		);
 	}
 
 	/**

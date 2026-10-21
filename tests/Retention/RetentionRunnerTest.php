@@ -288,6 +288,41 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A failed run is an error, and a backlog is a warning. Counts stay in the output.
+	 */
+	public function test_cli_messages_report_errors_and_a_backlog(): void {
+		$report = array(
+			'started_at'    => 1,
+			'finished_at'   => 2,
+			'submissions'   => 3,
+			'spam'          => 4,
+			'deliveries'    => 5,
+			'keys'          => 6,
+			'rate_limits'   => 7,
+			'backlog'       => false,
+			'backlog_since' => 0,
+			'errors'        => array( 'submission_delete_failed' ),
+		);
+
+		$failed = RetentionCommand::messages( $report );
+		$texts  = array_column( $failed, 'text' );
+		$this->assertContains( 'error', array_column( $failed, 'level' ) );
+		$this->assertContains( 'Deleted 3 submissions.', $texts );
+		$this->assertContains( 'Deleted 4 spam.', $texts );
+		$this->assertContains( 'Deleted 5 deliveries.', $texts );
+		$this->assertContains( 'Deleted 6 idempotency keys.', $texts );
+		$this->assertContains( 'Deleted 7 rate-limit counters.', $texts );
+		$this->assertContains( 'Retention failed: submission_delete_failed', $texts );
+
+		$report['errors']  = array();
+		$report['backlog'] = true;
+		$waiting           = RetentionCommand::messages( $report );
+		$this->assertContains( 'warning', array_column( $waiting, 'level' ) );
+		$this->assertNotContains( 'error', array_column( $waiting, 'level' ) );
+		$this->assertContains( 'Expired rows are still waiting.', array_column( $waiting, 'text' ) );
+	}
+
+	/**
 	 * A lock older than the TTL is taken over, including a plain timestamp from 0.6.0.
 	 */
 	public function test_a_stale_lock_is_taken_over(): void {
