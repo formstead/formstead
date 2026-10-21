@@ -70,9 +70,9 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An administrator sees the row, and opening it leaves the status alone.
+	 * An administrator sees the row, and opening a new submission marks it read.
 	 */
-	public function test_administrator_sees_a_submission_without_changing_its_status(): void {
+	public function test_administrator_sees_a_submission_and_opening_it_marks_it_read(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$submission_id = $this->store_submission( "Line one\nLine two" );
 		$repository    = new SubmissionRepository();
@@ -86,10 +86,31 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 		$this->assertStringContainsString( 'Note', $html );
 		$this->assertStringContainsString( 'Line one<br', $html );
 		$this->assertStringContainsString( 'Line two', $html );
+		$this->assertStringContainsString( 'Mark as unread', $html );
 
 		$loaded = $repository->find( $submission_id );
 		$this->assertNotNull( $loaded );
-		$this->assertSame( 'new', $loaded->status() );
+		$this->assertSame( 'read', $loaded->status() );
+	}
+
+	/**
+	 * Opening spam or an archived submission does not move it back to the inbox.
+	 */
+	public function test_opening_spam_or_archived_submission_keeps_its_status(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$repository = new SubmissionRepository();
+
+		foreach ( array( 'spam', 'archived' ) as $status ) {
+			$submission_id = $this->store_submission( $status . '-value' );
+			$this->assertSame( 1, $repository->set_status( array( $submission_id ), $status ) );
+
+			$_GET = array( 'submission' => (string) $submission_id );
+			$this->render();
+
+			$loaded = $repository->find( $submission_id );
+			$this->assertNotNull( $loaded );
+			$this->assertSame( $status, $loaded->status() );
+		}
 	}
 
 	/**
@@ -264,6 +285,10 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 				$this->assertStringContainsString( 'not allowed', $exception->getMessage() );
 			}
 		}
+
+		$loaded = ( new SubmissionRepository() )->find( $submission_id );
+		$this->assertNotNull( $loaded );
+		$this->assertSame( 'new', $loaded->status() );
 	}
 
 	/**

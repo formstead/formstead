@@ -48,7 +48,7 @@ final class Submission {
 	private array $payload;
 
 	/**
-	 * Inbox status. Opening the submission does not change it.
+	 * Inbox status. Opening a new submission marks it read.
 	 *
 	 * @var string
 	 */

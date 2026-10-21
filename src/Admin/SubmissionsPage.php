@@ -18,17 +18,33 @@ use Formstead\Forms\FormVersionRepository;
 use Formstead\Security\Capabilities;
 use Formstead\Submissions\Submission;
 use Formstead\Submissions\SubmissionList;
+use Formstead\Submissions\SubmissionQuery;
 use Formstead\Submissions\SubmissionRepository;
+use Formstead\Submissions\SubmissionStatus;
 
 /**
  * Lists submissions and shows one submission.
  *
  * The capability is checked here, not only on the menu item.
- * Opening a submission does not change its status.
+ * Opening a new submission marks it read.
  */
 final class SubmissionsPage {
 
 	private const PER_PAGE = 20;
+
+	/**
+	 * Status stored for each detail action.
+	 *
+	 * @var array<string, string>
+	 */
+	private const STATUS_ACTIONS = array(
+		'mark_read'   => SubmissionStatus::READ,
+		'mark_unread' => SubmissionStatus::NEW,
+		'archive'     => SubmissionStatus::ARCHIVED,
+		'restore'     => SubmissionStatus::READ,
+		'mark_spam'   => SubmissionStatus::SPAM,
+		'not_spam'    => SubmissionStatus::READ,
+	);
 
 	/**
 	 * Render the list or one submission.
@@ -52,13 +68,36 @@ final class SubmissionsPage {
 	}
 
 	/**
+	 * Apply a posted status action, then redirect.
+	 *
+	 * Runs on `load-toplevel_page_formstead`, before the screen renders.
+	 */
+	public static function handle_load(): void {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- handle_single() verifies the nonce.
+		if ( 'POST' !== $method || ! isset( $_POST['formstead_single'] ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( Capabilities::READ_SUBMISSIONS ) ) {
+			wp_die(
+				esc_html__( 'Sorry, you are not allowed to read submissions.', 'formstead' ),
+				'',
+				array( 'response' => 403 )
+			);
+		}
+
+		self::handle_single();
+	}
+
+	/**
 	 * Render the inbox list.
 	 */
 	private static function render_list(): void {
 		$form_id     = self::query_int( 'form_id' );
 		$paged       = max( 1, self::query_int( 'paged' ) );
 		$forms       = ( new FormRepository() )->all();
-		$page        = ( new SubmissionRepository() )->paginate( $form_id > 0 ? $form_id : null, $paged, self::PER_PAGE );
+		$page        = ( new SubmissionRepository() )->paginate( SubmissionQuery::from_values( $form_id, SubmissionQuery::VIEW_ALL, '', '' ), $paged, self::PER_PAGE );
 		$rows        = self::list_rows( $page, $forms );
 		$total_pages = (int) ceil( $page->total() / self::PER_PAGE );
 		$pagination  = '';
@@ -89,12 +128,129 @@ final class SubmissionsPage {
 	 * @param int $submission_id Submission id from the query string.
 	 */
 	private static function render_detail( int $submission_id ): void {
-		$submission = ( new SubmissionRepository() )->find( $submission_id );
+		$repository = new SubmissionRepository();
+		$repository->mark_read_if_new( $submission_id );
+		$submission = $repository->find( $submission_id );
 		$form       = $submission instanceof Submission ? ( new FormRepository() )->find_by_id( $submission->form_id() ) : null;
 		$rows       = $submission instanceof Submission ? self::detail_rows( $submission, $form ) : array();
 		$deliveries = $submission instanceof Submission ? self::delivery_rows( $submission->id() ) : array();
+		$actions    = $submission instanceof Submission ? self::detail_actions( $submission ) : array();
+		$notice     = self::notice();
 
 		include dirname( FORMSTEAD_FILE ) . '/templates/admin/submission-detail.php';
+	}
+
+	/**
+	 * Status actions for one submission.
+	 *
+	 * @param Submission $submission Stored submission.
+	 * @return list<array{action: string, label: string}>
+	 */
+	private static function detail_actions( Submission $submission ): array {
+		$actions = array();
+		if ( SubmissionStatus::NEW !== $submission->status() ) {
+			$actions[] = array(
+				'action' => 'mark_unread',
+				'label'  => __( 'Mark as unread', 'formstead' ),
+			);
+		}
+		if ( SubmissionStatus::READ !== $submission->status() && SubmissionStatus::NEW !== $submission->status() ) {
+			$actions[] = array(
+				'action' => 'restore',
+				'label'  => __( 'Move to inbox', 'formstead' ),
+			);
+		}
+		if ( SubmissionStatus::ARCHIVED !== $submission->status() ) {
+			$actions[] = array(
+				'action' => 'archive',
+				'label'  => __( 'Archive', 'formstead' ),
+			);
+		}
+		if ( SubmissionStatus::SPAM !== $submission->status() ) {
+			$actions[] = array(
+				'action' => 'mark_spam',
+				'label'  => __( 'Mark as spam', 'formstead' ),
+			);
+		} else {
+			$actions[] = array(
+				'action' => 'not_spam',
+				'label'  => __( 'Not spam', 'formstead' ),
+			);
+		}
+
+		return $actions;
+	}
+
+	/**
+	 * Change the submission opened on this screen.
+	 */
+	private static function handle_single(): void {
+		$id = self::posted_int( 'submission_id' );
+		check_admin_referer( 'formstead_submission_' . $id );
+
+		$action = self::posted_text( 'formstead_action' );
+		if ( ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
+			return;
+		}
+
+		$changed = ( new SubmissionRepository() )->set_status( array( $id ), self::STATUS_ACTIONS[ $action ] );
+		self::redirect(
+			array(
+				'page'              => Menu::MENU_SLUG,
+				'submission'        => $id,
+				'formstead_updated' => $changed,
+			)
+		);
+	}
+
+	/**
+	 * Redirect back to the submission and stop the load hook.
+	 *
+	 * @param array<string, mixed> $args Query arguments.
+	 */
+	private static function redirect( array $args ): void {
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Notice produced by the previous action, or an empty string.
+	 */
+	private static function notice(): string {
+		$updated = self::query_int( 'formstead_updated' );
+		if ( $updated > 0 ) {
+			return sprintf(
+				/* translators: %s: number of submissions. */
+				_n( '%s submission updated.', '%s submissions updated.', $updated, 'formstead' ),
+				number_format_i18n( $updated )
+			);
+		}
+
+		return '';
+	}
+
+	/**
+	 * Integer from the action POST.
+	 *
+	 * @param string $key Field name.
+	 */
+	private static function posted_int( string $key ): int {
+		return absint( self::posted_text( $key ) );
+	}
+
+	/**
+	 * Text from the action POST.
+	 *
+	 * @param string $key Field name.
+	 */
+	private static function posted_text( string $key ): string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- the caller checks the action nonce before this is used.
+		if ( ! isset( $_POST[ $key ] ) ) {
+			return '';
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitize_text_field cleans the action field.
+		return sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
 	}
 
 	/**

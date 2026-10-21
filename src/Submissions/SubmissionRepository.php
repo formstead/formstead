@@ -11,6 +11,8 @@ use Formstead\Database\Schema;
 use Formstead\Forms\Form;
 use WP_Error;
 
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- table names are identifiers. Dynamic WHERE and IN lists are prepared.
+
 /**
  * Stores submissions in the plugin table.
  */
@@ -60,6 +62,7 @@ final class SubmissionRepository {
 			$wpdb->suppress_errors( $previous );
 
 			if ( false !== $saved ) {
+				UnreadCounter::forget();
 				return new Submission(
 					(int) $wpdb->insert_id,
 					$form->id(),
@@ -90,38 +93,157 @@ final class SubmissionRepository {
 	/**
 	 * One page of submissions, newest first.
 	 *
-	 * A form id limits the query to that form. The `form_status_created` index
-	 * starts with `form_id`, which is the filter used by the inbox.
-	 *
-	 * @param int|null $form_id  Form id, or null for every form.
-	 * @param int      $page     Page number, starting at 1.
-	 * @param int      $per_page Page size.
+	 * @param SubmissionQuery $query    Inbox filters.
+	 * @param int             $page     Page number, starting at 1.
+	 * @param int             $per_page Page size.
 	 */
-	public function paginate( ?int $form_id, int $page, int $per_page ): SubmissionList {
+	public function paginate( SubmissionQuery $query, int $page, int $per_page ): SubmissionList {
 		global $wpdb;
 
 		$page     = max( 1, $page );
 		$per_page = max( 1, $per_page );
 		$offset   = ( $page - 1 ) * $per_page;
 		$table    = Schema::submissions_table();
+		$where    = $this->where( $query );
 
-		if ( null !== $form_id ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE form_id = %d ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d", $form_id, $per_page, $offset ), ARRAY_A );
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$total = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE form_id = %d", $form_id ) );
-		} else {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d", $per_page, $offset ), ARRAY_A );
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$total = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- table name is an identifier. The WHERE clause is prepared.
+		$rows = $wpdb->get_results( $this->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE {$where['sql']} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d", array_merge( $where['args'], array( $per_page, $offset ) ) ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- table name is an identifier. The WHERE clause is prepared.
+		$total = $wpdb->get_var( $this->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where['sql']}", $where['args'] ) );
 
 		return new SubmissionList( $this->hydrate_rows( $rows ), (int) $total );
 	}
 
 	/**
-	 * Load one submission. Reading it does not change its status.
+	 * Count submissions in one status, across every form.
+	 *
+	 * @param string $status Inbox status.
+	 */
+	public function count_with_status( string $status ): int {
+		global $wpdb;
+
+		if ( ! SubmissionStatus::is_known( $status ) ) {
+			return 0;
+		}
+
+		$table = Schema::submissions_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$count = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s", $status ) );
+
+		return (int) $count;
+	}
+
+	/**
+	 * Count submissions per status for the current filters, ignoring the view.
+	 *
+	 * The form and the date range still apply, so view counts match the filters.
+	 *
+	 * @param SubmissionQuery $query Inbox filters. The view's status list is ignored.
+	 * @return array<string, int>
+	 */
+	public function count_by_status( SubmissionQuery $query ): array {
+		global $wpdb;
+
+		$counts = array();
+		foreach ( SubmissionStatus::all() as $status ) {
+			$counts[ $status ] = 0;
+		}
+
+		$where = $this->where(
+			SubmissionQuery::from_values(
+				(int) $query->form_id(),
+				SubmissionQuery::VIEW_ALL,
+				$query->date_from() ?? '',
+				$query->date_to() ?? ''
+			)
+		);
+		$table = Schema::submissions_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- table name is an identifier. The WHERE clause is prepared.
+		$rows = $wpdb->get_results( $this->prepare( "SELECT status, COUNT(*) AS total FROM {$table} WHERE {$where['sql']} GROUP BY status", $where['args'] ), ARRAY_A );
+
+		if ( ! is_array( $rows ) ) {
+			return $counts;
+		}
+
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$status = (string) ( $row['status'] ?? '' );
+			if ( isset( $counts[ $status ] ) ) {
+				$counts[ $status ] = (int) ( $row['total'] ?? 0 );
+			}
+		}
+
+		return $counts;
+	}
+
+	/**
+	 * Set the status of these submissions.
+	 *
+	 * @param int[]  $ids    Submission ids.
+	 * @param string $status Status to store.
+	 * @return int Rows changed.
+	 */
+	public function set_status( array $ids, string $status ): int {
+		global $wpdb;
+
+		if ( ! SubmissionStatus::is_known( $status ) ) {
+			return 0;
+		}
+
+		$ids = self::positive_ids( $ids );
+		if ( array() === $ids ) {
+			return 0;
+		}
+
+		$table        = Schema::submissions_table();
+		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+		$args         = array_merge( array( $status, $status ), $ids );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- table name is an identifier. The IN list is unpacked.
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = %s WHERE status <> %s AND id IN ( {$placeholders} )", ...$args ) );
+		if ( ! is_int( $changed ) || $changed < 1 ) {
+			return 0;
+		}
+
+		UnreadCounter::forget();
+		return $changed;
+	}
+
+	/**
+	 * Mark one new submission as read.
+	 *
+	 * A submission that is already read, spam, or archived is left alone.
+	 *
+	 * @param int $id Submission id.
+	 */
+	public function mark_read_if_new( int $id ): bool {
+		global $wpdb;
+
+		if ( $id < 1 ) {
+			return false;
+		}
+
+		$table = Schema::submissions_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$changed = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = %s WHERE id = %d AND status = %s",
+				SubmissionStatus::READ,
+				$id,
+				SubmissionStatus::NEW
+			)
+		);
+		if ( 1 !== $changed ) {
+			return false;
+		}
+
+		UnreadCounter::forget();
+		return true;
+	}
+
+	/**
+	 * Load one submission. The caller marks a new row as read.
 	 *
 	 * A locking read sees a row committed by another connection after this
 	 * transaction's snapshot was taken. Replay uses that so it can return the
@@ -143,6 +265,88 @@ final class SubmissionRepository {
 		}
 
 		return $this->hydrate( is_array( $row ) ? $row : null );
+	}
+
+	/**
+	 * Build submissions from wpdb rows.
+	 *
+	 * @param mixed $rows Rows from wpdb.
+	 * @return Submission[]
+	 */
+	/**
+	 * Prepared WHERE body and its values.
+	 *
+	 * The SQL contains placeholders only. `1=1` is used when nothing is filtered
+	 * so the caller can always append `AND`.
+	 *
+	 * @param SubmissionQuery $query Inbox filters.
+	 * @return array{sql: string, args: list<int|string>}
+	 */
+	private function where( SubmissionQuery $query ): array {
+		$sql  = array( '1=1' );
+		$args = array();
+
+		if ( null !== $query->form_id() ) {
+			$sql[]  = 'form_id = %d';
+			$args[] = $query->form_id();
+		}
+
+		$statuses = $query->statuses();
+		if ( array() !== $statuses ) {
+			$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+			$sql[]        = "status IN ( {$placeholders} )";
+			foreach ( $statuses as $status ) {
+				$args[] = $status;
+			}
+		}
+
+		if ( null !== $query->date_from() ) {
+			$sql[]  = 'created_at >= %s';
+			$args[] = $query->date_from() . ' 00:00:00';
+		}
+		if ( null !== $query->date_to() ) {
+			$sql[]  = 'created_at <= %s';
+			$args[] = $query->date_to() . ' 23:59:59';
+		}
+
+		return array(
+			'sql'  => implode( ' AND ', $sql ),
+			'args' => $args,
+		);
+	}
+
+	/**
+	 * Prepare a statement, or return it when it has no placeholders.
+	 *
+	 * @param string                 $sql  SQL with placeholders.
+	 * @param array<int, int|string> $args Placeholder values.
+	 */
+	private function prepare( string $sql, array $args ): string {
+		global $wpdb;
+
+		if ( array() === $args ) {
+			return $sql;
+		}
+
+		$prepared = $wpdb->prepare( $sql, ...$args );
+		return is_string( $prepared ) ? $prepared : $sql;
+	}
+
+	/**
+	 * Unique positive ids.
+	 *
+	 * @param int[] $ids Candidate ids.
+	 * @return list<int>
+	 */
+	private static function positive_ids( array $ids ): array {
+		$clean = array();
+		foreach ( $ids as $id ) {
+			if ( is_int( $id ) && $id > 0 ) {
+				$clean[ $id ] = $id;
+			}
+		}
+
+		return array_values( $clean );
 	}
 
 	/**
