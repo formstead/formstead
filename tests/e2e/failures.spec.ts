@@ -1,4 +1,8 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, dirname, resolve as resolvePath } from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { formState, readForms, wp } from './helpers/wp';
 
@@ -122,7 +126,7 @@ test( 'a stopped database can be retried with the same key', async ( { browser }
 	expect( after.latest?.status ).toBe( 'new' );
 } );
 
-test( 'parallel requests with one key store one submission', async () => {
+test( 'parallel requests with one key store one submission', async ( { page } ) => {
 	const stamp = Date.now();
 	const before = formState( forms.forms.cross.public_id ).submissions ?? 0;
 	const key = crypto.randomUUID();
@@ -131,33 +135,33 @@ test( 'parallel requests with one key store one submission', async () => {
 		message: `Parallel ${ stamp }`,
 		_fs_elapsed: 5000,
 	} );
-	const responses = await Promise.all(
-		Array.from( { length: 5 }, () => postJson( forms.forms.cross.endpoint, body, key ) )
+	const responses = await postJsonFromBrowser(
+		page,
+		forms.forms.cross.endpoint,
+		Array.from( { length: 5 }, () => body ),
+		key
 	);
 
 	expect( responses.filter( ( response ) => response.status === 201 ) ).toHaveLength( 5 );
-	expect(
-		responses.filter( ( response ) => response.headers.get( 'idempotent-replayed' ) !== 'true' )
-	).toHaveLength( 1 );
+	expect( responses.filter( ( response ) => response.replayed !== 'true' ) ).toHaveLength( 1 );
 
 	const after = formState( forms.forms.cross.public_id );
 	expect( after.submissions ).toBe( before + 1 );
 	expect( after.latest?.deliveries ?? [] ).toHaveLength( 1 );
 } );
 
-test( 'a form limited to 3 per minute accepts 3 of 6 parallel posts', async () => {
+test( 'a form limited to 3 per minute accepts 3 of 6 parallel posts', async ( { page } ) => {
 	const stamp = Date.now();
 	const before = formState( forms.forms.rate.public_id ).submissions ?? 0;
-	const responses = await Promise.all(
+	const responses = await postJsonFromBrowser(
+		page,
+		forms.forms.rate.endpoint,
 		Array.from( { length: 6 }, ( _unused, index ) =>
-			postJson(
-				forms.forms.rate.endpoint,
-				JSON.stringify( {
-					email: `rate-${ stamp }-${ index }@example.com`,
-					message: `Rate ${ stamp } ${ index }`,
-					_fs_elapsed: 5000,
-				} )
-			)
+			JSON.stringify( {
+				email: `rate-${ stamp }-${ index }@example.com`,
+				message: `Rate ${ stamp } ${ index }`,
+				_fs_elapsed: 5000,
+			} )
 		)
 	);
 
@@ -165,7 +169,7 @@ test( 'a form limited to 3 per minute accepts 3 of 6 parallel posts', async () =
 	const limited = responses.filter( ( response ) => response.status === 429 );
 	expect( limited ).toHaveLength( 3 );
 	for ( const response of limited ) {
-		expect( response.headers.get( 'retry-after' ) ).toMatch( /^\d+$/ );
+		expect( response.retryAfter ).toMatch( /^\d+$/ );
 	}
 	expect( formState( forms.forms.rate.public_id ).submissions ).toBe( before + 3 );
 } );
@@ -205,12 +209,54 @@ function releaseMailRetries(): void {
 }
 
 function testsMysql(): string {
-	const names = execFileSync( 'docker', [ 'ps', '-a', '--format', '{{.Names}}' ], { encoding: 'utf8' } );
-	const name = names.split( '\n' ).find( ( line ) => line.includes( 'tests-mysql' ) );
-	if ( ! name ) {
-		throw new Error( 'The tests database container is not running.' );
+	const project = basename( wpEnvCacheDirectory() );
+	const names = execFileSync(
+		'docker',
+		[
+			'ps',
+			'-a',
+			'--filter',
+			`label=com.docker.compose.project=${ project }`,
+			'--filter',
+			'label=com.docker.compose.service=tests-mysql',
+			'--format',
+			'{{.Names}}',
+		],
+		{ encoding: 'utf8' }
+	)
+		.split( '\n' )
+		.map( ( line ) => line.trim() )
+		.filter( ( line ) => line !== '' );
+	const name = names[ 0 ];
+	if ( names.length !== 1 || ! name ) {
+		throw new Error( `Expected one tests database for ${ project }, found ${ names.length }.` );
 	}
 	return name;
+}
+
+/**
+ * Cache directory wp-env derives from this checkout's `.wp-env.json`.
+ *
+ * The compose project name is that directory's basename, so `docker stop`
+ * cannot select another checkout's tests database.
+ */
+function wpEnvCacheDirectory(): string {
+	const configFile = resolvePath( '.wp-env.json' );
+	const home = process.env.WP_ENV_HOME
+		? resolvePath( process.env.WP_ENV_HOME )
+		: resolvePath( homedir(), existsSync( '/snap' ) ? 'wp-env' : '.wp-env' );
+	const legacy = resolvePath( home, md5( configFile ) );
+	if ( existsSync( legacy ) ) {
+		return legacy;
+	}
+
+	const projectDirectory = basename( dirname( configFile ) );
+	const shortHash = md5( configFile ).slice( 0, 8 );
+	return resolvePath( home, `wp-env-${ projectDirectory }-${ shortHash }` );
+}
+
+function md5( value: string ): string {
+	return createHash( 'md5' ).update( value ).digest( 'hex' );
 }
 
 async function waitForSite( up: boolean ): Promise<void> {
@@ -231,16 +277,43 @@ async function waitForSite( up: boolean ): Promise<void> {
 	throw new Error( up ? 'The tests site did not come back.' : 'The tests site did not go down.' );
 }
 
-async function postJson( endpoint: string, body: string, key?: string ): Promise<Response> {
-	const headers: Record<string, string> = {
-		Accept: 'application/json',
-		'Content-Type': 'application/json',
-		Origin: 'http://localhost:4321',
-	};
-	if ( key ) {
-		headers[ 'Idempotency-Key' ] = key;
-	}
-	return fetch( endpoint, { method: 'POST', headers, body } );
+interface PostedJson {
+	status: number;
+	replayed: string | null;
+	retryAfter: string | null;
+}
+
+/**
+ * Post JSON from the Astro origin so the browser applies CORS.
+ *
+ * JavaScript can read `Retry-After` and `Idempotent-Replayed` only when the
+ * response exposes them.
+ */
+async function postJsonFromBrowser( page: Page, endpoint: string, bodies: string[], key?: string ): Promise<PostedJson[]> {
+	await page.goto( `${ astro }/fetch/` );
+	return page.evaluate(
+		async ( input: { endpoint: string; bodies: string[]; key: string } ) => {
+			const responses = await Promise.all(
+				input.bodies.map( async ( body ) => {
+					const headers: Record<string, string> = {
+						Accept: 'application/json',
+						'Content-Type': 'application/json',
+					};
+					if ( input.key !== '' ) {
+						headers[ 'Idempotency-Key' ] = input.key;
+					}
+					const response = await fetch( input.endpoint, { method: 'POST', headers, body } );
+					return {
+						status: response.status,
+						replayed: response.headers.get( 'Idempotent-Replayed' ),
+						retryAfter: response.headers.get( 'Retry-After' ),
+					};
+				} )
+			);
+			return responses;
+		},
+		{ endpoint, bodies, key: key ?? '' }
+	);
 }
 
 async function clearMailbox(): Promise<void> {

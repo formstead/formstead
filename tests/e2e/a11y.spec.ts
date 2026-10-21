@@ -55,15 +55,24 @@ test( 'admin screens have no accessibility violations', async ( { page } ) => {
 	await expect( page.getByRole( 'heading', { name: 'Edit form' } ) ).toBeVisible();
 	await expectAccessible( page, '#wpbody-content' );
 
+	const stamp = Date.now();
+	const email = `a11y-detail-${ stamp }@example.com`;
+	const created = await page.request.post( forms.forms.same.endpoint, {
+		form: {
+			email,
+			message: `A11y detail ${ stamp }`,
+		},
+		maxRedirects: 0,
+	} );
+	expect( created.status() ).toBe( 303 );
+
 	await page.goto( '/wp-admin/admin.php?page=formstead' );
 	await expect( page.getByRole( 'heading', { name: 'Submissions' } ) ).toBeVisible();
 	await expectAccessible( page, '#wpbody-content' );
 
-	const link = page.locator( '.wp-list-table tbody tr' ).first().getByRole( 'link' );
-	if ( await link.count() ) {
-		await link.first().click();
-		await expectAccessible( page, '#wpbody-content' );
-	}
+	await page.getByRole( 'row', { name: email } ).getByRole( 'link' ).first().click();
+	await expect( page.getByRole( 'heading', { name: 'Submission', level: 1 } ) ).toBeVisible();
+	await expectAccessible( page, '#wpbody-content' );
 
 	await page.goto( '/wp-admin/admin.php?page=formstead-settings' );
 	await expect( page.getByRole( 'heading', { name: 'Settings' } ) ).toBeVisible();
