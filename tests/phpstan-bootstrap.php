@@ -47,5 +47,14 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 		public static function log( $message ): void {
 			unset( $message );
 		}
+
+		/**
+		 * Print a warning.
+		 *
+		 * @param string $message Message.
+		 */
+		public static function warning( $message ): void {
+			unset( $message );
+		}
 	}
 }

@@ -10,8 +10,10 @@ namespace Formstead;
 use Formstead\Admin\Menu;
 use Formstead\Admin\SubmissionsExport;
 use Formstead\Cli\DeliveriesCommand;
+use Formstead\Cli\RetentionCommand;
 use Formstead\Database\Migrator;
 use Formstead\Delivery\Scheduler;
+use Formstead\Retention\RetentionScheduler;
 use Formstead\Lifecycle\Requirements;
 use Formstead\Rest\Cors;
 use Formstead\Rest\HtmlResponder;
@@ -62,7 +64,9 @@ final class Plugin {
 		Cors::register();
 		HtmlResponder::register();
 		Scheduler::register();
+		RetentionScheduler::register();
 		DeliveriesCommand::register();
+		RetentionCommand::register();
 	}
 
 	/**
