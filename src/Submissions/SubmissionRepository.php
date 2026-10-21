@@ -25,10 +25,12 @@ final class SubmissionRepository {
 	 * write the submission text into `debug.log`. The failure line names the
 	 * form id only.
 	 *
-	 * @param Form                                    $form   Form that received the submission.
-	 * @param array<string, string|bool|list<string>> $values Normalized field values.
+	 * @param Form                                    $form         Form that received the submission.
+	 * @param array<string, string|bool|list<string>> $values       Normalized field values.
+	 * @param string                                  $status       Inbox status.
+	 * @param string|null                             $content_hash SHA-256 of the canonical body, or null.
 	 */
-	public function insert( Form $form, array $values ): Submission|WP_Error {
+	public function insert( Form $form, array $values, string $status = SubmissionStatus::NEW, ?string $content_hash = null ): Submission|WP_Error {
 		global $wpdb;
 
 		$payload = wp_json_encode( $values, JSON_UNESCAPED_UNICODE );
@@ -41,23 +43,27 @@ final class SubmissionRepository {
 		}
 
 		$created_at = current_time( 'mysql', true );
+		$status     = SubmissionStatus::is_known( $status ) ? $status : SubmissionStatus::NEW;
+		$hashed     = is_string( $content_hash ) && 1 === preg_match( '/\A[a-f0-9]{64}\z/', $content_hash );
 
 		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
-			$receipt  = ReceiptId::generate();
-			$previous = $wpdb->suppress_errors( true );
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- custom table.
-			$saved     = $wpdb->insert(
-				Schema::submissions_table(),
-				array(
-					'form_id'        => $form->id(),
-					'schema_version' => $form->schema_version(),
-					'receipt_id'     => $receipt,
-					'payload'        => $payload,
-					'status'         => 'new',
-					'created_at'     => $created_at,
-				),
-				array( '%d', '%d', '%s', '%s', '%s', '%s' )
+			$receipt = ReceiptId::generate();
+			$data    = array(
+				'form_id'        => $form->id(),
+				'schema_version' => $form->schema_version(),
+				'receipt_id'     => $receipt,
+				'payload'        => $payload,
+				'status'         => $status,
+				'created_at'     => $created_at,
 			);
+			$format  = array( '%d', '%d', '%s', '%s', '%s', '%s' );
+			if ( $hashed ) {
+				$data['content_hash'] = $content_hash;
+				$format[]             = '%s';
+			}
+
+			$previous  = $wpdb->suppress_errors( true );
+			$saved     = $wpdb->insert( Schema::submissions_table(), $data, $format );
 			$duplicate = false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
 			$wpdb->suppress_errors( $previous );
 
@@ -69,7 +75,7 @@ final class SubmissionRepository {
 					$form->schema_version(),
 					$receipt,
 					$values,
-					'new',
+					$status,
 					$created_at
 				);
 			}
@@ -135,6 +141,33 @@ final class SubmissionRepository {
 		$rows = $wpdb->get_results( $this->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE {$where['sql']} AND id > %d ORDER BY id ASC LIMIT %d", $args ), ARRAY_A );
 
 		return $this->hydrate_rows( $rows );
+	}
+
+	/**
+	 * Whether this form already stored the same body inside the window.
+	 *
+	 * @param int    $form_id      Form id.
+	 * @param string $content_hash SHA-256 of the canonical body.
+	 * @param int    $since        Unix time. Rows older than this do not count.
+	 */
+	public function has_recent_duplicate( int $form_id, string $content_hash, int $since ): bool {
+		global $wpdb;
+
+		if ( $form_id < 1 || 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $content_hash ) || $since < 1 ) {
+			return false;
+		}
+
+		$table = Schema::submissions_table();
+		$found = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE form_id = %d AND content_hash = %s AND created_at >= %s LIMIT 1",
+				$form_id,
+				$content_hash,
+				gmdate( 'Y-m-d H:i:s', $since )
+			)
+		);
+
+		return is_string( $found ) || is_int( $found );
 	}
 
 	/**
