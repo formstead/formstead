@@ -7,7 +7,10 @@
 
 namespace Formstead\Retention;
 
+use Formstead\Delivery\DeliveryRepository;
 use Formstead\Forms\FormRepository;
+use Formstead\Security\RateLimiter;
+use Formstead\Submissions\IdempotencyRepository;
 use Formstead\Submissions\SubmissionDeleter;
 use Formstead\Submissions\SubmissionRepository;
 use WP_Error;
@@ -62,6 +65,27 @@ final class RetentionRunner {
 	private SubmissionDeleter $deleter;
 
 	/**
+	 * Delivery store.
+	 *
+	 * @var DeliveryRepository
+	 */
+	private DeliveryRepository $deliveries;
+
+	/**
+	 * Idempotency key store.
+	 *
+	 * @var IdempotencyRepository
+	 */
+	private IdempotencyRepository $keys;
+
+	/**
+	 * Rate-limit counters.
+	 *
+	 * @var RateLimiter
+	 */
+	private RateLimiter $rates;
+
+	/**
 	 * Create a runner.
 	 *
 	 * @param int $batch_size Rows deleted in one query.
@@ -71,6 +95,9 @@ final class RetentionRunner {
 		$this->forms       = new FormRepository();
 		$this->submissions = new SubmissionRepository();
 		$this->deleter     = new SubmissionDeleter();
+		$this->deliveries  = new DeliveryRepository();
+		$this->keys        = new IdempotencyRepository();
+		$this->rates       = new RateLimiter();
 	}
 
 	/**
@@ -111,6 +138,9 @@ final class RetentionRunner {
 	private function purge( ?int $batch_limit, ?int $deadline, int $now, int $started ): array {
 		$submissions = 0;
 		$spam        = 0;
+		$deliveries  = 0;
+		$keys        = 0;
+		$rates       = 0;
 		$errors      = array();
 		$batches     = 0;
 		$stopped     = false;
@@ -134,14 +164,50 @@ final class RetentionRunner {
 			$stopped = $outcome['stopped'];
 		}
 
+		if ( ! $stopped ) {
+			$outcome    = $this->drain(
+				fn (): int => $this->deliveries->delete_finished_before( $this->before( $now, RetentionPeriods::delivery_days() ), $this->batch_size ),
+				$batch_limit,
+				$deadline,
+				$batches
+			);
+			$deliveries = $outcome['deleted'];
+			$batches    = $outcome['batches'];
+			$stopped    = $outcome['stopped'];
+		}
+
+		if ( ! $stopped ) {
+			$outcome = $this->drain(
+				fn (): int => $this->keys->prune_expired( $now, $this->batch_size ),
+				$batch_limit,
+				$deadline,
+				$batches
+			);
+			$keys    = $outcome['deleted'];
+			$batches = $outcome['batches'];
+			$stopped = $outcome['stopped'];
+		}
+
+		if ( ! $stopped ) {
+			$outcome = $this->drain(
+				fn (): int => $this->rates->prune_expired( $now, $this->batch_size ),
+				$batch_limit,
+				$deadline,
+				$batches
+			);
+			$rates   = $outcome['deleted'];
+			$batches = $outcome['batches'];
+			$stopped = $outcome['stopped'];
+		}
+
 		return array(
 			'started_at'  => $started,
 			'finished_at' => time(),
 			'submissions' => $submissions,
 			'spam'        => $spam,
-			'deliveries'  => 0,
-			'keys'        => 0,
-			'rate_limits' => 0,
+			'deliveries'  => $deliveries,
+			'keys'        => $keys,
+			'rate_limits' => $rates,
 			'backlog'     => $stopped && $this->has_expired( $now ),
 			'errors'      => array_values( $errors ),
 		);
@@ -210,7 +276,51 @@ final class RetentionRunner {
 		}
 
 		$spam = $this->submissions->spam_ids_created_before( $this->before( $now, RetentionPeriods::spam_days() ), 1 );
-		return array() !== $spam;
+		if ( array() !== $spam ) {
+			return true;
+		}
+
+		if ( $this->deliveries->has_finished_before( $this->before( $now, RetentionPeriods::delivery_days() ) ) ) {
+			return true;
+		}
+
+		if ( $this->keys->has_expired( $now ) ) {
+			return true;
+		}
+
+		return $this->rates->has_expired( $now );
+	}
+
+	/**
+	 * Delete batches until one comes back short or the budget runs out.
+	 *
+	 * @param callable(): int $batch       Deletes one batch and returns the row count.
+	 * @param int|null        $batch_limit Maximum batches for the whole run.
+	 * @param int|null        $deadline    Unix time at which to stop.
+	 * @param int             $batches     Batches already used.
+	 * @return array{deleted: int, batches: int, stopped: bool}
+	 */
+	private function drain( callable $batch, ?int $batch_limit, ?int $deadline, int $batches ): array {
+		$deleted = 0;
+
+		while ( $this->within_budget( $batches, $batch_limit, $deadline ) ) {
+			$rows = $batch();
+			if ( $rows < 1 ) {
+				break;
+			}
+
+			$deleted += $rows;
+			++$batches;
+			if ( $rows < $this->batch_size ) {
+				break;
+			}
+		}
+
+		return array(
+			'deleted' => $deleted,
+			'batches' => $batches,
+			'stopped' => ! $this->within_budget( $batches, $batch_limit, $deadline ),
+		);
 	}
 
 	/**

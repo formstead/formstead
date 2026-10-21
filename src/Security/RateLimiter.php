@@ -84,21 +84,46 @@ final class RateLimiter {
 	/**
 	 * Delete expired counters, up to one batch.
 	 *
+	 * @param int $now   Unix time.
+	 * @param int $limit Maximum rows. A full batch means older counters may remain.
+	 */
+	public function prune_expired( int $now, int $limit = self::PRUNE_BATCH ): int {
+		global $wpdb;
+
+		$limit = max( 1, $limit );
+		$table = Schema::rate_limits_table();
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE expires_at < %d LIMIT %d",
+				$now,
+				$limit
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return is_int( $deleted ) ? $deleted : 0;
+	}
+
+	/**
+	 * Whether an expired counter is still stored.
+	 *
 	 * @param int $now Unix time.
 	 */
-	public function prune_expired( int $now ): void {
+	public function has_expired( int $now ): bool {
 		global $wpdb;
 
 		$table = Schema::rate_limits_table();
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-		$wpdb->query(
+		$found = $wpdb->get_var(
 			$wpdb->prepare(
-				"DELETE FROM {$table} WHERE expires_at < %d LIMIT %d",
-				$now,
-				self::PRUNE_BATCH
+				"SELECT bucket FROM {$table} WHERE expires_at < %d LIMIT 1",
+				$now
 			)
 		);
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return is_string( $found ) && '' !== $found;
 	}
 
 	/**
