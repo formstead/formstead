@@ -56,6 +56,41 @@ final class FormRepositoryTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Changing the retention period does not create a new field schema.
+	 */
+	public function test_update_changes_retention_without_a_new_schema_version(): void {
+		$saved = $this->forms->insert( $this->form( 'Contact' ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $saved );
+		$this->assertSame( 30, $saved->retention_days() );
+
+		$changed = new Form(
+			$saved->id(),
+			$saved->public_id(),
+			$saved->name(),
+			$saved->is_enabled(),
+			$saved->fields(),
+			$saved->schema_version(),
+			$saved->success_url(),
+			$saved->created_at(),
+			$saved->updated_at(),
+			$saved->protection(),
+			$saved->honeypot_rejections(),
+			$saved->notifications(),
+			7
+		);
+		$updated = $this->forms->update( $changed );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $updated );
+		$this->assertSame( 7, $updated->retention_days() );
+		$this->assertSame( 1, $updated->schema_version() );
+
+		$loaded = $this->forms->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 7, $loaded->retention_days() );
+		$this->assertSame( 1, $loaded->schema_version() );
+	}
+
+	/**
 	 * Updating the name keeps the public id and the schema version.
 	 */
 	public function test_update_keeps_the_public_id_and_version_when_fields_are_unchanged(): void {

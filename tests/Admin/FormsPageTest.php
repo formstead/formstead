@@ -197,6 +197,53 @@ final class FormsPageTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A retention period is stored without a new field schema.
+	 */
+	public function test_retention_period_is_saved(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->insert_contact_form();
+
+		$this->post_form();
+		$_POST['form_id']        = (string) $saved->id();
+		$_POST['schema_version'] = (string) $saved->schema_version();
+		$_POST['retention_days'] = '14';
+		$_REQUEST                = $_POST;
+
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 14, $loaded->retention_days() );
+		$this->assertSame( 1, $loaded->schema_version() );
+	}
+
+	/**
+	 * A period outside 0 to 3650 changes nothing and is shown again.
+	 */
+	public function test_invalid_retention_period_keeps_the_saved_form(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->insert_contact_form();
+
+		$this->post_form();
+		$_POST['form_id']        = (string) $saved->id();
+		$_POST['schema_version'] = (string) $saved->schema_version();
+		$_POST['name']           = 'Renamed';
+		$_POST['retention_days'] = '3651';
+		$_REQUEST                = $_POST;
+
+		FormsPage::handle_load();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 'Contact', $loaded->name() );
+		$this->assertSame( 30, $loaded->retention_days() );
+
+		$html = $this->render();
+		$this->assertStringContainsString( 'from 0 to 3650', $html );
+		$this->assertStringContainsString( 'value="3651"', $html );
+	}
+
+	/**
 	 * An allowlist and both rate overrides are stored without a new schema version.
 	 */
 	public function test_protection_settings_are_saved(): void {
@@ -434,10 +481,11 @@ final class FormsPageTest extends WP_UnitTestCase {
 	private function post_form(): void {
 		$_SERVER['REQUEST_METHOD'] = 'POST';
 		$_POST                     = array(
-			'name'        => 'Contact',
-			'is_enabled'  => '1',
-			'success_url' => 'https://example.com/thanks',
-			'fields'      => array(
+			'name'           => 'Contact',
+			'is_enabled'     => '1',
+			'success_url'    => 'https://example.com/thanks',
+			'retention_days' => '30',
+			'fields'         => array(
 				array(
 					'name'       => 'email',
 					'label'      => 'Email',

@@ -33,6 +33,7 @@ final class FormInputTest extends WP_UnitTestCase {
 		$this->assertSame( FieldType::Text, $form->fields()[0]->type() );
 		$this->assertSame( 10000, $form->fields()[1]->max_length() );
 		$this->assertTrue( $form->fields()[0]->required() );
+		$this->assertSame( 30, $form->retention_days() );
 	}
 
 	/**
@@ -279,6 +280,35 @@ final class FormInputTest extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'notify_recipients', $rejected->errors() );
 		$this->assertArrayHasKey( 'reply_to_field', $rejected->errors() );
 		$this->assertNull( $rejected->form() );
+	}
+
+	/**
+	 * Zero keeps submissions, and 3650 is the longest period.
+	 */
+	public function test_retention_period_accepts_zero_and_the_ceiling(): void {
+		$forever                   = $this->input();
+		$forever['retention_days'] = '0';
+		$kept                      = FormInput::validate( $forever );
+		$this->assertTrue( $kept->is_valid() );
+		$this->assertSame( 0, $kept->form()->retention_days() );
+
+		$longest                   = $this->input();
+		$longest['retention_days'] = '3650';
+		$limited                   = FormInput::validate( $longest );
+		$this->assertTrue( $limited->is_valid() );
+		$this->assertSame( 3650, $limited->form()->retention_days() );
+	}
+
+	/**
+	 * A blank period and a period past ten years are rejected.
+	 */
+	public function test_retention_period_rejects_blank_and_oversized_values(): void {
+		foreach ( array( '', '3651', '30 days' ) as $days ) {
+			$input                   = $this->input();
+			$input['retention_days'] = $days;
+			$result                  = FormInput::validate( $input );
+			$this->assertArrayHasKey( 'retention_days', $result->errors(), $days );
+		}
 	}
 
 	/**
