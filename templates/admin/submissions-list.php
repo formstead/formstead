@@ -6,8 +6,9 @@
  *
  * @var Form[]           $forms  Forms for the filter.
  * @var SubmissionQuery  $query  Active filters.
- * @var SubmissionsTable $table  Inbox table.
- * @var string           $notice Result of the previous action.
+ * @var SubmissionsTable $table      Inbox table.
+ * @var string           $export_url Export URL, or empty when export is unavailable.
+ * @var string           $notice     Result of the previous action.
  */
 
 use Formstead\Admin\Menu;
@@ -17,16 +18,20 @@ use Formstead\Submissions\SubmissionQuery;
 
 defined( 'ABSPATH' ) || exit;
 
-$forms     = isset( $forms ) && is_array( $forms ) ? $forms : array();
-$query     = isset( $query ) && $query instanceof SubmissionQuery ? $query : SubmissionQuery::from_values( 0, '', '', '' );
-$table     = isset( $table ) && $table instanceof SubmissionsTable ? $table : null;
-$notice    = isset( $notice ) ? (string) $notice : '';
-$form_id   = (int) $query->form_id();
-$date_from = $query->date_from() ?? '';
-$date_to   = $query->date_to() ?? '';
+$forms      = isset( $forms ) && is_array( $forms ) ? $forms : array();
+$query      = isset( $query ) && $query instanceof SubmissionQuery ? $query : SubmissionQuery::from_values( 0, '', '', '' );
+$table      = isset( $table ) && $table instanceof SubmissionsTable ? $table : null;
+$export_url = isset( $export_url ) ? (string) $export_url : '';
+$notice     = isset( $notice ) ? (string) $notice : '';
+$form_id    = (int) $query->form_id();
+$date_from  = $query->date_from() ?? '';
+$date_to    = $query->date_to() ?? '';
 ?>
 <div class="wrap">
 	<h1 class="wp-heading-inline"><?php echo esc_html__( 'Submissions', 'formstead' ); ?></h1>
+	<?php if ( '' !== $export_url ) : ?>
+		<a href="<?php echo esc_url( $export_url ); ?>" class="page-title-action"><?php echo esc_html__( 'Export CSV', 'formstead' ); ?></a>
+	<?php endif; ?>
 	<hr class="wp-header-end">
 
 	<?php if ( '' !== $notice ) : ?>

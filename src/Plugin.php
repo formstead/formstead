@@ -8,6 +8,7 @@
 namespace Formstead;
 
 use Formstead\Admin\Menu;
+use Formstead\Admin\SubmissionsExport;
 use Formstead\Cli\DeliveriesCommand;
 use Formstead\Database\Migrator;
 use Formstead\Delivery\Scheduler;
@@ -56,6 +57,7 @@ final class Plugin {
 		}
 
 		Menu::register();
+		SubmissionsExport::register();
 		SubmissionsController::register();
 		Cors::register();
 		HtmlResponder::register();

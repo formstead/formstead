@@ -115,6 +115,29 @@ final class SubmissionRepository {
 	}
 
 	/**
+	 * Submissions for one export batch, in id order.
+	 *
+	 * The caller passes the last id it wrote. The first call passes zero.
+	 *
+	 * @param SubmissionQuery $query    Inbox filters.
+	 * @param int             $after_id Last exported id.
+	 * @param int             $limit    Batch size.
+	 * @return Submission[]
+	 */
+	public function iterate_for_export( SubmissionQuery $query, int $after_id, int $limit ): array {
+		global $wpdb;
+
+		$limit = max( 1, $limit );
+		$table = Schema::submissions_table();
+		$where = $this->where( $query );
+		$args  = array_merge( $where['args'], array( max( 0, $after_id ), $limit ) );
+
+		$rows = $wpdb->get_results( $this->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE {$where['sql']} AND id > %d ORDER BY id ASC LIMIT %d", $args ), ARRAY_A );
+
+		return $this->hydrate_rows( $rows );
+	}
+
+	/**
 	 * Count submissions in one status, across every form.
 	 *
 	 * @param string $status Inbox status.
