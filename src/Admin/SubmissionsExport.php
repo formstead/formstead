@@ -86,8 +86,9 @@ final class SubmissionsExport {
 	 * @param Form            $form   Form to export. The query is limited to this form.
 	 * @param SubmissionQuery $query  Status and date filters.
 	 * @param resource        $output Binary write handle.
+	 * @param int             $batch  Rows read between flushes.
 	 */
-	public static function write( Form $form, SubmissionQuery $query, $output ): void {
+	public static function write( Form $form, SubmissionQuery $query, $output, int $batch = self::BATCH ): void {
 		$query  = SubmissionQuery::from_values(
 			$form->id(),
 			$query->view(),
@@ -104,16 +105,20 @@ final class SubmissionsExport {
 		fwrite( $output, "\xEF\xBB\xBF" );
 		self::put( $output, $header );
 
-		$repository  = new SubmissionRepository();
-		$after_id    = 0;
-		$batch_count = 0;
+		$repository = new SubmissionRepository();
+		$size       = max( 1, $batch );
+		$after      = null;
+		$count      = 0;
 		do {
-			$batch       = $repository->iterate_for_export( $query, $after_id, self::BATCH );
-			$batch_count = count( $batch );
-			foreach ( $batch as $submission ) {
-				$after_id = $submission->id();
-				$payload  = $submission->payload();
-				$row      = array(
+			$rows  = $repository->iterate_for_export( $query, $after, $size );
+			$count = count( $rows );
+			foreach ( $rows as $submission ) {
+				$after   = array(
+					'created_at' => $submission->created_at(),
+					'id'         => $submission->id(),
+				);
+				$payload = $submission->payload();
+				$row     = array(
 					CsvRow::guard( $submission->receipt_id() ),
 					CsvRow::guard( $submission->created_at() ),
 					CsvRow::guard( $submission->status() ),
@@ -125,7 +130,7 @@ final class SubmissionsExport {
 			}
 			fflush( $output );
 			flush();
-		} while ( self::BATCH === $batch_count );
+		} while ( $size === $count );
 	}
 
 	/**

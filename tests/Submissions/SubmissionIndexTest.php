@@ -103,13 +103,14 @@ final class SubmissionIndexTest extends \WP_UnitTestCase {
 				'2020-01-01 00:00:00'
 			)
 		);
+		$cursor = " AND ( created_at > '2020-01-01 00:00:00' OR ( created_at = '2020-01-01 00:00:00' AND id > 0 ) )";
 		$this->assert_index(
-			array( 'form_created', 'form_status_created', 'PRIMARY' ),
+			array( 'form_created' ),
 			$wpdb->prepare(
-				"SELECT id FROM {$table} WHERE form_id = %d AND status IN ('new','read') AND id > %d ORDER BY id ASC LIMIT 500",
-				$forms[0]->id(),
-				0
-			)
+				"SELECT id FROM {$table} WHERE form_id = %d AND status IN ('new','read'){$cursor} ORDER BY created_at ASC, id ASC LIMIT 500",
+				$forms[0]->id()
+			),
+			true
 		);
 	}
 
@@ -117,11 +118,14 @@ final class SubmissionIndexTest extends \WP_UnitTestCase {
 	 * Assert EXPLAIN chose one of these indexes and did not scan the table.
 	 *
 	 * The optimizer may pick either index when both can serve the filter.
+	 * `$presorted` is for a query whose ORDER BY matches that index, so the
+	 * plan must not sort the rows again.
 	 *
-	 * @param string[] $indexes Acceptable keys.
-	 * @param string   $sql     Query without EXPLAIN. Placeholders are already prepared.
+	 * @param string[] $indexes   Acceptable keys.
+	 * @param string   $sql       Query without EXPLAIN. Placeholders are already prepared.
+	 * @param bool     $presorted Whether the chosen index already provides the order.
 	 */
-	private function assert_index( array $indexes, string $sql ): void {
+	private function assert_index( array $indexes, string $sql, bool $presorted = false ): void {
 		global $wpdb;
 
 		$row = $wpdb->get_row( 'EXPLAIN ' . $sql, ARRAY_A );
@@ -129,6 +133,9 @@ final class SubmissionIndexTest extends \WP_UnitTestCase {
 		$key = (string) ( $row['key'] ?? '' );
 		$this->assertNotSame( 'ALL', (string) ( $row['type'] ?? '' ) );
 		$this->assertContains( $key, $indexes, $key );
+		if ( $presorted ) {
+			$this->assertStringNotContainsString( 'Using filesort', (string) ( $row['Extra'] ?? '' ) );
+		}
 	}
 
 	/**
