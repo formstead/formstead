@@ -68,7 +68,7 @@ $form_name  = $form instanceof Form ? $form->name() : '';
 		</form>
 		<h2><?php echo esc_html__( 'Email', 'formstead' ); ?></h2>
 		<?php if ( array() === $deliveries ) : ?>
-			<p><?php echo esc_html__( 'No email was queued for this submission.', 'formstead' ); ?></p>
+			<p><?php echo esc_html__( 'No delivery was queued for this submission.', 'formstead' ); ?></p>
 		<?php else : ?>
 			<table class="widefat striped">
 				<thead>
