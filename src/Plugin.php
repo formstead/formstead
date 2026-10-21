@@ -19,6 +19,7 @@ use Formstead\Lifecycle\Requirements;
 use Formstead\Privacy\IdentityBackfill;
 use Formstead\Privacy\PrivacyEraser;
 use Formstead\Privacy\PrivacyExporter;
+use Formstead\Privacy\PrivacyPolicy;
 use Formstead\Rest\Cors;
 use Formstead\Rest\HtmlResponder;
 use Formstead\Rest\SubmissionsController;
@@ -72,6 +73,7 @@ final class Plugin {
 		IdentityBackfill::register();
 		PrivacyExporter::register();
 		PrivacyEraser::register();
+		PrivacyPolicy::register();
 		DeliveriesCommand::register();
 		RetentionCommand::register();
 		IdentitiesCommand::register();
