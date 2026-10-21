@@ -53,6 +53,7 @@ test( 'admin screens have no accessibility violations', async ( { page } ) => {
 
 	await page.getByRole( 'link', { name: 'E2E same site' } ).click();
 	await expect( page.getByRole( 'heading', { name: 'Edit form' } ) ).toBeVisible();
+	await expect( page.getByRole( 'heading', { name: 'Webhook' } ) ).toBeVisible();
 	await expectAccessible( page, '#wpbody-content' );
 
 	const stamp = Date.now();
