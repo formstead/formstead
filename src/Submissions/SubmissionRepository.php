@@ -391,6 +391,27 @@ final class SubmissionRepository {
 	}
 
 	/**
+	 * Load one submission by its public receipt id.
+	 *
+	 * An id that is not a receipt id does not match a row.
+	 *
+	 * @param string $receipt_id Public receipt id.
+	 */
+	public function find_by_receipt_id( string $receipt_id ): ?Submission {
+		global $wpdb;
+
+		if ( ! ReceiptId::is_valid( $receipt_id ) ) {
+			return null;
+		}
+
+		$table = Schema::submissions_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, form_id, schema_version, receipt_id, payload, status, created_at FROM {$table} WHERE receipt_id = %s", $receipt_id ), ARRAY_A );
+
+		return $this->hydrate( is_array( $row ) ? $row : null );
+	}
+
+	/**
 	 * Load one submission. The caller marks a new row as read.
 	 *
 	 * A locking read sees a row committed by another connection after this

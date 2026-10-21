@@ -107,11 +107,16 @@ final class SubmissionQuery {
 	 * @param string $date_from Requested first day.
 	 * @param string $date_to   Requested last day.
 	 * @param string $email     Address to match exactly, or an empty string.
+	 * @param string $status    One status to include. Empty keeps the view's statuses.
 	 */
-	public static function from_values( int $form_id, string $view, string $date_from, string $date_to, string $email = '' ): self {
-		$view  = self::normalize_view( $view );
-		$email = trim( $email );
-		$hash  = '' === $email ? null : IdentityHasher::hash( $email );
+	public static function from_values( int $form_id, string $view, string $date_from, string $date_to, string $email = '', string $status = '' ): self {
+		$view     = self::normalize_view( $view );
+		$email    = trim( $email );
+		$hash     = '' === $email ? null : IdentityHasher::hash( $email );
+		$statuses = self::statuses_for_view( $view );
+		if ( SubmissionStatus::is_known( $status ) ) {
+			$statuses = array( $status );
+		}
 		if ( ! is_string( $hash ) ) {
 			$email = '';
 			$hash  = null;
@@ -120,7 +125,7 @@ final class SubmissionQuery {
 		return new self(
 			$form_id > 0 ? $form_id : null,
 			$view,
-			self::statuses_for_view( $view ),
+			$statuses,
 			self::date( $date_from ),
 			self::date( $date_to ),
 			$hash,
