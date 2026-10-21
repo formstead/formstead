@@ -26,22 +26,25 @@ $errors   = isset( $errors ) && is_array( $errors ) ? $errors : array();
 <html lang="<?php echo esc_attr( $language ); ?>">
 <head>
 	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title><?php echo esc_html( $title ); ?></title>
 </head>
 <body>
-	<h1><?php echo esc_html( $heading ); ?></h1>
-	<?php if ( array() !== $errors ) : ?>
-		<ul>
-			<?php foreach ( $errors as $formstead_error ) : ?>
-				<?php
-				$formstead_label   = is_array( $formstead_error ) && isset( $formstead_error['label'] ) ? (string) $formstead_error['label'] : '';
-				$formstead_message = is_array( $formstead_error ) && isset( $formstead_error['message'] ) ? (string) $formstead_error['message'] : '';
-				?>
-				<li><?php echo esc_html( $formstead_label ); ?>: <?php echo esc_html( $formstead_message ); ?></li>
-			<?php endforeach; ?>
-		</ul>
-	<?php elseif ( '' !== $message ) : ?>
-		<p><?php echo esc_html( $message ); ?></p>
-	<?php endif; ?>
+	<main>
+		<h1><?php echo esc_html( $heading ); ?></h1>
+		<?php if ( array() !== $errors ) : ?>
+			<ul>
+				<?php foreach ( $errors as $formstead_error ) : ?>
+					<?php
+					$formstead_label   = is_array( $formstead_error ) && isset( $formstead_error['label'] ) ? (string) $formstead_error['label'] : '';
+					$formstead_message = is_array( $formstead_error ) && isset( $formstead_error['message'] ) ? (string) $formstead_error['message'] : '';
+					?>
+					<li><?php echo esc_html( $formstead_label ); ?>: <?php echo esc_html( $formstead_message ); ?></li>
+				<?php endforeach; ?>
+			</ul>
+		<?php elseif ( '' !== $message ) : ?>
+			<p><?php echo esc_html( $message ); ?></p>
+		<?php endif; ?>
+	</main>
 </body>
 </html>
