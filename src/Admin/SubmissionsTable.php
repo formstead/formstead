@@ -7,6 +7,8 @@
 
 namespace Formstead\Admin;
 
+defined( 'ABSPATH' ) || exit;
+
 use Formstead\Forms\Form;
 use Formstead\Submissions\Submission;
 use Formstead\Submissions\SubmissionQuery;
