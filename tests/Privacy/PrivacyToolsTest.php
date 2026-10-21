@@ -36,6 +36,15 @@ final class PrivacyToolsTest extends WP_UnitTestCase {
 	private const OTHER = 'other-privacy-250@example.com';
 
 	/**
+	 * Drop a cursor left by an earlier test that committed.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		delete_option( Migrator::IDENTITY_BACKFILL_OPTION );
+		IdentityBackfill::clear();
+	}
+
+	/**
 	 * Forget a backfill cursor this class may set.
 	 */
 	public function tear_down(): void {
