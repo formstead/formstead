@@ -734,6 +734,12 @@ jobs:
       - name: Seed the tests site
         run: npm run e2e:setup
 
+      - name: Build the Next.js example and verify the signature
+        run: |
+          npm ci --prefix examples/next
+          npm run build --prefix examples/next
+          npm test --prefix examples/next
+
       - name: Playwright
         run: npm run e2e
 

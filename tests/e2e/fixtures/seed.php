@@ -344,7 +344,7 @@ function formstead_e2e_seed(): void {
 	);
 
 	$ids         = formstead_e2e_public_ids();
-	$example     = array( 'http://localhost:4400', 'http://localhost:4321' );
+	$example     = array( 'http://localhost:4400', 'http://localhost:4321', 'http://localhost:4500' );
 	$thanks_html = 'http://localhost:4400/thanks.html';
 
 	formstead_e2e_insert_form( 'E2E same site', $ids['same'], $thanks_url, array(), 60, 10000, array() );

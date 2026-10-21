@@ -47,5 +47,10 @@ export default defineConfig( {
 			url: 'http://127.0.0.1:4321/',
 			reuseExistingServer: ! process.env.CI,
 		},
+		{
+			command: 'node tests/e2e/serve-next.mjs',
+			url: 'http://127.0.0.1:4500/',
+			reuseExistingServer: ! process.env.CI,
+		},
 	],
 } );
