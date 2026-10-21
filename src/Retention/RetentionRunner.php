@@ -143,7 +143,7 @@ final class RetentionRunner {
 			'keys'        => 0,
 			'rate_limits' => 0,
 			'backlog'     => $stopped && $this->has_expired( $now ),
-			'errors'      => $errors,
+			'errors'      => array_values( $errors ),
 		);
 	}
 
