@@ -111,6 +111,13 @@ final class Form {
 	private array $identity_fields;
 
 	/**
+	 * Webhook destination and secret.
+	 *
+	 * @var FormWebhook
+	 */
+	private FormWebhook $webhook;
+
+	/**
 	 * Create a form.
 	 *
 	 * @param int                    $id                  Database id, or zero for a new form.
@@ -125,8 +132,9 @@ final class Form {
 	 * @param FormProtection|null    $protection          Origin allowlist and rate overrides. Null uses the defaults.
 	 * @param int                    $honeypot_rejections Rejected honeypot submissions.
 	 * @param FormNotifications|null $notifications      Email settings. Null sends no mail.
-	 * @param int                    $retention_days     Days to keep submissions. Zero keeps them until deletion.
-	 * @param string[]               $identity_fields    Email field names that identify the person.
+	 * @param int                    $retention_days      Days to keep submissions. Zero keeps them until deletion.
+	 * @param string[]               $identity_fields     Email field names that identify the person.
+	 * @param FormWebhook|null       $webhook             Webhook settings. Null sends no webhook.
 	 */
 	public function __construct(
 		int $id,
@@ -142,7 +150,8 @@ final class Form {
 		int $honeypot_rejections = 0,
 		?FormNotifications $notifications = null,
 		int $retention_days = 30,
-		array $identity_fields = array()
+		array $identity_fields = array(),
+		?FormWebhook $webhook = null
 	) {
 		$this->id                  = $id;
 		$this->public_id           = $public_id;
@@ -158,6 +167,7 @@ final class Form {
 		$this->notifications       = $notifications ?? FormNotifications::none();
 		$this->retention_days      = max( 0, $retention_days );
 		$this->identity_fields     = $identity_fields;
+		$this->webhook             = $webhook instanceof FormWebhook ? $webhook : FormWebhook::none();
 	}
 
 	/**
@@ -251,6 +261,13 @@ final class Form {
 	 */
 	public function retention_days(): int {
 		return $this->retention_days;
+	}
+
+	/**
+	 * Webhook destination and secret.
+	 */
+	public function webhook(): FormWebhook {
+		return $this->webhook;
 	}
 
 	/**

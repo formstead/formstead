@@ -16,6 +16,8 @@ final class AuditEvent {
 
 	public const FORM_UPDATED = 'form_updated';
 
+	public const WEBHOOK_SECRET_ROTATED = 'webhook_secret_rotated';
+
 	public const SETTINGS_UPDATED = 'settings_updated';
 
 	public const SUBMISSIONS_EXPORTED = 'submissions_exported';
@@ -37,6 +39,7 @@ final class AuditEvent {
 		return array(
 			self::FORM_CREATED,
 			self::FORM_UPDATED,
+			self::WEBHOOK_SECRET_ROTATED,
 			self::SETTINGS_UPDATED,
 			self::SUBMISSIONS_EXPORTED,
 			self::SUBMISSIONS_DELETED,
@@ -66,6 +69,8 @@ final class AuditEvent {
 				return __( 'Form created', 'formstead' );
 			case self::FORM_UPDATED:
 				return __( 'Form updated', 'formstead' );
+			case self::WEBHOOK_SECRET_ROTATED:
+				return __( 'Webhook secret rotated', 'formstead' );
 			case self::SETTINGS_UPDATED:
 				return __( 'Settings updated', 'formstead' );
 			case self::SUBMISSIONS_EXPORTED:
