@@ -7,6 +7,8 @@
 
 namespace Formstead\Admin;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
 use Formstead\Lifecycle\Uninstaller;
 use Formstead\Privacy\IdentityBackfill;
 use Formstead\Retention\RetentionPeriods;
@@ -54,6 +56,13 @@ final class SettingsPage {
 		} else {
 			delete_option( Uninstaller::OPTION );
 		}
+
+		AuditLog::record(
+			AuditEvent::SETTINGS_UPDATED,
+			'settings',
+			0,
+			array( 'settings' => array( 'delete_data_on_uninstall' ) )
+		);
 
 		wp_safe_redirect(
 			add_query_arg(

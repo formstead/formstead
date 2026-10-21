@@ -7,6 +7,8 @@
 
 namespace Formstead\Admin;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
 use Formstead\Delivery\DeliveryRepository;
 use Formstead\Delivery\DeliveryStatus;
 use Formstead\Forms\Field;
@@ -186,7 +188,8 @@ final class SubmissionsPage {
 				array( $id ),
 				array(
 					'page' => Menu::MENU_SLUG,
-				)
+				),
+				'single'
 			);
 		}
 		if ( ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
@@ -224,7 +227,7 @@ final class SubmissionsPage {
 			self::redirect( self::list_redirect_args() );
 		}
 		if ( self::DELETE_ACTION === $action ) {
-			self::delete_and_redirect( $ids, self::list_redirect_args() );
+			self::delete_and_redirect( $ids, self::list_redirect_args(), 'bulk' );
 		}
 		if ( ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
 			self::redirect( self::list_redirect_args() );
@@ -237,10 +240,11 @@ final class SubmissionsPage {
 	/**
 	 * Delete, then leave the inbox list.
 	 *
-	 * @param int[]                $ids  Submission ids.
-	 * @param array<string, mixed> $args Redirect query arguments.
+	 * @param int[]                $ids    Submission ids.
+	 * @param array<string, mixed> $args   Redirect query arguments.
+	 * @param string               $source `single` or `bulk`.
 	 */
-	private static function delete_and_redirect( array $ids, array $args ): void {
+	private static function delete_and_redirect( array $ids, array $args, string $source ): void {
 		if ( ! current_user_can( Capabilities::DELETE_SUBMISSIONS ) ) {
 			wp_die(
 				esc_html__( 'Sorry, you are not allowed to delete submissions.', 'formstead' ),
@@ -253,6 +257,21 @@ final class SubmissionsPage {
 		if ( $deleted instanceof WP_Error ) {
 			wp_die( esc_html( $deleted->get_error_message() ), '', array( 'response' => 500 ) );
 		}
+
+		$object_id = 0;
+		if ( 'single' === $source && isset( $ids[0] ) && is_int( $ids[0] ) ) {
+			$object_id = $ids[0];
+		}
+
+		AuditLog::record(
+			AuditEvent::SUBMISSIONS_DELETED,
+			'submission',
+			$object_id,
+			array(
+				'count'  => $deleted,
+				'source' => 'single' === $source ? 'single' : 'bulk',
+			)
+		);
 
 		self::redirect( array_merge( $args, array( 'formstead_deleted' => $deleted ) ) );
 	}
