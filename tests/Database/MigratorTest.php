@@ -489,6 +489,53 @@ final class MigratorTest extends MigrationTestCase {
 	}
 
 	/**
+	 * Schema version 5 gains a per-form retention period and a delivery index.
+	 *
+	 * Existing forms keep submissions for 30 days. The column default applies
+	 * them without a backfill.
+	 */
+	public function test_upgrade_from_version_5_adds_retention(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+
+		$forms      = Schema::forms_table();
+		$deliveries = Schema::deliveries_table();
+		$this->assertSame( 'retention_days', $wpdb->get_var( "SHOW COLUMNS FROM {$forms} LIKE 'retention_days'" ) );
+
+		$wpdb->query( "ALTER TABLE {$forms} DROP COLUMN retention_days" );
+		$wpdb->query( "ALTER TABLE {$deliveries} DROP INDEX status_updated" );
+		$wpdb->insert(
+			$forms,
+			array(
+				'public_id'      => 'fs_abcdefghijklmnop',
+				'name'           => 'Contact',
+				'is_enabled'     => 1,
+				'fields'         => '[]',
+				'schema_version' => 1,
+				'success_url'    => 'https://example.com/thanks',
+				'created_at'     => '2026-10-20 10:00:00',
+				'updated_at'     => '2026-10-20 11:00:00',
+			)
+		);
+		update_option( Schema::VERSION_OPTION, 5 );
+
+		$this->assertNull( Migrator::maybe_migrate() );
+		$this->assertSame( Schema::VERSION, (int) get_option( Schema::VERSION_OPTION ) );
+		$this->assertSame( '30', (string) $wpdb->get_var( "SELECT retention_days FROM {$forms}" ) );
+
+		$indexes = $wpdb->get_col( "SHOW INDEX FROM {$deliveries}", 2 );
+		$this->assertContains( 'status_updated', $indexes );
+
+		$again = array();
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		foreach ( Schema::statements() as $statement ) {
+			$again = array_merge( $again, dbDelta( $statement ) );
+		}
+		$this->assertSame( array(), $again );
+	}
+
+	/**
 	 * Activation creates the tables.
 	 */
 	public function test_activation_creates_tables(): void {

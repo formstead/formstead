@@ -1,6 +1,6 @@
 <?php
 /**
- * Database schema version 5.
+ * Database schema version 6.
  *
  * @package Formstead
  */
@@ -15,7 +15,7 @@ namespace Formstead\Database;
  */
 final class Schema {
 
-	public const VERSION = 5;
+	public const VERSION = 6;
 
 	public const VERSION_OPTION = 'formstead_db_version';
 
@@ -129,6 +129,7 @@ final class Schema {
 				notify_recipients text,
 				reply_to_field varchar(64) DEFAULT NULL,
 				mail_include_content tinyint(1) NOT NULL DEFAULT 0,
+				retention_days smallint(5) unsigned NOT NULL DEFAULT 30,
 				PRIMARY KEY  (id),
 				UNIQUE KEY public_id (public_id)
 			) {$charset} ENGINE=InnoDB;",
@@ -190,7 +191,8 @@ final class Schema {
 				updated_at datetime NOT NULL,
 				PRIMARY KEY  (id),
 				KEY status_next (status,next_attempt_at),
-				KEY submission_id (submission_id)
+				KEY submission_id (submission_id),
+				KEY status_updated (status,updated_at)
 			) {$charset} ENGINE=InnoDB;",
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared

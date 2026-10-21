@@ -97,6 +97,13 @@ final class Form {
 	private FormNotifications $notifications;
 
 	/**
+	 * How many days a submission is kept. Zero keeps it until someone deletes it.
+	 *
+	 * @var int
+	 */
+	private int $retention_days;
+
+	/**
 	 * Create a form.
 	 *
 	 * @param int                    $id                  Database id, or zero for a new form.
@@ -111,6 +118,7 @@ final class Form {
 	 * @param FormProtection|null    $protection          Origin allowlist and rate overrides. Null uses the defaults.
 	 * @param int                    $honeypot_rejections Rejected honeypot submissions.
 	 * @param FormNotifications|null $notifications      Email settings. Null sends no mail.
+	 * @param int                    $retention_days     Days to keep submissions. Zero keeps them until deletion.
 	 */
 	public function __construct(
 		int $id,
@@ -124,7 +132,8 @@ final class Form {
 		string $updated_at,
 		?FormProtection $protection = null,
 		int $honeypot_rejections = 0,
-		?FormNotifications $notifications = null
+		?FormNotifications $notifications = null,
+		int $retention_days = 30
 	) {
 		$this->id                  = $id;
 		$this->public_id           = $public_id;
@@ -138,6 +147,7 @@ final class Form {
 		$this->protection          = $protection ?? FormProtection::none();
 		$this->honeypot_rejections = max( 0, $honeypot_rejections );
 		$this->notifications       = $notifications ?? FormNotifications::none();
+		$this->retention_days      = max( 0, $retention_days );
 	}
 
 	/**
@@ -224,6 +234,13 @@ final class Form {
 	 */
 	public function notifications(): FormNotifications {
 		return $this->notifications;
+	}
+
+	/**
+	 * Days a submission is kept. Zero keeps it until someone deletes it.
+	 */
+	public function retention_days(): int {
+		return $this->retention_days;
 	}
 
 	/**
