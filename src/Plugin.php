@@ -17,6 +17,8 @@ use Formstead\Delivery\Scheduler;
 use Formstead\Retention\RetentionScheduler;
 use Formstead\Lifecycle\Requirements;
 use Formstead\Privacy\IdentityBackfill;
+use Formstead\Privacy\PrivacyEraser;
+use Formstead\Privacy\PrivacyExporter;
 use Formstead\Rest\Cors;
 use Formstead\Rest\HtmlResponder;
 use Formstead\Rest\SubmissionsController;
@@ -68,6 +70,8 @@ final class Plugin {
 		Scheduler::register();
 		RetentionScheduler::register();
 		IdentityBackfill::register();
+		PrivacyExporter::register();
+		PrivacyEraser::register();
 		DeliveriesCommand::register();
 		RetentionCommand::register();
 		IdentitiesCommand::register();

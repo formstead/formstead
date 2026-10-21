@@ -246,7 +246,7 @@ final class IdentityRepository {
 		$table = Schema::identities_table();
 		$rows  = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT submission_id FROM {$table} WHERE value_hash = %s ORDER BY submission_id ASC LIMIT %d OFFSET %d",
+				"SELECT DISTINCT submission_id FROM {$table} WHERE value_hash = %s ORDER BY submission_id ASC LIMIT %d OFFSET %d",
 				$hash,
 				max( 1, $limit ),
 				max( 0, $offset )
