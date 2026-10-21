@@ -59,7 +59,7 @@ final class RetentionCommand {
 	 * Null means another run holds the lock.
 	 *
 	 * @param array<string, mixed> $assoc_args Associative arguments.
-	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, errors: list<string>}|null
+	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, backlog_since: int, errors: list<string>}|null
 	 */
 	public static function process( array $assoc_args ): ?array {
 		$batches = null;
