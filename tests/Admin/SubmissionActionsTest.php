@@ -9,6 +9,7 @@ namespace Formstead\Tests\Admin;
 
 // phpcs:disable WordPress.Security.NonceVerification -- the test posts the inbox action, including its nonce.
 
+use Formstead\Admin\SubmissionsExport;
 use Formstead\Admin\SubmissionsPage;
 use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
@@ -96,6 +97,23 @@ final class SubmissionActionsTest extends \WP_UnitTestCase {
 		}
 
 		$this->assertNotNull( ( new SubmissionRepository() )->find( $id ) );
+	}
+
+	/**
+	 * A person who can read but not export is refused.
+	 */
+	public function test_reader_without_export_capability_cannot_export(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user    = new WP_User( $user_id );
+		$user->add_cap( Capabilities::READ_SUBMISSIONS );
+		wp_set_current_user( $user_id );
+
+		try {
+			SubmissionsExport::handle();
+			$this->fail( 'Expected the export to be rejected.' );
+		} catch ( \WPDieException $exception ) {
+			$this->assertStringContainsString( 'not allowed to export', $exception->getMessage() );
+		}
 	}
 
 	/**

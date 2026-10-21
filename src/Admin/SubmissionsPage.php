@@ -102,10 +102,12 @@ final class SubmissionsPage {
 	 * Render the inbox list.
 	 */
 	private static function render_list(): void {
-		$query  = self::current_query();
-		$forms  = ( new FormRepository() )->all();
-		$table  = new SubmissionsTable( $query, $forms, max( 1, self::query_int( 'paged' ) ) );
-		$notice = self::notice();
+		$query      = self::current_query();
+		$forms      = ( new FormRepository() )->all();
+		$table      = new SubmissionsTable( $query, $forms, max( 1, self::query_int( 'paged' ) ) );
+		$can_export = current_user_can( Capabilities::EXPORT_SUBMISSIONS ) && null !== $query->form_id();
+		$export_url = $can_export ? SubmissionsExport::url( $query ) : '';
+		$notice     = self::notice();
 		$table->prepare_items();
 
 		include dirname( FORMSTEAD_FILE ) . '/templates/admin/submissions-list.php';
