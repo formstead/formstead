@@ -17,3 +17,5 @@ A `422` body looks like `{ "error": { "code": "invalid_fields", "fields": { "mes
 `/closed` posts to `PUBLIC_FORMSTEAD_CLOSED_ENDPOINT`. Point that at a form whose allowlist does not include this site to see the browser refuse the response.
 
 A request with no `Origin` header is allowed. The browser sends one. A server-side client often does not.
+
+CORS, the admin API, and webhooks are described in [Integrations](../../docs/integrations.md).

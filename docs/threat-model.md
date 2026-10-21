@@ -1,18 +1,20 @@
 # Threat model
 
-This note describes the Formstead plugin, including personal-data export and erase and the audit log. It is not a certification, and it does not cover the host, WordPress core, or other plugins. What is stored, and how it is removed, is in [data-flows.md](data-flows.md).
+This note describes the Formstead plugin, including personal-data export and erase, the audit log, the admin API, and webhooks. It is not a certification, and it does not cover the host, WordPress core, or other plugins. What is stored, and how it is removed, is in [data-flows.md](data-flows.md). How to call the API and check a signature is in [integrations.md](integrations.md).
 
 Report a vulnerability to security@formstead.dev. See [SECURITY.md](../SECURITY.md).
 
 ## Assets
 
 - Submission text, stored as JSON, and the receipt id handed back to the sender.
-- Form configuration: fields, success URL, origin allowlist, recipients, and retention.
+- Form configuration: fields, success URL, origin allowlist, recipients, retention, and the webhook URL.
+- The webhook signing secret. It is stored in plaintext on the form so the plugin can sign. People who can manage forms can read it on the form screen. Rotating it invalidates the previous secret immediately.
 - Idempotency keys, stored only as SHA-256 hashes, and rate-limit counters.
 - The HMAC secret used to hash client addresses. It rotates about once a day. The raw address is not stored on the submission.
 - The separate HMAC secret used to index identifying email fields. It does not rotate. The index stores the HMAC, not the address. The address remains in the submission JSON.
 - The audit log: event codes, user ids, and short context. It does not store field values, email addresses, or IP addresses.
 - Mail handed to the site's mail system. A successful hand-off is not proof the mailbox received it.
+- A webhook handed to the form's receiver. A `2xx` is not proof the receiver kept it. The receiver's response is not stored.
 
 The public form id is an address, not a secret. Anyone who knows it can try to submit.
 
@@ -26,12 +28,16 @@ The public form id is an address, not a secret. Anyone who knows it can try to s
 | WP-Cron and WP-CLI | Run delivery, retention, and the identity-index backfill. They use the same deletion and delivery code as the admin screens. |
 | WordPress personal-data tools | Export or erase one email address. WordPress checks `export_others_personal_data` or `erase_others_personal_data` before it calls Formstead. Those are core capabilities, not Formstead capabilities. |
 | Site mail system | Accept a message. `From` stays with the site. `Reply-To` is a validated email field, with line breaks removed. |
-| Host backups and server logs | Outside the plugin. Deleting a row does not delete a backup. |
+| Webhook receiver | Receive one signed request. It is trusted to check the signature and the timestamp. It is not trusted to choose the URL or to follow a redirect the plugin refused. |
+| Application password | Call the admin API as that user, and only with that user's Formstead capabilities. It is not a browser session. |
+| Host backups and server logs | Outside the plugin. Deleting a row does not delete a backup. A backup keeps the webhook secret until the secret is rotated and that copy is gone. |
 
 ## Entry points
 
 - `POST /wp-json/formstead/v1/forms/{public_form_id}/submissions`, and the same route as `/?rest_route=`.
-- `OPTIONS` preflight for that namespace.
+- `OPTIONS` preflight for that public route. The admin routes do not answer CORS.
+- `GET`, `PATCH`, and `DELETE /wp-json/formstead/v1/submissions`, addressed by receipt id.
+- Outbound `POST` to the webhook URL saved on a form.
 - Formstead screens in wp-admin: forms, inbox, submission detail, CSV export, audit log, and Settings.
 - Inbox search by an exact email address (`s` on the inbox URL).
 - Tools → Export Personal Data and Erase Personal Data.
@@ -72,6 +78,15 @@ The public route does not list, export, or change stored submissions.
 | Store a field value or an email address in the audit log | Context keeps numbers, booleans, and short codes. A failed audit insert does not undo the action and does not write to the error log. | `tests/Audit/AuditLogTest.php` |
 | Read the audit log without managing forms | The screen requires `formstead_manage_forms`. | `tests/Admin/AuditPageTest.php` |
 | Keep audit rows past their period | Retention deletes rows older than 180 days. A row at the cutoff stays. | `tests/Retention/RetentionRunnerTest.php` |
+| Read submissions from another origin | Admin routes send no `Access-Control-*` headers. A missing user is `401`. A user without the capability is `403`. Production and staging require HTTPS. | `tests/Rest/AdminSubmissionsTest.php` |
+| Treat a read as opening the submission | `GET` returns the submission and leaves `new` as `new`. | `tests/Rest/AdminSubmissionsTest.php` |
+| Delete through the API without the capability, or leave a waiting webhook | `DELETE` requires `formstead_delete_submissions`. It uses the inbox deletion path, so a pending webhook is cancelled, and the audit row records `source` `api`. | `tests/Rest/AdminSubmissionsTest.php` |
+| Send a webhook to a private or metadata address | The URL must be HTTPS, with no userinfo, on port 443, and every resolved address must be public. The check runs at save time and before each attempt. A `3xx` is not followed. | `tests/Webhook/WebhookUrlPolicyTest.php` |
+| Let DNS change the target after the check | The attempt pins the addresses from that check with `CURLOPT_RESOLVE` and does not follow redirects. | `tests/Webhook/WebhookUrlPolicyTest.php` |
+| Sign a webhook with a guessable secret, or keep using one after rotation | The secret is `whsec_` plus base64 from 32 random bytes. Rotation replaces it before the next attempt. The audit row does not contain the secret or the URL. | `tests/Admin/FormsPageTest.php`, `tests/Webhook/WebhookChannelTest.php` |
+| Replay a captured webhook forever | `webhook-id` stays the same across attempts. `webhook-timestamp` is the time of that attempt. The receiver has to reject a stale timestamp. The Next.js example allows five minutes and compares the signature in constant time. | `examples/next/lib/verify.test.ts`, `tests/Webhook/WebhookChannelTest.php` |
+| Put the receiver's answer in the database or the log | The response body is discarded. The log line names the delivery id. | `tests/Webhook/WebhookChannelTest.php` |
+| Retry a blocked URL or a redirect until the limit | `webhook_blocked_url`, `webhook_redirect`, and `webhook_http_4xx` fail the delivery immediately. Timeouts, connection failures, `429`, and `5xx` stop after five attempts. | `tests/Webhook/WebhookChannelTest.php` |
 
 A focused pass over injection, open redirect, and the other Core 1.0 abuse cases is part of later hardening. The table is what this version already checks.
 
@@ -79,14 +94,16 @@ A focused pass over injection, open redirect, and the other Core 1.0 abuse cases
 
 These are intentionally absent. They are not silent controls.
 
-- An authenticated admin API. The inbox is the WordPress screen.
-- Webhooks. There is no outbound request to a form-configured URL, and no SSRF surface of that kind yet.
 - File uploads, captcha, and Multisite as a supported layout.
+- An allowlist of addresses that may call the admin API. A stolen application password works from any client that can reach the site.
+- A record of webhook deliveries the receiver has already accepted. Freshness is the receiver's timestamp check.
 
 ## Operating limits
 
 WP-Cron runs when the site is visited. A site that must send mail or delete old submissions on time should call the WP-CLI commands from system cron. Settings warns when retention looks overdue.
 
-The plugin does not encrypt submissions at rest and does not manage host backups. Mail leaves the site only when a form has recipients, or when the host's own mail path sends it.
+The plugin does not encrypt submissions at rest and does not manage host backups. Mail leaves the site only when a form has recipients, or when the host's own mail path sends it. A webhook leaves the site only when that form has a URL. The filter `formstead_webhook_allowed_hosts` can allow a private address for a test. A production site should leave it empty.
+
+The address pin is applied to curl. A host whose HTTP transport is not curl still refuses a private address at check time, and does not pin the later lookup.
 
 An inbox search puts the email address in the page URL. Server logs and the browser history can keep it after the submission is gone. Details are in [data-flows.md](data-flows.md).

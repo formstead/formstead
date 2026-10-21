@@ -14,6 +14,8 @@ Replace `__FORMSTEAD_ENDPOINT__` with that URL.
 
 A browser sends an `Origin` header on this POST. A request with no `Origin` header is allowed and still counts toward the rate limit. That is the path for a server-side client. `Origin: null` is refused.
 
+CORS, the admin API, and webhooks are described in [Integrations](../../docs/integrations.md).
+
 ## Fields
 
 `email` and `message` must be the field names saved on the form. The browser does not decide whether a value is accepted. An empty required field comes back as an HTML page that names the field and does not repeat what was typed.
