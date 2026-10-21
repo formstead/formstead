@@ -12,6 +12,7 @@ use Formstead\Database\Transaction;
 use Formstead\Delivery\DeliveryRepository;
 use Formstead\Delivery\Scheduler;
 use Formstead\Forms\Form;
+use Formstead\Security\Limits;
 use WP_Error;
 
 /**
@@ -26,14 +27,15 @@ final class SubmissionIntake {
 	/**
 	 * Accept normalized values.
 	 *
-	 * @param Form                                    $form   Form that received the submission.
-	 * @param array<string, string|bool|list<string>> $values Normalized field values.
-	 * @param IdempotencyKey|null                     $key    Idempotency key, or null when the client did not send one.
+	 * @param Form                                    $form     Form that received the submission.
+	 * @param array<string, string|bool|list<string>> $values   Normalized field values.
+	 * @param IdempotencyKey|null                     $key      Idempotency key, or null when the client did not send one.
+	 * @param bool                                    $too_fast Whether the fill-time signal says this is spam.
 	 */
-	public function accept( Form $form, array $values, ?IdempotencyKey $key ): IntakeResult {
+	public function accept( Form $form, array $values, ?IdempotencyKey $key, bool $too_fast = false ): IntakeResult {
 		$result = Transaction::run(
-			function () use ( $form, $values, $key ) {
-				return $this->store( $form, $values, $key );
+			function () use ( $form, $values, $key, $too_fast ) {
+				return $this->store( $form, $values, $key, $too_fast );
 			}
 		);
 
@@ -53,22 +55,23 @@ final class SubmissionIntake {
 	/**
 	 * Insert the key and the submission. The caller owns the transaction.
 	 *
-	 * @param Form                                    $form   Form that received the submission.
-	 * @param array<string, string|bool|list<string>> $values Normalized field values.
-	 * @param IdempotencyKey|null                     $key    Idempotency key, or null.
+	 * @param Form                                    $form     Form that received the submission.
+	 * @param array<string, string|bool|list<string>> $values   Normalized field values.
+	 * @param IdempotencyKey|null                     $key      Idempotency key, or null.
+	 * @param bool                                    $too_fast Whether the fill-time signal says this is spam.
 	 */
-	private function store( Form $form, array $values, ?IdempotencyKey $key ): IntakeResult|Rollback|WP_Error {
+	private function store( Form $form, array $values, ?IdempotencyKey $key, bool $too_fast ): IntakeResult|Rollback|WP_Error {
+		$body_hash = IdempotencyKey::body_hash( $values );
+		if ( ! is_string( $body_hash ) ) {
+			return new WP_Error(
+				'formstead_submission_save_failed',
+				__( 'The submission could not be saved.', 'formstead' )
+			);
+		}
+
+		$keys  = new IdempotencyRepository();
 		$claim = null;
 		if ( $key instanceof IdempotencyKey ) {
-			$body_hash = IdempotencyKey::body_hash( $values );
-			if ( ! is_string( $body_hash ) ) {
-				return new WP_Error(
-					'formstead_submission_save_failed',
-					__( 'The submission could not be saved.', 'formstead' )
-				);
-			}
-
-			$keys  = new IdempotencyRepository();
 			$claim = $keys->claim( $form->id(), $key->hash(), $body_hash );
 			if ( $claim->is_failed() ) {
 				return new WP_Error(
@@ -95,13 +98,25 @@ final class SubmissionIntake {
 			}
 		}
 
-		$saved = ( new SubmissionRepository() )->insert( $form, $values );
+		$submissions = new SubmissionRepository();
+		$spam        = $too_fast;
+		$window      = Limits::duplicate_window();
+		if ( ! $spam && $window > 0 && $submissions->has_recent_duplicate( $form->id(), $body_hash, time() - $window ) ) {
+			$spam = true;
+		}
+
+		$saved = $submissions->insert(
+			$form,
+			$values,
+			$spam ? SubmissionStatus::SPAM : SubmissionStatus::NEW,
+			$body_hash
+		);
 		if ( $saved instanceof WP_Error ) {
 			return $saved;
 		}
 
 		if ( $claim instanceof IdempotencyClaim && $claim->is_inserted() ) {
-			$attached = ( new IdempotencyRepository() )->attach( $claim->id(), $saved->id() );
+			$attached = $keys->attach( $claim->id(), $saved->id() );
 			if ( ! $attached ) {
 				return new WP_Error(
 					'formstead_submission_save_failed',
@@ -111,7 +126,7 @@ final class SubmissionIntake {
 		}
 
 		$delivery_id = null;
-		if ( $form->notifications()->has_recipients() ) {
+		if ( ! $spam && $form->notifications()->has_recipients() ) {
 			$created = ( new DeliveryRepository() )->create( $saved->id() );
 			if ( $created instanceof WP_Error ) {
 				return $created;

@@ -12,6 +12,7 @@ use Formstead\Forms\FormRepository;
 use Formstead\Security\Limits;
 use Formstead\Security\OriginPolicy;
 use Formstead\Security\RateLimiter;
+use Formstead\Security\SpamSignals;
 use Formstead\Submissions\IdempotencyKey;
 use Formstead\Submissions\ReceiptId;
 use Formstead\Submissions\SubmissionIntake;
@@ -118,7 +119,8 @@ final class SubmissionsController {
 			return SubmissionResponder::failure( $mode, $key );
 		}
 
-		$intake = ( new SubmissionIntake() )->accept( $form, $result->values(), $key );
+		$too_fast = ( new SpamSignals() )->too_fast( $params );
+		$intake   = ( new SubmissionIntake() )->accept( $form, $result->values(), $key, $too_fast );
 		if ( $intake->is_conflict() ) {
 			return SubmissionResponder::failure( $mode, RequestError::IdempotencyConflict );
 		}
