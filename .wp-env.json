@@ -9,7 +9,7 @@
 	],
 	"port": 8888,
 	"mappings": {
-		"wp-content/mu-plugins/formstead-mailpit.php": "./dev/mu-plugins/formstead-mailpit.php"
+		"wp-content/mu-plugins": "./dev/mu-plugins"
 	},
 	"config": {
 		"WP_DEBUG": true,
@@ -20,5 +20,13 @@
 	},
 	"lifecycleScripts": {
 		"afterStart": "npx wp-env run cli wp theme activate twentytwentyfive"
+	},
+	"env": {
+		"tests": {
+			"config": {
+				"FORMSTEAD_E2E": true,
+				"FORMSTEAD_E2E_FAULTS": true
+			}
+		}
 	}
 }

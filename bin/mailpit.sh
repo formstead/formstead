@@ -7,8 +7,8 @@ cd "$root"
 
 container_name="formstead-mailpit"
 
-wordpress_container() {
-	docker ps --format '{{.Names}}' | grep -E -- '-wordpress-1$' | grep -v -- '-tests-wordpress-1$' | head -n 1
+wordpress_containers() {
+	docker ps --format '{{.Names}}' | grep -E -- '-wordpress-1$' || true
 }
 
 network_of() {
@@ -35,25 +35,32 @@ wait_for_inbox() {
 up() {
 	docker compose up -d
 
-	local wordpress network
-	wordpress="$(wordpress_container || true)"
-	if [[ -z "$wordpress" ]]; then
+	local names name network
+	names="$(wordpress_containers)"
+	if [[ -z "$names" ]]; then
 		echo "The wp-env WordPress container is not running. Start it with npx wp-env start." >&2
 		exit 1
 	fi
 
-	network="$(network_of "$wordpress")"
-	if [[ -z "$network" ]]; then
-		echo "Could not read the network of ${wordpress}." >&2
-		exit 1
-	fi
+	while IFS= read -r name; do
+		if [[ -z "$name" ]]; then
+			continue
+		fi
 
-	if ! docker inspect -f '{{json .NetworkSettings.Networks}}' "$container_name" | grep -q "\"${network}\""; then
-		docker network connect "$network" "$container_name"
-	fi
+		network="$(network_of "$name")"
+		if [[ -z "$network" ]]; then
+			echo "Could not read the network of ${name}." >&2
+			exit 1
+		fi
+
+		if ! docker inspect -f '{{json .NetworkSettings.Networks}}' "$container_name" | grep -q "\"${network}\""; then
+			docker network connect "$network" "$container_name"
+		fi
+		echo "Mailpit is attached to ${network} via ${name}."
+	done <<<"$names"
 
 	wait_for_inbox
-	echo "Mailpit is ${container_name} on ${network}, SMTP port 1025. Inbox: http://localhost:$(ui_port)"
+	echo "Mailpit is ${container_name}, SMTP port 1025. Inbox: http://localhost:$(ui_port)"
 }
 
 down() {

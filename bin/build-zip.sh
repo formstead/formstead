@@ -46,7 +46,7 @@ rm -f "$OUTPUT"
 	zip -r "$OUTPUT" formstead
 )
 
-if unzip -l "$OUTPUT" | grep -E 'formstead/(tests/|bin/|node_modules/|\.github/)|formstead/composer\.(lock|json)|formstead/README\.md|\.wp-env|phpunit\.xml|phpcs\.xml|phpstan\.neon'; then
+if unzip -l "$OUTPUT" | grep -E 'formstead/(tests/|bin/|node_modules/|\.github/|examples/|docs/|dev/)|formstead/playwright\.config|formstead/composer\.(lock|json)|formstead/README\.md|\.wp-env|phpunit\.xml|phpcs\.xml|phpstan\.neon'; then
 	echo "Distributable ZIP contains development files." >&2
 	exit 1
 fi
