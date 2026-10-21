@@ -108,7 +108,7 @@ final class RetentionRunner {
 	 * @param int|null $batch_limit Maximum batches. Null means no limit.
 	 * @param int|null $deadline    Unix time at which to stop. Null means no time limit.
 	 * @param int|null $now         Unix time used to decide what has expired.
-	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, errors: list<string>}|null
+	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, backlog_since: int, errors: list<string>}|null
 	 */
 	public function run( ?int $batch_limit, ?int $deadline, ?int $now = null ): ?array {
 		$now     = $now ?? time();
@@ -118,7 +118,8 @@ final class RetentionRunner {
 		}
 
 		try {
-			$report = $this->purge( $batch_limit, $deadline, $now, $started );
+			$report                  = $this->purge( $batch_limit, $deadline, $now, $started );
+			$report['backlog_since'] = $this->backlog_since( $report['backlog'], $report['finished_at'] );
 			update_option( self::REPORT_OPTION, $report, false );
 			return $report;
 		} finally {
@@ -211,6 +212,33 @@ final class RetentionRunner {
 			'backlog'     => $stopped && $this->has_expired( $now ),
 			'errors'      => array_values( $errors ),
 		);
+	}
+
+	/**
+	 * When the current backlog began, or zero when nothing is waiting.
+	 *
+	 * A later run that still has work keeps the original time, so the screen
+	 * can warn once the leftovers have waited for a day.
+	 *
+	 * @param bool $backlog  Whether this run left rows behind.
+	 * @param int  $finished Unix time when this run finished.
+	 */
+	private function backlog_since( bool $backlog, int $finished ): int {
+		if ( ! $backlog ) {
+			return 0;
+		}
+
+		$previous = get_option( self::REPORT_OPTION );
+		if ( ! is_array( $previous ) || empty( $previous['backlog'] ) ) {
+			return $finished;
+		}
+
+		$since = $previous['backlog_since'] ?? 0;
+		if ( is_numeric( $since ) && (int) $since > 0 ) {
+			return (int) $since;
+		}
+
+		return $finished;
 	}
 
 	/**

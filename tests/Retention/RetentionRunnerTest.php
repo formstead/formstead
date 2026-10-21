@@ -247,6 +247,31 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A second run that still has work keeps the time the backlog started.
+	 */
+	public function test_a_backlog_keeps_its_start_time(): void {
+		$now   = time();
+		$since = $now - ( 25 * HOUR_IN_SECONDS );
+		update_option(
+			RetentionRunner::REPORT_OPTION,
+			array(
+				'backlog'       => true,
+				'backlog_since' => $since,
+			),
+			false
+		);
+		$form  = $this->form( 1 );
+		$saved = $this->submission( $form );
+		$this->age( $saved->id(), $now - ( 2 * DAY_IN_SECONDS ) );
+
+		$report = ( new RetentionRunner() )->run( 10, $now - 1, $now );
+
+		$this->assertIsArray( $report );
+		$this->assertTrue( $report['backlog'] );
+		$this->assertSame( $since, $report['backlog_since'] );
+	}
+
+	/**
 	 * The command deletes every expired row when no batch limit is given.
 	 */
 	public function test_cli_runs_until_nothing_is_left(): void {
