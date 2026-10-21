@@ -92,6 +92,7 @@ final class SettingsPage {
 		$overdue          = self::is_overdue();
 		$spam_days        = RetentionPeriods::spam_days();
 		$delivery_days    = RetentionPeriods::delivery_days();
+		$audit_days       = RetentionPeriods::audit_days();
 		$warning          = self::warning();
 		$next_run         = self::next_run();
 		$delete_data      = Uninstaller::enabled();
@@ -195,7 +196,7 @@ final class SettingsPage {
 	/**
 	 * Last run, with counts and known error codes only.
 	 *
-	 * @return array{finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, errors: list<string>}|null
+	 * @return array{finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, audit: int, backlog: bool, errors: list<string>}|null
 	 */
 	public static function report(): ?array {
 		$stored = get_option( RetentionRunner::REPORT_OPTION );
@@ -210,6 +211,7 @@ final class SettingsPage {
 			'deliveries'  => self::count( $stored['deliveries'] ?? null ),
 			'keys'        => self::count( $stored['keys'] ?? null ),
 			'rate_limits' => self::count( $stored['rate_limits'] ?? null ),
+			'audit'       => self::count( $stored['audit'] ?? null ),
 			'backlog'     => ! empty( $stored['backlog'] ),
 			'errors'      => self::errors( $stored['errors'] ?? null ),
 		);

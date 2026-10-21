@@ -74,10 +74,16 @@ final class SettingsPageTest extends WP_UnitTestCase {
 			false
 		);
 
+		$shown = SettingsPage::report();
+		$this->assertIsArray( $shown );
+		$this->assertSame( 0, $shown['audit'] );
+
 		$html = $this->render();
 
 		$this->assertStringContainsString( 'FORMSTEAD_SPAM_RETENTION_DAYS', $html );
 		$this->assertStringContainsString( 'FORMSTEAD_DELIVERY_RETENTION_DAYS', $html );
+		$this->assertStringContainsString( 'FORMSTEAD_AUDIT_RETENTION_DAYS', $html );
+		$this->assertStringContainsString( 'Audit events', $html );
 		$this->assertStringContainsString( '7', $html );
 		$this->assertStringContainsString( '30', $html );
 		$this->assertStringContainsString( '4', $html );
