@@ -51,7 +51,7 @@ The address is sent as the `s` query parameter, the same way WordPress search do
 
 WordPress Tools → Export Personal Data and Erase Personal Data call Formstead. WordPress checks `export_others_personal_data` and `erase_others_personal_data` before it calls the plugin. Formstead capabilities are not the gate for these tools.
 
-Both tools look up the address in the identity index. While the backfill is unfinished they return an error and do not report a partial result. The message asks for `wp formstead identities rebuild`.
+Both tools look up the address in the identity index. While the backfill is unfinished they return an error and do not report a partial result. The message asks for `wp formstead identities rebuild`. A failed read of the index returns an error as well, instead of an empty export or a finished erasure.
 
 Export returns pages of 100 submissions. Each item includes the receipt id, the form name, the date, the status, and the field values with labels from the schema snapshot. The group name is "Formstead submissions".
 

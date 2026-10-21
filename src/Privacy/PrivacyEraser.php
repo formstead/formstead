@@ -66,6 +66,9 @@ final class PrivacyEraser {
 		}
 
 		$ids = self::submission_ids( $email_address );
+		if ( $ids instanceof WP_Error ) {
+			return $ids;
+		}
 		if ( array() === $ids ) {
 			return self::result( false, true );
 		}
@@ -123,9 +126,9 @@ final class PrivacyEraser {
 	 * The first page of submission ids for this address.
 	 *
 	 * @param string $email Address to match.
-	 * @return list<int>
+	 * @return list<int>|WP_Error
 	 */
-	private static function submission_ids( string $email ): array {
+	private static function submission_ids( string $email ): array|WP_Error {
 		$hash = IdentityHasher::hash( $email );
 		if ( ! is_string( $hash ) ) {
 			return array();

@@ -273,9 +273,9 @@ final class FormRepository {
 
 			$unchanged = $this->find_by_id( $form->id() );
 			if ( ! $fields_changed && $unchanged instanceof Form && $unchanged->schema_version() === $form->schema_version() ) {
-				$cleared = self::clear_identity( $form );
-				if ( $cleared instanceof WP_Error ) {
-					return $cleared;
+				$indexed = self::finish_identity( $current, $form );
+				if ( $indexed instanceof WP_Error ) {
+					return $indexed;
 				}
 
 				return $unchanged;
@@ -287,12 +287,10 @@ final class FormRepository {
 			);
 		}
 
-		$cleared = self::clear_identity( $form );
-		if ( $cleared instanceof WP_Error ) {
-			return $cleared;
+		$indexed = self::finish_identity( $current, $form );
+		if ( $indexed instanceof WP_Error ) {
+			return $indexed;
 		}
-
-		self::request_added_identity( $current, $form );
 
 		return new Form(
 			$current->id(),
@@ -465,6 +463,21 @@ final class FormRepository {
 		}
 
 		return array_values( $names );
+	}
+
+	/**
+	 * Queue a backfill for newly marked fields, then drop rows for cleared ones.
+	 *
+	 * The form row is already stored. Requesting the backfill first means a
+	 * failed delete still leaves the new mark to be indexed. The next save
+	 * compares against that stored mark, so it cannot discover the add again.
+	 *
+	 * @param Form $current Form as it was stored before this save.
+	 * @param Form $form    Form the editor saved.
+	 */
+	private static function finish_identity( Form $current, Form $form ): ?WP_Error {
+		self::request_added_identity( $current, $form );
+		return self::clear_identity( $form );
 	}
 
 	/**

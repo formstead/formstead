@@ -70,6 +70,10 @@ final class PrivacyExporter {
 
 		$page = max( 1, $page );
 		$ids  = self::submission_ids( $email_address, ( $page - 1 ) * self::PAGE_SIZE );
+		if ( $ids instanceof WP_Error ) {
+			return $ids;
+		}
+
 		$data = array();
 		foreach ( $ids as $id ) {
 			$item = self::item( $id );
@@ -116,9 +120,9 @@ final class PrivacyExporter {
 	 *
 	 * @param string $email  Address to match.
 	 * @param int    $offset Rows to skip.
-	 * @return list<int>
+	 * @return list<int>|WP_Error
 	 */
-	private static function submission_ids( string $email, int $offset ): array {
+	private static function submission_ids( string $email, int $offset ): array|WP_Error {
 		$hash = IdentityHasher::hash( $email );
 		if ( ! is_string( $hash ) ) {
 			return array();

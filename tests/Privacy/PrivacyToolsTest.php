@@ -147,6 +147,42 @@ final class PrivacyToolsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A failed index read is an error, not an empty export or a finished erasure.
+	 */
+	public function test_a_failed_index_read_refuses_export_and_erasure(): void {
+		global $wpdb;
+
+		$form  = $this->form( 'Readable' );
+		$saved = $this->store( $form, self::EMAIL );
+		$table = Schema::identities_table();
+
+		$previous = $wpdb->suppress_errors( true );
+		$filter   = static function ( $query ) use ( $table ) {
+			if ( is_string( $query ) && str_contains( $query, $table ) && str_contains( $query, 'value_hash' ) ) {
+				return 'SELECT submission_id FROM ' . $table . '_missing';
+			}
+
+			return $query;
+		};
+
+		add_filter( 'query', $filter );
+		try {
+			$exported = PrivacyExporter::export( self::EMAIL, 1 );
+			$erased   = PrivacyEraser::erase( self::EMAIL, 1 );
+		} finally {
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $previous );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $exported );
+		$this->assertSame( 'formstead_identity_index_unreadable', $exported->get_error_code() );
+		$this->assertStringNotContainsString( 'wp formstead identities rebuild', $exported->get_error_message() );
+		$this->assertInstanceOf( WP_Error::class, $erased );
+		$this->assertSame( 'formstead_identity_index_unreadable', $erased->get_error_code() );
+		$this->assertNotNull( ( new SubmissionRepository() )->find( $saved->id() ) );
+	}
+
+	/**
 	 * Persist a form whose email field identifies the person.
 	 *
 	 * @param string $name Form name.

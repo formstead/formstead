@@ -65,6 +65,7 @@ The public route does not list, export, or change stored submissions.
 | Wipe a site on uninstall by surprise | Data is removed only when an administrator who can activate plugins has opted in. | `tests/Lifecycle/UninstallerTest.php` |
 | Network activation on Multisite | Activation as a network plugin is refused. | `tests/Lifecycle/ActivatorTest.php` |
 | Export or erase while the identity index is unfinished | Both tools return an error and do not report a partial result. The message names `wp formstead identities rebuild`. | `tests/Privacy/PrivacyToolsTest.php` |
+| Export or erase when the identity index cannot be read | Both tools return an error. Erasure does not report that it finished. | `tests/Privacy/PrivacyToolsTest.php` |
 | Miss a person who has more submissions than one page | Export pages 100 rows at a time until a short page. Erase deletes one page of 100 and reads the first page again, because the previous page is gone. | `tests/Privacy/PrivacyToolsTest.php` |
 | Erase one person and leave someone else, or leave a waiting notification | Erasure deletes the whole submission through the inbox deletion path, including the index row. Another person's rows stay. A pending delivery is cancelled. | `tests/Privacy/PrivacyToolsTest.php`, `tests/e2e/privacy.spec.ts` |
 | Find a person by scanning every submission | Inbox search and the privacy tools match an HMAC of the normalized address. The query uses the `hash_submission` index. | `tests/Submissions/SubmissionIndexTest.php`, `tests/e2e/inbox.spec.ts` |

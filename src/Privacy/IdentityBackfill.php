@@ -109,8 +109,10 @@ final class IdentityBackfill {
 	 * Queue a backfill for one form.
 	 *
 	 * Rows stored after the cursor was created are indexed when they arrive.
-	 * This covers rows stored before the field was marked. A job that has not
-	 * started yet already sees the new mark, so it is not queued twice.
+	 * This covers rows stored before the field was marked. A job for this form
+	 * that has already passed some rows starts again from the beginning, so
+	 * the new field is applied to them. A job that has not started yet already
+	 * sees the new mark, so it is not queued twice.
 	 *
 	 * @param int $form_id Form id.
 	 */
@@ -140,9 +142,18 @@ final class IdentityBackfill {
 		}
 
 		if ( $cursor['form_id'] === $form_id ) {
+			$changed = false;
+			if ( $cursor['after_id'] > 0 ) {
+				$cursor['after_id'] = 0;
+				$cursor['status']   = 'pending';
+				$changed            = true;
+			}
 			if ( $until > $cursor['until_id'] ) {
 				$cursor['until_id'] = $until;
 				$cursor['status']   = 'pending';
+				$changed            = true;
+			}
+			if ( $changed ) {
 				self::save( $cursor );
 			}
 			self::ensure();
@@ -236,20 +247,48 @@ final class IdentityBackfill {
 				continue;
 			}
 
-			$rows = $this->next_batch( $cursor, $batch_size );
+			$started_after = $cursor['after_id'];
+			$started_form  = $cursor['form_id'];
+			$rows          = $this->next_batch( $cursor, $batch_size );
+			if ( null === $rows ) {
+				return 'pending';
+			}
 			if ( array() === $rows ) {
+				if ( self::batch_was_rewound( $started_after, $started_form ) ) {
+					$forms = array();
+					continue;
+				}
 				self::save( $this->promote( $cursor ) );
 				continue;
 			}
 
+			$failed = false;
 			foreach ( $rows as $row ) {
 				if ( ! $this->index_row( $row, $forms ) ) {
-					self::save( $cursor );
-					return 'pending';
+					$failed = true;
+					break;
 				}
 
 				$cursor['after_id'] = $row['id'];
 				$cursor['status']   = 'pending';
+			}
+
+			if ( self::batch_was_rewound( $started_after, $started_form ) ) {
+				$forms = array();
+				if ( $failed ) {
+					return 'pending';
+				}
+				continue;
+			}
+
+			if ( $failed ) {
+				self::save( $cursor );
+				return 'pending';
+			}
+
+			$stored = self::read();
+			if ( $stored['until_id'] > $cursor['until_id'] ) {
+				$cursor['until_id'] = $stored['until_id'];
 			}
 
 			self::save( $cursor );
@@ -422,13 +461,29 @@ final class IdentityBackfill {
 	}
 
 	/**
+	 * Whether another request moved this batch's cursor while it was running.
+	 *
+	 * A new identifying field rewinds `after_id` to zero. Saving the copy this
+	 * batch holds would skip the rows that rewind was meant to cover.
+	 *
+	 * @param int $started_after Submission id this batch started after.
+	 * @param int $started_form  Form id this batch started with. Zero means every form.
+	 */
+	private static function batch_was_rewound( int $started_after, int $started_form ): bool {
+		$stored = self::read();
+		return $stored['after_id'] !== $started_after || $stored['form_id'] !== $started_form;
+	}
+
+	/**
 	 * Next submissions in this job, oldest id first.
+	 *
+	 * Null means the read failed. An empty list means the job has no further rows.
 	 *
 	 * @param array{status: string, after_id: int, until_id: int, form_id: int, queue: array<int, array{form_id: int, after_id: int, until_id: int}>} $cursor Active cursor.
 	 * @param int                                                                                                                                     $limit  Maximum rows.
-	 * @return list<array{id: int, form_id: int, payload: string, created_at: string}>
+	 * @return list<array{id: int, form_id: int, payload: string, created_at: string}>|null
 	 */
-	private function next_batch( array $cursor, int $limit ): array {
+	private function next_batch( array $cursor, int $limit ): ?array {
 		global $wpdb;
 
 		$table = Schema::submissions_table();
@@ -454,8 +509,8 @@ final class IdentityBackfill {
 				ARRAY_A
 			);
 		}
-		if ( ! is_array( $rows ) ) {
-			return array();
+		if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
+			return null;
 		}
 
 		$batch = array();
