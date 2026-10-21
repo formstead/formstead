@@ -17,7 +17,6 @@ use Formstead\Forms\FormVersion;
 use Formstead\Forms\FormVersionRepository;
 use Formstead\Security\Capabilities;
 use Formstead\Submissions\Submission;
-use Formstead\Submissions\SubmissionList;
 use Formstead\Submissions\SubmissionQuery;
 use Formstead\Submissions\SubmissionRepository;
 use Formstead\Submissions\SubmissionStatus;
@@ -29,8 +28,6 @@ use Formstead\Submissions\SubmissionStatus;
  * Opening a new submission marks it read.
  */
 final class SubmissionsPage {
-
-	private const PER_PAGE = 20;
 
 	/**
 	 * Status stored for each detail action.
@@ -74,8 +71,7 @@ final class SubmissionsPage {
 	 */
 	public static function handle_load(): void {
 		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '';
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- handle_single() verifies the nonce.
-		if ( 'POST' !== $method || ! isset( $_POST['formstead_single'] ) ) {
+		if ( 'POST' !== $method || ! self::is_action_post() ) {
 			return;
 		}
 
@@ -87,37 +83,23 @@ final class SubmissionsPage {
 			);
 		}
 
-		self::handle_single();
+		if ( self::is_single_post() ) {
+			self::handle_single();
+			return;
+		}
+
+		self::handle_bulk();
 	}
 
 	/**
 	 * Render the inbox list.
 	 */
 	private static function render_list(): void {
-		$form_id     = self::query_int( 'form_id' );
-		$paged       = max( 1, self::query_int( 'paged' ) );
-		$forms       = ( new FormRepository() )->all();
-		$page        = ( new SubmissionRepository() )->paginate( SubmissionQuery::from_values( $form_id, SubmissionQuery::VIEW_ALL, '', '' ), $paged, self::PER_PAGE );
-		$rows        = self::list_rows( $page, $forms );
-		$total_pages = (int) ceil( $page->total() / self::PER_PAGE );
-		$pagination  = '';
-
-		if ( $total_pages > 1 ) {
-			$link_args = array(
-				'base'      => add_query_arg( 'paged', '%#%' ),
-				'format'    => '',
-				'current'   => $paged,
-				'total'     => $total_pages,
-				'add_args'  => array(),
-				'prev_text' => __( 'Previous', 'formstead' ),
-				'next_text' => __( 'Next', 'formstead' ),
-			);
-			if ( $form_id > 0 ) {
-				$link_args['add_args'] = array( 'form_id' => $form_id );
-			}
-			$links      = paginate_links( $link_args );
-			$pagination = is_string( $links ) ? $links : '';
-		}
+		$query  = self::current_query();
+		$forms  = ( new FormRepository() )->all();
+		$table  = new SubmissionsTable( $query, $forms, max( 1, self::query_int( 'paged' ) ) );
+		$notice = self::notice();
+		$table->prepare_items();
 
 		include dirname( FORMSTEAD_FILE ) . '/templates/admin/submissions-list.php';
 	}
@@ -204,6 +186,25 @@ final class SubmissionsPage {
 	}
 
 	/**
+	 * Change the checked submissions.
+	 */
+	private static function handle_bulk(): void {
+		check_admin_referer( 'bulk-submissions' );
+
+		$action = self::posted_text( 'action' );
+		if ( '' === $action || '-1' === $action ) {
+			$action = self::posted_text( 'action2' );
+		}
+		$ids = self::posted_ids( 'submission' );
+		if ( array() === $ids || '' === $action || '-1' === $action || ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
+			self::redirect( self::list_redirect_args() );
+		}
+
+		$changed = ( new SubmissionRepository() )->set_status( $ids, self::STATUS_ACTIONS[ $action ] );
+		self::redirect( array_merge( self::list_redirect_args(), array( 'formstead_updated' => $changed ) ) );
+	}
+
+	/**
 	 * Redirect back to the submission and stop the load hook.
 	 *
 	 * @param array<string, mixed> $args Query arguments.
@@ -251,34 +252,6 @@ final class SubmissionsPage {
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitize_text_field cleans the action field.
 		return sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
-	}
-
-	/**
-	 * List rows for the template.
-	 *
-	 * @param SubmissionList $page  Page of submissions.
-	 * @param Form[]         $forms Known forms.
-	 * @return array<int, array{url: string, created_at: string, form_name: string, excerpt: string}>
-	 */
-	private static function list_rows( SubmissionList $page, array $forms ): array {
-		$forms_by_id = self::forms_by_id( $forms );
-		$rows        = array();
-
-		foreach ( $page->submissions() as $submission ) {
-			$form   = $forms_by_id[ $submission->form_id() ] ?? null;
-			$rows[] = array(
-				'url'        => admin_url( 'admin.php?page=' . Menu::MENU_SLUG . '&submission=' . $submission->id() ),
-				'created_at' => $submission->created_at(),
-				'form_name'  => $form instanceof Form ? $form->name() : sprintf(
-					/* translators: %d: form id. */
-					__( 'Form %d', 'formstead' ),
-					$submission->form_id()
-				),
-				'excerpt'    => self::excerpt( $submission ),
-			);
-		}
-
-		return $rows;
 	}
 
 	/**
@@ -404,54 +377,100 @@ final class SubmissionsPage {
 	}
 
 	/**
-	 * Short text from the first stored field.
+	 * Query arguments that keep the current list filters.
 	 *
-	 * @param Submission $submission Stored submission.
+	 * @return array<string, mixed>
 	 */
-	private static function excerpt( Submission $submission ): string {
-		$payload = $submission->payload();
-		if ( array() === $payload ) {
+	private static function list_redirect_args(): array {
+		$query = self::current_query();
+		$args  = array(
+			'page'       => Menu::MENU_SLUG,
+			'inbox_view' => $query->view(),
+		);
+		if ( null !== $query->form_id() ) {
+			$args['form_id'] = $query->form_id();
+		}
+		if ( null !== $query->date_from() ) {
+			$args['date_from'] = $query->date_from();
+		}
+		if ( null !== $query->date_to() ) {
+			$args['date_to'] = $query->date_to();
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Inbox filters from the current request.
+	 */
+	private static function current_query(): SubmissionQuery {
+		return SubmissionQuery::from_values(
+			self::query_int( 'form_id' ),
+			self::query_text( 'inbox_view' ),
+			self::query_text( 'date_from' ),
+			self::query_text( 'date_to' )
+		);
+	}
+
+	/**
+	 * Whether this POST is an inbox action rather than an unrelated request.
+	 */
+	private static function is_action_post(): bool {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- the handler verifies the nonce for the matching action.
+		return isset( $_POST['formstead_single'] ) || isset( $_POST['_wpnonce'] );
+	}
+
+	/**
+	 * Whether this POST targets one submission.
+	 */
+	private static function is_single_post(): bool {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- handle_single() verifies the nonce.
+		return isset( $_POST['formstead_single'] );
+	}
+
+	/**
+	 * Text from the inbox query string.
+	 *
+	 * @param string $key Query key.
+	 */
+	private static function query_text( string $key ): string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the screen query, not a submission.
+		if ( ! isset( $_GET[ $key ] ) ) {
 			return '';
 		}
 
-		$value = self::plain_text( reset( $payload ) );
-		$flat  = preg_replace( '/\s+/', ' ', $value );
-		$flat  = trim( is_string( $flat ) ? $flat : $value );
-		if ( mb_strlen( $flat ) <= 80 ) {
-			return $flat;
-		}
-
-		return mb_substr( $flat, 0, 80 ) . '…';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitize_text_field cleans the screen query.
+		return sanitize_text_field( wp_unslash( $_GET[ $key ] ) );
 	}
 
 	/**
-	 * One line of text for a stored value.
+	 * Submission ids from the action POST.
 	 *
-	 * @param mixed $value Stored value, or false from an empty reset.
+	 * @param string $key Field name.
+	 * @return list<int>
 	 */
-	private static function plain_text( mixed $value ): string {
-		if ( is_bool( $value ) ) {
-			return $value ? __( 'Yes', 'formstead' ) : __( 'No', 'formstead' );
-		}
-		if ( is_array( $value ) ) {
-			return implode( ', ', $value );
+	private static function posted_ids( string $key ): array {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- the caller checks the action nonce.
+		if ( ! isset( $_POST[ $key ] ) ) {
+			return array();
 		}
 
-		return is_string( $value ) ? $value : '';
-	}
-
-	/**
-	 * Forms keyed by id.
-	 *
-	 * @param Form[] $forms Forms to index.
-	 * @return array<int, Form>
-	 */
-	private static function forms_by_id( array $forms ): array {
-		$indexed = array();
-		foreach ( $forms as $form ) {
-			$indexed[ $form->id() ] = $form;
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- absint sanitizes each id.
+		$raw = wp_unslash( $_POST[ $key ] );
+		if ( ! is_array( $raw ) ) {
+			$id = absint( $raw );
+			return $id > 0 ? array( $id ) : array();
 		}
-		return $indexed;
+
+		$ids = array();
+		foreach ( $raw as $value ) {
+			$id = absint( $value );
+			if ( $id > 0 ) {
+				$ids[ $id ] = $id;
+			}
+		}
+
+		return array_values( $ids );
 	}
 
 	/**
