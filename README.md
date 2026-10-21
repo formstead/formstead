@@ -8,7 +8,7 @@ License: [GPL-2.0-or-later](LICENSE).
 
 ## Status
 
-`0.4.0` accepts URL-encoded, multipart, and JSON submissions. A client that sends `Accept: application/json` receives a receipt id. Other clients are redirected or shown an HTML page. Sending the same `Idempotency-Key` again returns that result for 24 hours. A different submission with the same key is refused. WordPress stores the submission against the field schema that was current at the time and lists it for people who can read submissions. A form can list the sites allowed to submit it, and it can email recipients after a submission is stored. The message links to that submission. The plugin activates on WordPress 7.0+ with PHP 8.3+.
+`0.4.1` accepts URL-encoded, multipart, and JSON submissions. A client that sends `Accept: application/json` receives a receipt id. Other clients are redirected or shown an HTML page. Sending the same `Idempotency-Key` again returns that result for 24 hours. A different submission with the same key is refused. WordPress stores the submission against the field schema that was current at the time and lists it for people who can read submissions. A form can list the sites allowed to submit it, and it can email recipients after a submission is stored. The message links to that submission. The plugin activates on WordPress 7.0+ with PHP 8.3+.
 
 Forms that already exist keep an empty recipient list after this update. They do not start sending mail until recipients are saved on the form.
 

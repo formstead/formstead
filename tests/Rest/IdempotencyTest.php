@@ -51,6 +51,20 @@ final class IdempotencyTest extends WP_UnitTestCase {
 	private int $cleanup_form_id = 0;
 
 	/**
+	 * Holder process started with proc_open. Null when no race is running.
+	 *
+	 * @var resource|null
+	 */
+	private $holder_process = null;
+
+	/**
+	 * Pipes for the holder process, keyed by the proc_open descriptor.
+	 *
+	 * @var array<int, resource>
+	 */
+	private array $holder_pipes = array();
+
+	/**
 	 * Create the repository.
 	 */
 	public function set_up(): void {
@@ -67,6 +81,7 @@ final class IdempotencyTest extends WP_UnitTestCase {
 	 * the delete has to wait until after `parent::tear_down()`.
 	 */
 	public function tear_down(): void {
+		$this->finish_holder();
 		parent::tear_down();
 
 		if ( ! $this->cleanup_db instanceof mysqli ) {
@@ -178,6 +193,27 @@ final class IdempotencyTest extends WP_UnitTestCase {
 		$this->assertSame( 400, $html->get_status() );
 		$this->assertSame( 400, $json->get_status() );
 		$data = $json->get_data();
+		$this->assertIsArray( $data );
+		$this->assertSame( 'invalid_idempotency_key', $data['error']['code'] );
+		$this->assertSame( array(), $this->rows() );
+		$this->assertSame( 0, $this->key_count( $form->id() ) );
+	}
+
+	/**
+	 * A trailing newline is outside the key format. `$` would have allowed it.
+	 */
+	public function test_key_with_a_trailing_newline_is_rejected(): void {
+		$form = $this->save_form();
+
+		$response = $this->post(
+			$form->public_id(),
+			'email=a@b.co&_fs_idempotency_key=' . rawurlencode( "abc\n" ),
+			null,
+			true
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$data = $response->get_data();
 		$this->assertIsArray( $data );
 		$this->assertSame( 'invalid_idempotency_key', $data['error']['code'] );
 		$this->assertSame( array(), $this->rows() );
@@ -302,33 +338,283 @@ final class IdempotencyTest extends WP_UnitTestCase {
 				$db->real_escape_string( $created_at )
 			)
 		);
-			$this->assertNotFalse( $saved, $db->error );
-			$submission_id = (int) $db->insert_id;
+		$this->assertNotFalse( $saved, $db->error );
+		$submission_id = (int) $db->insert_id;
 
-			$reserved = $db->query(
-				sprintf(
-					"INSERT INTO `%s` (form_id, key_hash, body_hash, submission_id, expires_at) VALUES (%d, '%s', '%s', %d, %d)",
-					$keys,
-					$form->id(),
-					$db->real_escape_string( hash( 'sha256', $key ) ),
-					$db->real_escape_string( $body_hash ),
-					$submission_id,
-					time() + IdempotencyKey::WINDOW
-				)
-			);
-			$this->assertNotFalse( $reserved );
+		$reserved = $db->query(
+			sprintf(
+				"INSERT INTO `%s` (form_id, key_hash, body_hash, submission_id, expires_at) VALUES (%d, '%s', '%s', %d, %d)",
+				$keys,
+				$form->id(),
+				$db->real_escape_string( hash( 'sha256', $key ) ),
+				$db->real_escape_string( $body_hash ),
+				$submission_id,
+				time() + IdempotencyKey::WINDOW
+			)
+		);
+		$this->assertNotFalse( $reserved );
 
-			$response = $this->post( $form->public_id(), 'email=a@b.co', $key, true );
+		$response = $this->post( $form->public_id(), 'email=a@b.co', $key, true );
 
-			$this->assertSame( 201, $response->get_status() );
-			$this->assertSame( 'true', $response->get_headers()['Idempotent-Replayed'] );
-			$this->assertSame( array( 'receipt_id' => $receipt ), $response->get_data() );
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'true', $response->get_headers()['Idempotent-Replayed'] );
+		$this->assertSame( array( 'receipt_id' => $receipt ), $response->get_data() );
 
-			$count = $db->query( "SELECT COUNT(*) AS total FROM `{$submissions}` WHERE form_id = " . (int) $form->id() );
-			$this->assertInstanceOf( \mysqli_result::class, $count );
-			$total = $count->fetch_assoc();
-			$this->assertIsArray( $total );
-			$this->assertSame( '1', (string) $total['total'] );
+		$count = $db->query( "SELECT COUNT(*) AS total FROM `{$submissions}` WHERE form_id = " . (int) $form->id() );
+		$this->assertInstanceOf( \mysqli_result::class, $count );
+		$total = $count->fetch_assoc();
+		$this->assertIsArray( $total );
+		$this->assertSame( '1', (string) $total['total'] );
+	}
+
+	/**
+	 * An expired row is overwritten, so its id stays and a new submission is stored.
+	 */
+	public function test_expired_key_row_is_reused_in_place(): void {
+		global $wpdb;
+
+		$form  = $this->save_form();
+		$key   = 'reuse-key';
+		$table = Schema::idempotency_keys_table();
+		$wpdb->insert(
+			$table,
+			array(
+				'form_id'       => $form->id(),
+				'key_hash'      => hash( 'sha256', $key ),
+				'body_hash'     => hash( 'sha256', '{"email":"old@b.co"}' ),
+				'submission_id' => 1,
+				'expires_at'    => time() - 5,
+			),
+			array( '%d', '%s', '%s', '%d', '%d' )
+		);
+		$row_id = (int) $wpdb->insert_id;
+
+		$response = $this->post( $form->public_id(), 'email=a@b.co', $key, true );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertArrayNotHasKey( 'Idempotent-Replayed', $response->get_headers() );
+		$this->assertCount( 1, $this->rows() );
+		$this->assertSame( 1, $this->key_count( $form->id() ) );
+		$kept = $wpdb->get_row( $wpdb->prepare( "SELECT id, submission_id, expires_at FROM {$table} WHERE form_id = %d", $form->id() ), ARRAY_A );
+		$this->assertIsArray( $kept );
+		$this->assertSame( $row_id, (int) $kept['id'] );
+		$this->assertGreaterThan( 0, (int) $kept['submission_id'] );
+		$this->assertGreaterThan( time(), (int) $kept['expires_at'] );
+	}
+
+	/**
+	 * A key inserted by another connection, and not yet committed, is replayed.
+	 */
+	public function test_waits_for_uncommitted_key_and_replays(): void {
+		$form      = $this->save_form();
+		$key       = 'held-key';
+		$receipt   = 'fsr_heldreplay000001';
+		$body_hash = IdempotencyKey::body_hash( array( 'email' => 'a@b.co' ) );
+		$this->assertIsString( $body_hash );
+		$this->prepare_cleanup( $form->id() );
+
+		$this->start_holder( 'hold', $form, $key, $body_hash, $receipt );
+		$response = $this->post( $form->public_id(), 'email=a@b.co', $key, true );
+		$detail   = $this->holder_stderr();
+		$this->assertSame( 0, $this->finish_holder(), $detail );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'true', $response->get_headers()['Idempotent-Replayed'] );
+		$this->assertSame( array( 'receipt_id' => $receipt ), $response->get_data() );
+		$this->assertSame( '1', $this->committed_count( Schema::submissions_table() ) );
+		$this->assertSame( '1', $this->committed_count( Schema::idempotency_keys_table() ) );
+	}
+
+	/**
+	 * The old delete-then-insert sequence on another connection must not fail this request.
+	 *
+	 * On MySQL 8.0 that sequence deadlocks a claim that also deletes before inserting.
+	 */
+	public function test_parallel_claim_does_not_deadlock(): void {
+		$form      = $this->save_form();
+		$key       = 'gap-key';
+		$body_hash = IdempotencyKey::body_hash( array( 'email' => 'a@b.co' ) );
+		$this->assertIsString( $body_hash );
+		$this->prepare_cleanup( $form->id() );
+
+		$this->start_holder( 'gap', $form, $key, $body_hash, 'fsr_gaplockreplay001' );
+		$response = $this->post( $form->public_id(), 'email=a@b.co', $key, true );
+		$detail   = $this->holder_stderr();
+		$this->assertSame( 0, $this->finish_holder(), $detail );
+
+		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+	}
+
+	/**
+	 * Remember a form so rows committed outside the suite transaction can be removed.
+	 *
+	 * @param int $form_id Form id.
+	 */
+	private function prepare_cleanup( int $form_id ): void {
+		$this->cleanup_db      = $this->other_connection();
+		$this->cleanup_form_id = $form_id;
+	}
+
+	/**
+	 * Whether proc_open can start the holder process.
+	 */
+	private function proc_open_available(): bool {
+		if ( ! function_exists( 'proc_open' ) || '' === PHP_BINARY ) {
+			return false;
+		}
+
+		$disabled = ini_get( 'disable_functions' );
+		if ( ! is_string( $disabled ) || '' === $disabled ) {
+			return true;
+		}
+
+		return ! in_array( 'proc_open', array_map( 'trim', explode( ',', $disabled ) ), true );
+	}
+
+	/**
+	 * Start the holder and wait until its transaction is open.
+	 *
+	 * @param string $mode      `hold` or `gap`.
+	 * @param Form   $form      Form the request will use.
+	 * @param string $key       Raw idempotency key.
+	 * @param string $body_hash SHA-256 of the canonical body.
+	 * @param string $receipt   Receipt id the holder stores.
+	 */
+	private function start_holder( string $mode, Form $form, string $key, string $body_hash, string $receipt ): void {
+		if ( ! $this->proc_open_available() ) {
+			$this->markTestSkipped( 'proc_open is not available.' );
+		}
+
+		$script = dirname( __DIR__ ) . '/fixtures/hold-idempotency-key.php';
+		$this->assertFileExists( $script );
+
+		$host   = DB_HOST;
+		$port   = '';
+		$socket = '';
+		if ( is_string( $host ) && str_contains( $host, ':' ) ) {
+			$parts = explode( ':', $host, 2 );
+			$host  = $parts[0];
+			if ( isset( $parts[1] ) && is_numeric( $parts[1] ) ) {
+				$port = $parts[1];
+			} elseif ( isset( $parts[1] ) ) {
+				$socket = $parts[1];
+			}
+		}
+
+		$env   = array(
+			'FORMSTEAD_DB_HOST'           => is_string( $host ) && '' !== $host ? $host : 'localhost',
+			'FORMSTEAD_DB_PORT'           => $port,
+			'FORMSTEAD_DB_SOCKET'         => $socket,
+			'FORMSTEAD_DB_USER'           => (string) DB_USER,
+			'FORMSTEAD_DB_PASSWORD'       => (string) DB_PASSWORD,
+			'FORMSTEAD_DB_NAME'           => (string) DB_NAME,
+			'FORMSTEAD_SUBMISSIONS_TABLE' => Schema::submissions_table(),
+			'FORMSTEAD_KEYS_TABLE'        => Schema::idempotency_keys_table(),
+			'FORMSTEAD_FORM_ID'           => (string) $form->id(),
+			'FORMSTEAD_SCHEMA_VERSION'    => (string) $form->schema_version(),
+			'FORMSTEAD_KEY_HASH'          => hash( 'sha256', $key ),
+			'FORMSTEAD_BODY_HASH'         => $body_hash,
+			'FORMSTEAD_RECEIPT'           => $receipt,
+			'FORMSTEAD_PAYLOAD'           => '{"email":"a@b.co"}',
+			'FORMSTEAD_CREATED_AT'        => current_time( 'mysql', true ),
+			'FORMSTEAD_MODE'              => $mode,
+			'FORMSTEAD_HOLD_SECONDS'      => '1',
+		);
+		$pipes = array();
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- the race needs a second PHP process.
+		$process = proc_open(
+			array( PHP_BINARY, $script ),
+			array(
+				0 => array( 'pipe', 'r' ),
+				1 => array( 'pipe', 'w' ),
+				2 => array( 'pipe', 'w' ),
+			),
+			$pipes,
+			null,
+			$env
+		);
+		$this->assertTrue( is_resource( $process ), 'The holder process did not start.' );
+		$this->holder_process = $process;
+		foreach ( $pipes as $index => $pipe ) {
+			if ( is_resource( $pipe ) ) {
+				$this->holder_pipes[ (int) $index ] = $pipe;
+			}
+		}
+
+		$stdout = $this->holder_pipes[1] ?? null;
+		$this->assertTrue( is_resource( $stdout ) );
+		stream_set_blocking( $stdout, true );
+		stream_set_timeout( $stdout, 10 );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fgets -- pipe from the holder process.
+		$line = fgets( $stdout );
+		$this->assertSame( "ready\n", $line, $this->holder_stderr() );
+	}
+
+	/**
+	 * Stderr from the holder, without waiting for the process to exit.
+	 */
+	private function holder_stderr(): string {
+		$stderr = $this->holder_pipes[2] ?? null;
+		if ( ! is_resource( $stderr ) ) {
+			return '';
+		}
+
+		stream_set_blocking( $stderr, false );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_stream_get_contents -- pipe from the holder process.
+		$text = stream_get_contents( $stderr );
+		return is_string( $text ) ? $text : '';
+	}
+
+	/**
+	 * Wait for the holder to exit, or stop it.
+	 */
+	private function finish_holder(): int {
+		if ( ! is_resource( $this->holder_process ) ) {
+			return 0;
+		}
+
+		$deadline = time() + 8;
+		$status   = proc_get_status( $this->holder_process );
+		while ( is_array( $status ) && $status['running'] && time() < $deadline ) {
+			usleep( 100000 );
+			$status = proc_get_status( $this->holder_process );
+		}
+		if ( is_array( $status ) && $status['running'] ) {
+			proc_terminate( $this->holder_process );
+		}
+
+		foreach ( $this->holder_pipes as $pipe ) {
+			if ( is_resource( $pipe ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- pipe from the holder process.
+				fclose( $pipe );
+			}
+		}
+		$this->holder_pipes = array();
+
+		$code                 = proc_close( $this->holder_process );
+		$this->holder_process = null;
+
+		return $code;
+	}
+
+	/**
+	 * Count committed rows for the cleanup form on the side connection.
+	 *
+	 * The suite transaction cannot see those rows with a plain SELECT.
+	 *
+	 * @param string $table Full table name.
+	 */
+	private function committed_count( string $table ): string {
+		$this->assertInstanceOf( mysqli::class, $this->cleanup_db );
+		$this->assertSame( 1, preg_match( '/\A[A-Za-z0-9_]+\z/', $table ) );
+
+		$form_id = (int) $this->cleanup_form_id;
+		$result  = $this->cleanup_db->query( "SELECT COUNT(*) AS total FROM `{$table}` WHERE form_id = {$form_id}" );
+		$this->assertInstanceOf( \mysqli_result::class, $result );
+		$total = $result->fetch_assoc();
+		$this->assertIsArray( $total );
+
+		return (string) $total['total'];
 	}
 
 	/**

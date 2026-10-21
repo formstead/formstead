@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Receive form submissions from static and headless sites on an existing WordPress
 
 Formstead receives form submissions from static and headless sites on an existing WordPress install. Plain HTML, Astro, and Next.js post to WordPress. WordPress stores submissions in a private inbox. The site frontend stays with its author.
 
-Version 0.4.0 accepts URL-encoded, multipart, and JSON submissions. `Accept: application/json` returns a receipt id. Repeating a request with the same idempotency key returns the original result. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
+Version 0.4.1 accepts URL-encoded, multipart, and JSON submissions. `Accept: application/json` returns a receipt id. Repeating a request with the same idempotency key returns the original result. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
 
 Network activation on WordPress Multisite is not supported.
 
@@ -35,6 +35,11 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.4.1 =
+* Two submissions sent at the same time with the same idempotency key no longer fail with a database deadlock on MySQL.
+* Reject an idempotency key that ends with a newline.
+* Decode HTML entities in the site name before using it as the notification subject.
 
 = 0.4.0 =
 * Return the original result when the same idempotency key is sent again, and return 409 when that key is reused with different content.

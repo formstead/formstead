@@ -31,7 +31,7 @@ final class IdempotencyKey {
 	/**
 	 * Printable ASCII, excluding space, from 1 to 255 characters.
 	 */
-	private const PATTERN = '/^[\x21-\x7E]{1,255}$/';
+	private const PATTERN = '/^[\x21-\x7E]{1,255}\z/';
 
 	/**
 	 * Raw key. Kept only in memory for hashing.

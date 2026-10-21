@@ -32,32 +32,24 @@ final class IdempotencyRepository {
 	/**
 	 * Reserve a key, or report that it is already in use.
 	 *
-	 * An expired row for this key is removed first. The insert uses
+	 * The insert runs first. Deleting a missing expired row first takes a gap
+	 * lock, and two such deletes deadlock on MySQL when both then insert.
+	 * After a duplicate, a locking read waits for the transaction that owns
+	 * the row. An expired row is overwritten in place. The insert uses
 	 * `submission_id` 0 until {@see self::attach()} runs in the same transaction.
-	 * The lookup after a duplicate uses a locking read so it can see a row
-	 * committed by another connection after this transaction started.
 	 *
-	 * @param int    $form_id  Form id.
-	 * @param string $key_hash SHA-256 of the raw key.
+	 * A deadlock or a lock-wait timeout is a failed claim with no error log.
+	 * The client still receives the storage failure and can retry.
+	 *
+	 * @param int    $form_id   Form id.
+	 * @param string $key_hash  SHA-256 of the raw key.
 	 * @param string $body_hash SHA-256 of the canonical body.
 	 */
 	public function claim( int $form_id, string $key_hash, string $body_hash ): IdempotencyClaim {
 		global $wpdb;
 
-		$now    = time();
-		$table  = Schema::idempotency_keys_table();
-		$delete = $wpdb->query(
-			$wpdb->prepare(
-				"DELETE FROM {$table} WHERE form_id = %d AND key_hash = %s AND expires_at <= %d",
-				$form_id,
-				$key_hash,
-				$now
-			)
-		);
-		if ( false === $delete ) {
-			return IdempotencyClaim::failed();
-		}
-
+		$now       = time();
+		$table     = Schema::idempotency_keys_table();
 		$previous  = $wpdb->suppress_errors( true );
 		$saved     = $wpdb->insert(
 			$table,
@@ -70,28 +62,32 @@ final class IdempotencyRepository {
 			),
 			array( '%d', '%s', '%s', '%d', '%d' )
 		);
-		$duplicate = false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
+		$error     = (string) $wpdb->last_error;
+		$duplicate = false !== stripos( $error, 'Duplicate' );
 		$wpdb->suppress_errors( $previous );
 
 		if ( false !== $saved ) {
 			return IdempotencyClaim::inserted( (int) $wpdb->insert_id );
 		}
 		if ( ! $duplicate ) {
-			$this->log_failure( $form_id );
+			$this->log_failure_unless_contention( $form_id, $error );
 			return IdempotencyClaim::failed();
 		}
 
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT body_hash, submission_id, expires_at FROM {$table} WHERE form_id = %d AND key_hash = %s FOR UPDATE",
+				"SELECT id, body_hash, submission_id, expires_at FROM {$table} WHERE form_id = %d AND key_hash = %s FOR UPDATE",
 				$form_id,
 				$key_hash
 			),
 			ARRAY_A
 		);
-		if ( ! is_array( $row ) || (int) ( $row['expires_at'] ?? 0 ) <= $now ) {
-			$this->log_failure( $form_id );
+		if ( ! is_array( $row ) ) {
+			$this->log_failure_unless_contention( $form_id, (string) $wpdb->last_error );
 			return IdempotencyClaim::failed();
+		}
+		if ( (int) ( $row['expires_at'] ?? 0 ) <= $now ) {
+			return $this->reuse_expired( $table, (int) ( $row['id'] ?? 0 ), $body_hash, $now, $form_id );
 		}
 		if ( ! hash_equals( (string) ( $row['body_hash'] ?? '' ), $body_hash ) ) {
 			return IdempotencyClaim::conflict();
@@ -104,6 +100,47 @@ final class IdempotencyRepository {
 		}
 
 		return IdempotencyClaim::replay( $submission_id );
+	}
+
+	/**
+	 * Overwrite an expired key row and treat it as a fresh insert.
+	 *
+	 * The caller already holds the row lock. `submission_id` goes back to 0
+	 * so {@see self::attach()} can point the row at the new submission.
+	 *
+	 * @param string $table     Idempotency table name.
+	 * @param int    $id        Key row id.
+	 * @param string $body_hash SHA-256 of the canonical body.
+	 * @param int    $now       Unix time.
+	 * @param int    $form_id   Form id, used only in the failure log.
+	 */
+	private function reuse_expired( string $table, int $id, string $body_hash, int $now, int $form_id ): IdempotencyClaim {
+		global $wpdb;
+
+		if ( $id < 1 ) {
+			$this->log_failure( $form_id );
+			return IdempotencyClaim::failed();
+		}
+
+		$previous = $wpdb->suppress_errors( true );
+		$saved    = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET body_hash = %s, submission_id = 0, expires_at = %d WHERE id = %d AND expires_at <= %d",
+				$body_hash,
+				$now + IdempotencyKey::WINDOW,
+				$id,
+				$now
+			)
+		);
+		$error    = (string) $wpdb->last_error;
+		$wpdb->suppress_errors( $previous );
+
+		if ( 1 !== $saved ) {
+			$this->log_failure_unless_contention( $form_id, $error );
+			return IdempotencyClaim::failed();
+		}
+
+		return IdempotencyClaim::inserted( $id );
 	}
 
 	/**
@@ -160,6 +197,33 @@ final class IdempotencyRepository {
 				self::PRUNE_BATCH
 			)
 		);
+	}
+
+	/**
+	 * Record a failed claim unless the database reported a lock conflict.
+	 *
+	 * Deadlock (1213) and lock-wait timeout are expected when two requests
+	 * meet. The caller returns a failed claim either way. The log stays quiet
+	 * for those two, because a retry is the recovery.
+	 *
+	 * @param int    $form_id Form id.
+	 * @param string $error   Database error text.
+	 */
+	private function log_failure_unless_contention( int $form_id, string $error ): void {
+		if ( $this->is_lock_contention( $error ) ) {
+			return;
+		}
+
+		$this->log_failure( $form_id );
+	}
+
+	/**
+	 * Whether the database aborted the statement because of a lock.
+	 *
+	 * @param string $error Database error text.
+	 */
+	private function is_lock_contention( string $error ): bool {
+		return false !== stripos( $error, 'Deadlock' ) || false !== stripos( $error, 'Lock wait timeout' );
 	}
 
 	/**

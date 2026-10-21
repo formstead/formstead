@@ -137,7 +137,6 @@ jobs:
 
   mysql:
     name: PHPUnit on MySQL 8.0
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -276,7 +275,7 @@ jobs:
 
       - name: Hit front, admin, and uninstall over PHP's built-in server
         run: |
-          php -S 127.0.0.1:8080 -t wordpress >/tmp/php-server.log 2>&1 &
+          PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8080 -t wordpress >/tmp/php-server.log 2>&1 &
           for i in $(seq 1 20); do
             if curl -sf -o /dev/null http://127.0.0.1:8080/; then
               break
@@ -347,8 +346,8 @@ jobs:
           endpoint="$(wp eval "echo rest_url( 'formstead/v1/forms/${public_id}/submissions' );" --path=wordpress)"
           echo "endpoint:${endpoint}"
 
-          # Two requests with one key. The built-in server handles one request at a time;
-          # the database race is covered in PHPUnit.
+          # Two requests with one key. Several workers make the posts overlap
+          # so the database, not the web server, serializes them.
           idem_key="package-same-key"
           idem_headers_a="$(mktemp)"
           idem_headers_b="$(mktemp)"
