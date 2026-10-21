@@ -243,6 +243,29 @@ final class SubmissionRepository {
 	}
 
 	/**
+	 * Delete these submissions.
+	 *
+	 * The caller cancels deliveries and idempotency keys in the same transaction.
+	 *
+	 * @param int[] $ids Submission ids.
+	 * @return int|false Rows deleted, or false when the query fails.
+	 */
+	public function delete_ids( array $ids ): int|false {
+		global $wpdb;
+
+		$ids = self::positive_ids( $ids );
+		if ( array() === $ids ) {
+			return 0;
+		}
+
+		$table        = Schema::submissions_table();
+		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+		$deleted      = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id IN ( {$placeholders} )", ...$ids ) );
+
+		return is_int( $deleted ) ? $deleted : false;
+	}
+
+	/**
 	 * Load one submission. The caller marks a new row as read.
 	 *
 	 * A locking read sees a row committed by another connection after this

@@ -14,10 +14,12 @@ use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
+use Formstead\Security\Capabilities;
 use Formstead\Submissions\SubmissionRepository;
+use WP_User;
 
 /**
- * Bulk status changes.
+ * Bulk status changes and deletion permission.
  */
 final class SubmissionActionsTest extends \WP_UnitTestCase {
 
@@ -66,6 +68,49 @@ final class SubmissionActionsTest extends \WP_UnitTestCase {
 		}
 
 		$this->assertSame( 'new', ( new SubmissionRepository() )->find( $id )->status() );
+	}
+
+	/**
+	 * Reading submissions does not allow deleting them.
+	 */
+	public function test_reader_without_delete_capability_cannot_delete(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user    = new WP_User( $user_id );
+		$user->add_cap( Capabilities::READ_SUBMISSIONS );
+		wp_set_current_user( $user_id );
+		$id = $this->store( 'kept' );
+
+		$nonce                     = wp_create_nonce( 'formstead_submission_' . $id );
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST['formstead_single'] = '1';
+		$_POST['submission_id']    = (string) $id;
+		$_POST['formstead_action'] = 'delete';
+		$_POST['_wpnonce']         = $nonce;
+		$_REQUEST['_wpnonce']      = $nonce;
+
+		try {
+			SubmissionsPage::handle_load();
+			$this->fail( 'Expected deletion to be rejected.' );
+		} catch ( \WPDieException $exception ) {
+			$this->assertStringContainsString( 'not allowed to delete', $exception->getMessage() );
+		}
+
+		$this->assertNotNull( ( new SubmissionRepository() )->find( $id ) );
+	}
+
+	/**
+	 * Exporting does not grant deletion.
+	 */
+	public function test_exporter_without_delete_capability_cannot_delete(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user    = new WP_User( $user_id );
+		$user->add_cap( Capabilities::READ_SUBMISSIONS );
+		$user->add_cap( Capabilities::EXPORT_SUBMISSIONS );
+		wp_set_current_user( $user_id );
+		$id = $this->store( 'kept-by-exporter' );
+		$this->post_bulk( 'delete', array( $id ), false );
+
+		$this->assertNotNull( ( new SubmissionRepository() )->find( $id ) );
 	}
 
 	/**

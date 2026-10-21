@@ -9,7 +9,7 @@ namespace Formstead\Submissions;
 
 use Formstead\Database\Schema;
 
-// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- table name is an identifier. Dynamic IN lists are unpacked.
 
 /**
  * Reserves a key inside the caller's transaction.
@@ -141,6 +141,82 @@ final class IdempotencyRepository {
 		}
 
 		return IdempotencyClaim::inserted( $id );
+	}
+
+	/**
+	 * Treat a key whose submission is gone as a fresh insert.
+	 *
+	 * The caller holds the row lock from {@see self::claim()}. The same key
+	 * can then store a new submission instead of failing the request.
+	 *
+	 * @param int    $form_id   Form id.
+	 * @param string $key_hash  SHA-256 of the raw key.
+	 * @param string $body_hash SHA-256 of the canonical body.
+	 */
+	public function reopen( int $form_id, string $key_hash, string $body_hash ): IdempotencyClaim {
+		global $wpdb;
+
+		$table = Schema::idempotency_keys_table();
+		$row   = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE form_id = %d AND key_hash = %s FOR UPDATE",
+				$form_id,
+				$key_hash
+			),
+			ARRAY_A
+		);
+		if ( ! is_array( $row ) ) {
+			$this->log_failure_unless_contention( $form_id, (string) $wpdb->last_error );
+			return IdempotencyClaim::failed();
+		}
+
+		$id    = (int) ( $row['id'] ?? 0 );
+		$saved = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET body_hash = %s, submission_id = 0, expires_at = %d WHERE id = %d",
+				$body_hash,
+				time() + IdempotencyKey::WINDOW,
+				$id
+			)
+		);
+		if ( false === $saved || $id < 1 ) {
+			$this->log_failure_unless_contention( $form_id, (string) $wpdb->last_error );
+			return IdempotencyClaim::failed();
+		}
+
+		return IdempotencyClaim::inserted( $id );
+	}
+
+	/**
+	 * Delete keys that point at these submissions.
+	 *
+	 * Called inside the deletion transaction, before the submissions go away.
+	 *
+	 * @param int[] $submission_ids Submission ids.
+	 */
+	public function delete_for_submissions( array $submission_ids ): void {
+		global $wpdb;
+
+		$ids = array();
+		foreach ( $submission_ids as $id ) {
+			if ( is_int( $id ) && $id > 0 ) {
+				$ids[ $id ] = $id;
+			}
+		}
+		if ( array() === $ids ) {
+			return;
+		}
+
+		$ids          = array_values( $ids );
+		$table        = Schema::idempotency_keys_table();
+		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+		$wpdb->query(
+			// phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the IN list is unpacked.
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE submission_id IN ( {$placeholders} )",
+				...$ids
+			)
+		);
 	}
 
 	/**
