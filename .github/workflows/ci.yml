@@ -60,7 +60,7 @@ jobs:
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
 
       - name: PHPUnit
-        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain,multisite
 
       - name: PHPCS
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs
@@ -133,7 +133,7 @@ jobs:
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
 
       - name: PHPUnit
-        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain,multisite
 
   mysql:
     name: PHPUnit on MySQL 8.0
@@ -172,13 +172,18 @@ jobs:
 
       - name: PHPUnit
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
-        run: vendor/bin/phpunit --exclude-group explain
+        run: vendor/bin/phpunit --exclude-group explain,multisite
         env:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
 
       - name: PHPUnit including index checks
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: vendor/bin/phpunit
+        run: vendor/bin/phpunit --exclude-group multisite
+        env:
+          WP_TESTS_DIR: /tmp/wordpress-tests-lib
+
+      - name: PHPUnit multisite
+        run: WP_MULTISITE=1 vendor/bin/phpunit --group multisite
         env:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
 

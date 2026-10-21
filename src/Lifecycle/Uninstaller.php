@@ -22,7 +22,8 @@ use WP_Roles;
  * Dropping the tables does not go through the submission deleter. The cron
  * hooks are cleared first, and the delivery rows disappear with their table,
  * so there is nothing left to send. Each site in a network is checked on its
- * own. A site that did not opt in keeps its data.
+ * own. Switching sites does not reload roles, so the wipe loads that site's
+ * roles before removing capabilities. A site that did not opt in keeps its data.
  */
 final class Uninstaller {
 
@@ -52,11 +53,13 @@ final class Uninstaller {
 				)
 			);
 			if ( ! is_array( $ids ) || array() === $ids ) {
-				return;
+				break;
 			}
 
 			foreach ( $ids as $site_id ) {
-				switch_to_blog( (int) $site_id );
+				$site_id = (int) $site_id;
+				switch_to_blog( $site_id );
+				wp_roles()->for_site( $site_id );
 				self::wipe_site();
 				restore_current_blog();
 			}
@@ -64,6 +67,8 @@ final class Uninstaller {
 			$count   = count( $ids );
 			$offset += 100;
 		} while ( 100 === $count );
+
+		wp_roles()->for_site( get_current_blog_id() );
 	}
 
 	/**
