@@ -161,9 +161,9 @@ final class CsvExportTest extends \WP_UnitTestCase {
 		);
 		$this->assertInstanceOf( Form::class, $form );
 		$repository = new SubmissionRepository();
-		$kept = $repository->insert( $form, array( 'note' => 'kept-row' ) );
-		$spam = $repository->insert( $form, array( 'note' => 'spam-row' ) );
-		$old  = $repository->insert( $form, array( 'note' => 'old-row' ) );
+		$kept       = $repository->insert( $form, array( 'note' => 'kept-row' ) );
+		$spam       = $repository->insert( $form, array( 'note' => 'spam-row' ) );
+		$old        = $repository->insert( $form, array( 'note' => 'old-row' ) );
 		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $kept );
 		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $spam );
 		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $old );
