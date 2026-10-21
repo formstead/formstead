@@ -13,7 +13,7 @@ namespace Formstead\Submissions;
 final class IdempotencyClaim {
 
 	/**
-	 * `inserted`, `replay`, `conflict`, or `failed`.
+	 * `inserted`, `replay`, `conflict`, `contended`, or `failed`.
 	 *
 	 * @var string
 	 */
@@ -72,6 +72,15 @@ final class IdempotencyClaim {
 	}
 
 	/**
+	 * Another request holds the key and the database aborted this attempt.
+	 *
+	 * The caller should roll back and try the whole transaction again.
+	 */
+	public static function contended(): self {
+		return new self( 'contended', 0, 0 );
+	}
+
+	/**
 	 * The key could not be saved.
 	 */
 	public static function failed(): self {
@@ -97,6 +106,13 @@ final class IdempotencyClaim {
 	 */
 	public function is_conflict(): bool {
 		return 'conflict' === $this->state;
+	}
+
+	/**
+	 * Whether a lock conflict aborted the attempt.
+	 */
+	public function is_contended(): bool {
+		return 'contended' === $this->state;
 	}
 
 	/**
