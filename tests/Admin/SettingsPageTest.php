@@ -7,9 +7,13 @@
 
 namespace Formstead\Tests\Admin;
 
+// phpcs:disable WordPress.Security.NonceVerification -- the test supplies the nonce that the screen checks.
+
 use Formstead\Admin\Menu;
 use Formstead\Admin\SettingsPage;
+use Formstead\Lifecycle\Uninstaller;
 use Formstead\Retention\RetentionRunner;
+use Formstead\Security\Capabilities;
 use WP_UnitTestCase;
 
 /**
@@ -21,7 +25,12 @@ final class SettingsPageTest extends WP_UnitTestCase {
 	 * Forget the report and leave the admin screen.
 	 */
 	public function tear_down(): void {
+		$_POST                     = array();
+		$_GET                      = array();
+		$_REQUEST                  = array();
+		$_SERVER['REQUEST_METHOD'] = 'GET';
 		delete_option( RetentionRunner::REPORT_OPTION );
+		delete_option( Uninstaller::OPTION );
 		if ( function_exists( 'set_current_screen' ) ) {
 			set_current_screen( 'front' );
 		}
@@ -92,6 +101,41 @@ final class SettingsPageTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An administrator can opt in to deleting data, and can turn it off again.
+	 */
+	public function test_administrator_can_opt_in_to_deleting_data(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->post_settings( true );
+		$this->save_expecting_redirect();
+		$this->assertTrue( Uninstaller::enabled() );
+
+		$this->post_settings( false );
+		$this->save_expecting_redirect();
+		$this->assertFalse( Uninstaller::enabled() );
+	}
+
+	/**
+	 * Managing forms is not enough to change the uninstall choice.
+	 */
+	public function test_uninstall_choice_requires_activate_plugins(): void {
+		$user = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $user );
+		$account = get_userdata( $user );
+		$this->assertNotFalse( $account );
+		$account->add_cap( Capabilities::MANAGE_FORMS );
+		update_option( Uninstaller::OPTION, '1', false );
+
+		$this->post_settings( false );
+		try {
+			SettingsPage::handle_load();
+			$this->fail( 'Expected the uninstall choice to be refused.' );
+		} catch ( \WPDieException $exception ) {
+			$this->assertNotSame( '', $exception->getMessage() );
+		}
+		$this->assertTrue( Uninstaller::enabled() );
+	}
+
+	/**
 	 * The warning is shown on a Formstead screen and not on the dashboard.
 	 */
 	public function test_notice_is_limited_to_formstead_screens(): void {
@@ -108,6 +152,41 @@ final class SettingsPageTest extends WP_UnitTestCase {
 
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
 		$this->assertSame( '', $this->notice() );
+	}
+
+	/**
+	 * Post the settings form.
+	 *
+	 * @param bool $delete Whether to opt in to deleting data.
+	 */
+	private function post_settings( bool $delete ): void {
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST                     = array();
+		if ( $delete ) {
+			$_POST['delete_data_on_uninstall'] = '1';
+		}
+		$nonce             = wp_create_nonce( 'formstead_save_settings' );
+		$_POST['_wpnonce'] = $nonce;
+		$_REQUEST          = $_POST;
+	}
+
+	/**
+	 * Save settings and stop the redirect.
+	 */
+	private function save_expecting_redirect(): void {
+		$filter = static function ( $location ) {
+			throw new \RuntimeException( esc_html( (string) $location ) );
+		};
+		add_filter( 'wp_redirect', $filter );
+
+		try {
+			SettingsPage::handle_load();
+			$this->fail( 'Expected a redirect after saving.' );
+		} catch ( \RuntimeException $exception ) {
+			$this->assertStringContainsString( 'updated=1', $exception->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', $filter );
+		}
 	}
 
 	/**
