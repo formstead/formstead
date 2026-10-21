@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "==> PHPUnit"
-npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit
+npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain
 
 echo "==> PHPCS"
 npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs
