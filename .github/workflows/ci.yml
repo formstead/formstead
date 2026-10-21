@@ -333,8 +333,8 @@ jobs:
 
           assert_schema
           db_version="$(wp option get formstead_db_version --path=wordpress)"
-          if [[ "$db_version" != "4" ]]; then
-            echo "Expected formstead_db_version 4, got ${db_version}." >&2
+          if [[ "$db_version" != "5" ]]; then
+            echo "Expected formstead_db_version 5, got ${db_version}." >&2
             exit 1
           fi
 

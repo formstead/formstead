@@ -459,6 +459,36 @@ final class MigratorTest extends MigrationTestCase {
 	}
 
 	/**
+	 * Schema version 4 gains the inbox column and indexes.
+	 */
+	public function test_upgrade_from_version_4_adds_inbox_indexes(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+
+		$submissions = Schema::submissions_table();
+		$keys        = Schema::idempotency_keys_table();
+		$wpdb->query( "ALTER TABLE {$submissions} DROP INDEX form_created" );
+		$wpdb->query( "ALTER TABLE {$submissions} DROP INDEX status_created" );
+		$wpdb->query( "ALTER TABLE {$submissions} DROP INDEX form_content" );
+		$wpdb->query( "ALTER TABLE {$submissions} DROP COLUMN content_hash" );
+		$wpdb->query( "ALTER TABLE {$keys} DROP INDEX submission_id" );
+		update_option( Schema::VERSION_OPTION, 4 );
+
+		$this->assertNull( Migrator::maybe_migrate() );
+		$this->assertSame( Schema::VERSION, (int) get_option( Schema::VERSION_OPTION ) );
+		$this->assertSame( 'content_hash', $wpdb->get_var( "SHOW COLUMNS FROM {$submissions} LIKE 'content_hash'" ) );
+
+		$submission_indexes = $wpdb->get_col( "SHOW INDEX FROM {$submissions}", 2 );
+		foreach ( array( 'form_status_created', 'form_created', 'status_created', 'form_content' ) as $index ) {
+			$this->assertContains( $index, $submission_indexes );
+		}
+
+		$key_indexes = $wpdb->get_col( "SHOW INDEX FROM {$keys}", 2 );
+		$this->assertContains( 'submission_id', $key_indexes );
+	}
+
+	/**
 	 * Activation creates the tables.
 	 */
 	public function test_activation_creates_tables(): void {
