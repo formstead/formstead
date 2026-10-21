@@ -194,6 +194,12 @@ final class SubmissionsPage {
 		}
 
 		$changed = ( new SubmissionRepository() )->set_status( array( $id ), self::STATUS_ACTIONS[ $action ] );
+
+		// Opening the detail marks a new row as read, so unread goes back to the list.
+		if ( 'mark_unread' === $action ) {
+			self::redirect( array_merge( self::list_redirect_args(), array( 'formstead_updated' => $changed ) ) );
+		}
+
 		self::redirect(
 			array(
 				'page'              => Menu::MENU_SLUG,

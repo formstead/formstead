@@ -25,6 +25,13 @@ use WP_User;
 final class SubmissionActionsTest extends \WP_UnitTestCase {
 
 	/**
+	 * Target of the last redirect the test stopped.
+	 *
+	 * @var string
+	 */
+	private string $redirected_to = '';
+
+	/**
 	 * Clear the request between tests.
 	 */
 	public function tear_down(): void {
@@ -47,6 +54,71 @@ final class SubmissionActionsTest extends \WP_UnitTestCase {
 
 		$this->assertSame( 'spam', $repository->find( $first )->status() );
 		$this->assertSame( 'new', $repository->find( $second )->status() );
+	}
+
+	/**
+	 * Mark as unread returns to the list, so opening the detail cannot mark it read again.
+	 */
+	public function test_mark_as_unread_stays_unread_after_returning_to_the_list(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$repository = new SubmissionRepository();
+		$id         = $this->store( 'opened' );
+		$this->assertSame( 1, $repository->set_status( array( $id ), 'read' ) );
+
+		$nonce                     = wp_create_nonce( 'formstead_submission_' . $id );
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST['formstead_single'] = '1';
+		$_POST['submission_id']    = (string) $id;
+		$_POST['formstead_action'] = 'mark_unread';
+		$_POST['_wpnonce']         = $nonce;
+		$_REQUEST['_wpnonce']      = $nonce;
+
+		add_filter( 'wp_redirect', array( $this, 'stop_redirect' ) );
+		try {
+			SubmissionsPage::handle_load();
+			$this->fail( 'Expected a redirect after marking the submission unread.' );
+		} catch ( \RuntimeException $exception ) {
+			$this->assertSame( 'redirect', $exception->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', array( $this, 'stop_redirect' ) );
+		}
+
+		$this->assertStringNotContainsString( 'submission=', $this->redirected_to );
+		$this->assertStringContainsString( 'formstead_updated=1', $this->redirected_to );
+
+		$_GET  = array();
+		$_POST = array();
+		ob_start();
+		SubmissionsPage::render();
+		ob_end_clean();
+
+		$loaded = $repository->find( $id );
+		$this->assertNotNull( $loaded );
+		$this->assertSame( 'new', $loaded->status() );
+	}
+
+	/**
+	 * Reading is required before a status can change.
+	 */
+	public function test_user_without_read_capability_cannot_change_status(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+		$id                        = $this->store( 'kept' );
+		$nonce                     = wp_create_nonce( 'formstead_submission_' . $id );
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST['formstead_single'] = '1';
+		$_POST['submission_id']    = (string) $id;
+		$_POST['formstead_action'] = 'mark_spam';
+		$_POST['_wpnonce']         = $nonce;
+		$_REQUEST['_wpnonce']      = $nonce;
+
+		try {
+			SubmissionsPage::handle_load();
+			$this->fail( 'Expected a missing read capability to stop the action.' );
+		} catch ( \WPDieException $exception ) {
+			$this->assertStringContainsString( 'not allowed to read', $exception->getMessage() );
+		}
+
+		$this->assertSame( 'new', ( new SubmissionRepository() )->find( $id )->status() );
 	}
 
 	/**
@@ -176,7 +248,7 @@ final class SubmissionActionsTest extends \WP_UnitTestCase {
 	 * @throws \RuntimeException Always.
 	 */
 	public function stop_redirect( mixed $location ): void {
-		unset( $location );
+		$this->redirected_to = (string) $location;
 		throw new \RuntimeException( 'redirect' );
 	}
 

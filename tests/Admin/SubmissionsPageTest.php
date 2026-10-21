@@ -161,6 +161,35 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * View links are on the list, and their counts follow the form filter.
+	 */
+	public function test_list_shows_view_links_with_counts_for_the_filtered_form(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$first  = $this->save_form( 'First', 'note', 'Note', FieldType::Text, false );
+		$second = $this->save_form( 'Second', 'note', 'Note', FieldType::Text, false );
+		$repo   = new SubmissionRepository();
+
+		$visible = $repo->insert( $first, array( 'note' => 'visible-new' ) );
+		$spam    = $repo->insert( $first, array( 'note' => 'visible-spam' ) );
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $visible );
+		$this->assertInstanceOf( \Formstead\Submissions\Submission::class, $spam );
+		$this->assertSame( 1, $repo->set_status( array( $spam->id() ), 'spam' ) );
+		for ( $index = 0; $index < 4; $index++ ) {
+			$saved = $repo->insert( $second, array( 'note' => 'other-' . $index ) );
+			$this->assertNotInstanceOf( \WP_Error::class, $saved );
+		}
+
+		$_GET = array( 'form_id' => (string) $first->id() );
+		$html = $this->render();
+
+		$this->assertMatchesRegularExpression( '/inbox_view=unread[^"]*"[^>]*>Unread <span class="count">\\(1\\)<\\/span>/', $html );
+		$this->assertMatchesRegularExpression( '/inbox_view=archived[^"]*"[^>]*>Archived <span class="count">\\(0\\)<\\/span>/', $html );
+		$this->assertMatchesRegularExpression( '/inbox_view=spam[^"]*"[^>]*>Spam <span class="count">\\(1\\)<\\/span>/', $html );
+		$this->assertMatchesRegularExpression( '/inbox_view=all[^"]*"[^>]*>All <span class="count">\\(2\\)<\\/span>/', $html );
+		$this->assertStringNotContainsString( 'other-0', $html );
+	}
+
+	/**
 	 * Page two shows the older row, and the form filter hides the other form.
 	 */
 	public function test_pagination_and_form_filter(): void {
