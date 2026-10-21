@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-21
+
+### Added
+
+- Inbox views for new and read submissions, unread, archived, spam, and everything. The list filters by form and by date, and the menu shows how many submissions are still unread.
+- Opening a new submission marks it read. Mark as unread puts it back.
+- Permanent deletion. A notification that is still waiting is cancelled, and the same idempotency key can store a new submission afterwards.
+- CSV export for one form, using the status and dates of the current view. Dates are UTC. A cell that starts with `=`, `+`, `-`, `@`, a tab, or a carriage return is prefixed so a spreadsheet does not treat it as a formula.
+- Optional `_fs_elapsed`, the number of milliseconds since the form was shown. A value under three seconds, or the same content on the same form within ten minutes, is stored as spam and is not emailed. The visitor still receives the normal success response. Changing that status later does not send the skipped email.
+
 ## [0.4.1] - 2026-10-21
 
 ### Fixed
@@ -118,7 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/formstead/formstead/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/formstead/formstead/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/formstead/formstead/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/formstead/formstead/compare/v0.3.0...v0.3.1

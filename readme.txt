@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.4.1
+Stable tag: 0.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Receive form submissions from static and headless sites on an existing WordPress
 
 Formstead receives form submissions from static and headless sites on an existing WordPress install. Plain HTML, Astro, and Next.js post to WordPress. WordPress stores submissions in a private inbox. The site frontend stays with its author.
 
-Version 0.4.1 accepts URL-encoded, multipart, and JSON submissions. `Accept: application/json` returns a receipt id. Repeating a request with the same idempotency key returns the original result. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
+Version 0.5.0 lists submissions in an inbox. Opening a new submission marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
 
 Network activation on WordPress Multisite is not supported.
 
@@ -35,6 +35,13 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.5.0 =
+* List submissions as Inbox, Unread, Archived, Spam, or All, and filter by form and date.
+* Opening a new submission marks it read. The menu shows how many are still unread.
+* Delete a submission permanently. A waiting notification is cancelled, and the same idempotency key can be used again.
+* Export one form as CSV. A cell that starts with `=`, `+`, `-`, `@`, a tab, or a carriage return is prefixed so a spreadsheet does not treat it as a formula.
+* Store a submission as spam, without an email, when `_fs_elapsed` is under three seconds or the same content was stored in the last ten minutes. The visitor still gets the normal success response.
 
 = 0.4.1 =
 * Two submissions sent at the same time with the same idempotency key no longer fail with a database deadlock on MySQL.
