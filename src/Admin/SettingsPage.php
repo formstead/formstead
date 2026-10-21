@@ -7,6 +7,7 @@
 
 namespace Formstead\Admin;
 
+use Formstead\Lifecycle\Uninstaller;
 use Formstead\Retention\RetentionPeriods;
 use Formstead\Retention\RetentionRunner;
 use Formstead\Security\Capabilities;
@@ -28,6 +29,43 @@ final class SettingsPage {
 	public const BACKLOG_STALE_AFTER = 24 * HOUR_IN_SECONDS;
 
 	/**
+	 * Save the uninstall choice before the screen renders.
+	 */
+	public static function handle_load(): void {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '';
+		if ( 'POST' !== $method ) {
+			return;
+		}
+
+		check_admin_referer( 'formstead_save_settings' );
+
+		if ( ! current_user_can( Capabilities::MANAGE_FORMS ) || ! current_user_can( 'activate_plugins' ) ) {
+			wp_die(
+				esc_html__( 'Sorry, you are not allowed to change this setting.', 'formstead' ),
+				'',
+				array( 'response' => 403 )
+			);
+		}
+
+		if ( isset( $_POST['delete_data_on_uninstall'] ) ) {
+			update_option( Uninstaller::OPTION, '1', false );
+		} else {
+			delete_option( Uninstaller::OPTION );
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'    => Menu::SETTINGS_SLUG,
+					'updated' => '1',
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
 	 * Render the settings screen.
 	 */
 	public static function render(): void {
@@ -39,11 +77,16 @@ final class SettingsPage {
 			);
 		}
 
-		$report        = self::report();
-		$overdue       = self::is_overdue();
-		$spam_days     = RetentionPeriods::spam_days();
-		$delivery_days = RetentionPeriods::delivery_days();
-		$warning       = self::warning();
+		$report          = self::report();
+		$overdue         = self::is_overdue();
+		$spam_days       = RetentionPeriods::spam_days();
+		$delivery_days   = RetentionPeriods::delivery_days();
+		$warning         = self::warning();
+		$delete_data     = Uninstaller::enabled();
+		$can_delete_data = current_user_can( 'activate_plugins' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the screen query, not a submission.
+		$updated_flag = isset( $_GET['updated'] ) ? sanitize_text_field( wp_unslash( $_GET['updated'] ) ) : '';
+		$updated      = '1' === $updated_flag;
 
 		include dirname( FORMSTEAD_FILE ) . '/templates/admin/settings.php';
 	}

@@ -33,7 +33,7 @@ final class Menu {
 	}
 
 	/**
-	 * Add the inbox and forms screens.
+	 * Add the inbox, forms, and settings screens.
 	 */
 	public static function add_pages(): void {
 		$unread = UnreadCounter::count();
@@ -74,7 +74,7 @@ final class Menu {
 			add_action( 'load-' . $forms_hook, array( FormsPage::class, 'handle_load' ) );
 		}
 
-		add_submenu_page(
+		$settings_hook = add_submenu_page(
 			self::MENU_SLUG,
 			__( 'Settings', 'formstead' ),
 			__( 'Settings', 'formstead' ),
@@ -82,6 +82,10 @@ final class Menu {
 			self::SETTINGS_SLUG,
 			array( SettingsPage::class, 'render' )
 		);
+
+		if ( is_string( $settings_hook ) ) {
+			add_action( 'load-' . $settings_hook, array( SettingsPage::class, 'handle_load' ) );
+		}
 
 		add_action( 'admin_enqueue_scripts', array( FormsPage::class, 'enqueue' ) );
 	}

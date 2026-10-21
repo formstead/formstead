@@ -9,20 +9,31 @@
  * @var int    $spam_days
  * @var int    $delivery_days
  * @var string $warning
+ * @var bool   $delete_data
+ * @var bool   $can_delete_data
+ * @var bool   $updated
  */
 
+use Formstead\Admin\Menu;
 use Formstead\Admin\SettingsPage;
 
 defined( 'ABSPATH' ) || exit;
 
-$report        = isset( $report ) && is_array( $report ) ? $report : null;
-$overdue       = isset( $overdue ) && $overdue;
-$spam_days     = isset( $spam_days ) ? (int) $spam_days : 0;
-$delivery_days = isset( $delivery_days ) ? (int) $delivery_days : 0;
-$warning       = isset( $warning ) ? (string) $warning : '';
+$report          = isset( $report ) && is_array( $report ) ? $report : null;
+$overdue         = isset( $overdue ) && $overdue;
+$spam_days       = isset( $spam_days ) ? (int) $spam_days : 0;
+$delivery_days   = isset( $delivery_days ) ? (int) $delivery_days : 0;
+$warning         = isset( $warning ) ? (string) $warning : '';
+$delete_data     = isset( $delete_data ) && $delete_data;
+$can_delete_data = isset( $can_delete_data ) && $can_delete_data;
+$updated         = isset( $updated ) && $updated;
 ?>
 <div class="wrap">
 	<h1><?php echo esc_html__( 'Settings', 'formstead' ); ?></h1>
+
+	<?php if ( $updated ) : ?>
+		<div class="notice notice-success is-dismissible"><p><?php echo esc_html__( 'Settings saved.', 'formstead' ); ?></p></div>
+	<?php endif; ?>
 
 	<?php if ( $overdue ) : ?>
 		<div class="notice notice-warning inline"><p><?php echo esc_html( $warning ); ?></p></div>
@@ -108,5 +119,27 @@ $warning       = isset( $warning ) ? (string) $warning : '';
 				<?php endif; ?>
 			</tbody>
 		</table>
+	<?php endif; ?>
+
+	<h2><?php echo esc_html__( 'Uninstall', 'formstead' ); ?></h2>
+	<?php if ( $can_delete_data ) : ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=' . Menu::SETTINGS_SLUG ) ); ?>">
+			<?php wp_nonce_field( 'formstead_save_settings' ); ?>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php echo esc_html__( 'Data', 'formstead' ); ?></th>
+					<td>
+						<label for="formstead-delete-data">
+							<input name="delete_data_on_uninstall" id="formstead-delete-data" type="checkbox" value="1" <?php checked( $delete_data ); ?>>
+							<?php echo esc_html__( 'Delete all data on uninstall', 'formstead' ); ?>
+						</label>
+						<p class="description"><?php echo esc_html__( 'Deletes tables, settings, and capabilities when the plugin is uninstalled. Leave this off to keep submissions.', 'formstead' ); ?></p>
+					</td>
+				</tr>
+			</table>
+			<?php submit_button( __( 'Save settings', 'formstead' ) ); ?>
+		</form>
+	<?php else : ?>
+		<p><?php echo esc_html__( 'Only a person who can activate plugins can choose to delete data on uninstall.', 'formstead' ); ?></p>
 	<?php endif; ?>
 </div>
