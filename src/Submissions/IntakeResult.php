@@ -13,7 +13,7 @@ namespace Formstead\Submissions;
 final class IntakeResult {
 
 	/**
-	 * `accepted`, `replayed`, `conflict`, or `failed`.
+	 * `accepted`, `replayed`, `conflict`, `contended`, or `failed`.
 	 *
 	 * @var string
 	 */
@@ -73,6 +73,13 @@ final class IntakeResult {
 	}
 
 	/**
+	 * A lock conflict aborted the attempt. The caller retries the transaction.
+	 */
+	public static function contended(): self {
+		return new self( 'contended', null );
+	}
+
+	/**
 	 * The submission could not be stored.
 	 */
 	public static function failed(): self {
@@ -98,6 +105,13 @@ final class IntakeResult {
 	 */
 	public function is_conflict(): bool {
 		return 'conflict' === $this->state;
+	}
+
+	/**
+	 * Whether the attempt should be repeated after a lock conflict.
+	 */
+	public function is_contended(): bool {
+		return 'contended' === $this->state;
 	}
 
 	/**

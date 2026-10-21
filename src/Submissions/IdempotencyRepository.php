@@ -38,8 +38,9 @@ final class IdempotencyRepository {
 	 * the row. An expired row is overwritten in place. The insert uses
 	 * `submission_id` 0 until {@see self::attach()} runs in the same transaction.
 	 *
-	 * A deadlock or a lock-wait timeout is a failed claim with no error log.
-	 * The client still receives the storage failure and can retry.
+	 * A deadlock or a lock-wait timeout is a contended claim. The intake
+	 * retries the transaction. The client receives a storage failure only
+	 * when those retries are used up.
 	 *
 	 * @param int    $form_id   Form id.
 	 * @param string $key_hash  SHA-256 of the raw key.
@@ -70,8 +71,7 @@ final class IdempotencyRepository {
 			return IdempotencyClaim::inserted( (int) $wpdb->insert_id );
 		}
 		if ( ! $duplicate ) {
-			$this->log_failure_unless_contention( $form_id, $error );
-			return IdempotencyClaim::failed();
+			return $this->claim_failure( $form_id, $error );
 		}
 
 		$row = $wpdb->get_row(
@@ -83,8 +83,7 @@ final class IdempotencyRepository {
 			ARRAY_A
 		);
 		if ( ! is_array( $row ) ) {
-			$this->log_failure_unless_contention( $form_id, (string) $wpdb->last_error );
-			return IdempotencyClaim::failed();
+			return $this->claim_failure( $form_id, (string) $wpdb->last_error );
 		}
 		if ( (int) ( $row['expires_at'] ?? 0 ) <= $now ) {
 			return $this->reuse_expired( $table, (int) ( $row['id'] ?? 0 ), $body_hash, $now, $form_id );
@@ -136,8 +135,7 @@ final class IdempotencyRepository {
 		$wpdb->suppress_errors( $previous );
 
 		if ( 1 !== $saved ) {
-			$this->log_failure_unless_contention( $form_id, $error );
-			return IdempotencyClaim::failed();
+			return $this->claim_failure( $form_id, $error );
 		}
 
 		return IdempotencyClaim::inserted( $id );
@@ -166,8 +164,7 @@ final class IdempotencyRepository {
 			ARRAY_A
 		);
 		if ( ! is_array( $row ) ) {
-			$this->log_failure_unless_contention( $form_id, (string) $wpdb->last_error );
-			return IdempotencyClaim::failed();
+			return $this->claim_failure( $form_id, (string) $wpdb->last_error );
 		}
 
 		$id    = (int) ( $row['id'] ?? 0 );
@@ -180,8 +177,7 @@ final class IdempotencyRepository {
 			)
 		);
 		if ( false === $saved || $id < 1 ) {
-			$this->log_failure_unless_contention( $form_id, (string) $wpdb->last_error );
-			return IdempotencyClaim::failed();
+			return $this->claim_failure( $form_id, (string) $wpdb->last_error );
 		}
 
 		return IdempotencyClaim::inserted( $id );
@@ -302,21 +298,21 @@ final class IdempotencyRepository {
 	}
 
 	/**
-	 * Record a failed claim unless the database reported a lock conflict.
+	 * A deadlock or a lock-wait timeout can be retried. Anything else is a failure.
 	 *
 	 * Deadlock (1213) and lock-wait timeout are expected when two requests
-	 * meet. The caller returns a failed claim either way. The log stays quiet
-	 * for those two, because a retry is the recovery.
+	 * meet. The log stays quiet for those two. Other failures name the form id.
 	 *
 	 * @param int    $form_id Form id.
 	 * @param string $error   Database error text.
 	 */
-	private function log_failure_unless_contention( int $form_id, string $error ): void {
+	private function claim_failure( int $form_id, string $error ): IdempotencyClaim {
 		if ( $this->is_lock_contention( $error ) ) {
-			return;
+			return IdempotencyClaim::contended();
 		}
 
 		$this->log_failure( $form_id );
+		return IdempotencyClaim::failed();
 	}
 
 	/**
