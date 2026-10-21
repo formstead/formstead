@@ -21,3 +21,5 @@ A `201` shows the `receipt_id`. A `422` shows the first field error. A `409` ask
 When `FORMSTEAD_API_BASE`, `FORMSTEAD_API_USER`, and `FORMSTEAD_API_PASSWORD` are all set, a valid webhook then requests `GET /submissions/{receipt_id}` with that application password. Without those values the route returns `204` after the signature checks.
 
 `npm test` checks the signature against `tests/fixtures/webhook-vector.json`, the same vector the PHP tests use.
+
+CORS, the admin API, and the webhook request are described in [Integrations](../../docs/integrations.md).

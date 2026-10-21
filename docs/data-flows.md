@@ -67,11 +67,25 @@ A failed hand-off stays pending. It does not retry forever. A site with little t
 
 Mail that the site mail system has already accepted is outside the plugin. Deleting the submission later does not recall it. Deleting the submission first cancels a delivery that has not been sent.
 
+## Webhooks
+
+A form can set an HTTPS webhook URL. After a submission is stored, a second row in `wp_formstead_deliveries` is queued when that URL is set. Spam does not queue one. The row stores the channel `webhook`, the status, an error code, and an event id (`fse_` and 16 characters). It does not store the request body, the URL, the secret, or the receiver's response.
+
+The body is built at send time. It names the event, the receipt id, the form, the status, and the time. Field values are included only when the form has "Include submission fields" on. That option is off until someone turns it on. The same cron and `wp formstead deliveries run` send webhooks and mail. They are separate rows, so one can fail while the other is handed off.
+
+The signing secret is `whsec_` plus base64, in `forms.webhook_secret`, in plaintext, because the plugin has to sign. People who can manage forms see it on the form screen. Rotate secret replaces it immediately. The audit row for that rotation, and the audit row for a URL or content-option change, do not contain the secret or the URL.
+
+A receiver that has already accepted the request is outside the plugin. Deleting the submission cancels a webhook that has not been sent. It does not recall one that was handed off. The secret is in the database, so it is in host and database backups until it is rotated and those copies age out.
+
+## Admin API
+
+`GET`, `PATCH`, and `DELETE` on `formstead/v1/submissions` read or change the same submission rows as the inbox. A read does not mark a submission read and does not write a second copy. The response includes the field values. `DELETE` uses the inbox deletion path and adds `source: api` on the audit row. The request itself is not stored.
+
 ## Audit log
 
 `wp_formstead_audit` records that an action happened. The row stores an event code, the user id (or `0` when cron or WP-CLI has no user), an object type and id, a time, and a JSON context of numbers, booleans, and short codes such as setting names.
 
-The context is filtered before insert. A field value, an email address, or an IP address is dropped. The events are: a form was created or updated, settings were updated, submissions were exported or deleted, retention ran, and personal data was exported or erased.
+The context is filtered before insert. A field value, an email address, an IP address, a webhook URL, or a webhook secret is dropped. The events are: a form was created or updated, a webhook secret was rotated, settings were updated, submissions were exported or deleted, retention ran, and personal data was exported or erased.
 
 The row is written after the action has succeeded. A failed insert does not undo the action and does not write to the PHP error log.
 
@@ -106,6 +120,8 @@ These copies are not updated when a row is deleted:
 - web server access logs, including an inbox search that put an email address in the URL
 - PHP and mail logs the host keeps
 - a notification the mail system has already accepted
+- a webhook the receiver has already accepted
+- the webhook signing secret, which is stored on the form and therefore copied with the database
 - the WordPress record of an export or erase request, which core stores with the address the administrator entered
 
 The plugin does not encrypt submissions at rest.
