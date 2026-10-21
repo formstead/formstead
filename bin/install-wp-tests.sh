@@ -43,6 +43,8 @@ cat > "${WP_TESTS_DIR}/wp-tests-config.php" <<PHP
 <?php
 define( 'ABSPATH', '${WP_CORE_DIR}/' );
 define( 'WP_DEBUG', true );
+// The admin API allows plain HTTP here. This library is the local test install.
+define( 'WP_ENVIRONMENT_TYPE', 'local' );
 define( 'DB_NAME', '${DB_NAME}' );
 define( 'DB_USER', '${DB_USER}' );
 define( 'DB_PASSWORD', '${DB_PASS}' );
