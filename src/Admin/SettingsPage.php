@@ -10,6 +10,7 @@ namespace Formstead\Admin;
 use Formstead\Lifecycle\Uninstaller;
 use Formstead\Retention\RetentionPeriods;
 use Formstead\Retention\RetentionRunner;
+use Formstead\Retention\RetentionScheduler;
 use Formstead\Security\Capabilities;
 use WP_Screen;
 
@@ -82,6 +83,7 @@ final class SettingsPage {
 		$spam_days       = RetentionPeriods::spam_days();
 		$delivery_days   = RetentionPeriods::delivery_days();
 		$warning         = self::warning();
+		$next_run        = self::next_run();
 		$delete_data     = Uninstaller::enabled();
 		$can_delete_data = current_user_can( 'activate_plugins' );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the screen query, not a submission.
@@ -106,7 +108,9 @@ final class SettingsPage {
 	}
 
 	/**
-	 * Whether the last full run is old, leftovers have waited a day, or retention has never run.
+	 * Whether the last full run is old, leftovers have waited a day, or cron never started the first run.
+	 *
+	 * No report is not a warning while the next event is still ahead, or less than 48 hours late.
 	 *
 	 * @param int|null $now Unix time. Tests can pin the clock.
 	 */
@@ -114,7 +118,7 @@ final class SettingsPage {
 		$now    = $now ?? time();
 		$stored = get_option( RetentionRunner::REPORT_OPTION );
 		if ( ! is_array( $stored ) ) {
-			return true;
+			return self::schedule_is_overdue( $now );
 		}
 
 		$finished = self::timestamp( $stored['finished_at'] ?? null );
@@ -132,13 +136,49 @@ final class SettingsPage {
 
 	/**
 	 * Text of the overdue warning. It names the command and no submission.
+	 *
+	 * Before the first report, the text says retention has not run yet.
 	 */
 	public static function warning(): string {
+		if ( ! is_array( get_option( RetentionRunner::REPORT_OPTION ) ) ) {
+			return sprintf(
+				/* translators: %s: WP-CLI command. */
+				__( 'Retention has not run yet. Run %s from the system cron.', 'formstead' ),
+				'wp formstead retention run'
+			);
+		}
+
 		return sprintf(
 			/* translators: %s: WP-CLI command. */
 			__( 'Retention has not finished in the last 48 hours, or expired rows have been waiting for more than 24 hours. Run %s from the system cron.', 'formstead' ),
 			'wp formstead retention run'
 		);
+	}
+
+	/**
+	 * Unix time of the next retention event, or zero when none is scheduled.
+	 */
+	private static function next_run(): int {
+		$next = wp_next_scheduled( RetentionScheduler::HOOK );
+		if ( ! is_numeric( $next ) ) {
+			return 0;
+		}
+
+		return max( 0, (int) $next );
+	}
+
+	/**
+	 * Whether the hourly event is missing or more than 48 hours late.
+	 *
+	 * @param int $now Unix time.
+	 */
+	private static function schedule_is_overdue( int $now ): bool {
+		$next = self::next_run();
+		if ( $next < 1 ) {
+			return true;
+		}
+
+		return $next < $now - self::RUN_STALE_AFTER;
 	}
 
 	/**

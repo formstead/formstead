@@ -9,6 +9,7 @@
  * @var int    $spam_days
  * @var int    $delivery_days
  * @var string $warning
+ * @var int    $next_run
  * @var bool   $delete_data
  * @var bool   $can_delete_data
  * @var bool   $updated
@@ -24,6 +25,7 @@ $overdue         = isset( $overdue ) && $overdue;
 $spam_days       = isset( $spam_days ) ? (int) $spam_days : 0;
 $delivery_days   = isset( $delivery_days ) ? (int) $delivery_days : 0;
 $warning         = isset( $warning ) ? (string) $warning : '';
+$next_run        = isset( $next_run ) ? (int) $next_run : 0;
 $delete_data     = isset( $delete_data ) && $delete_data;
 $can_delete_data = isset( $can_delete_data ) && $can_delete_data;
 $updated         = isset( $updated ) && $updated;
@@ -76,6 +78,19 @@ $updated         = isset( $updated ) && $updated;
 	<h2><?php echo esc_html__( 'Last run', 'formstead' ); ?></h2>
 	<?php if ( null === $report || $report['finished_at'] < 1 ) : ?>
 		<p><?php echo esc_html__( 'Retention has not run yet.', 'formstead' ); ?></p>
+		<?php if ( $next_run > 0 ) : ?>
+			<p>
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: %s: date and time of the first retention run. */
+						__( 'The first run is scheduled for %s.', 'formstead' ),
+						wp_date( 'Y-m-d H:i', $next_run )
+					)
+				);
+				?>
+			</p>
+		<?php endif; ?>
 	<?php else : ?>
 		<table class="widefat striped">
 			<tbody>

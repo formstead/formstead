@@ -13,6 +13,7 @@ use Formstead\Admin\Menu;
 use Formstead\Admin\SettingsPage;
 use Formstead\Lifecycle\Uninstaller;
 use Formstead\Retention\RetentionRunner;
+use Formstead\Retention\RetentionScheduler;
 use Formstead\Security\Capabilities;
 use WP_UnitTestCase;
 
@@ -31,6 +32,7 @@ final class SettingsPageTest extends WP_UnitTestCase {
 		$_SERVER['REQUEST_METHOD'] = 'GET';
 		delete_option( RetentionRunner::REPORT_OPTION );
 		delete_option( Uninstaller::OPTION );
+		RetentionScheduler::clear();
 		if ( function_exists( 'set_current_screen' ) ) {
 			set_current_screen( 'front' );
 		}
@@ -81,12 +83,21 @@ final class SettingsPageTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * No report, a stale run, and a day-old backlog each warn. A recent run does not.
+	 * A missing report warns only when cron is not going to run. A stale run and a day-old backlog warn too.
 	 */
 	public function test_warning_conditions(): void {
 		$now = time();
+		RetentionScheduler::clear();
 		$this->assertTrue( SettingsPage::is_overdue( $now ) );
 
+		wp_schedule_event( $now + HOUR_IN_SECONDS, 'hourly', RetentionScheduler::HOOK );
+		$this->assertFalse( SettingsPage::is_overdue( $now ) );
+
+		RetentionScheduler::clear();
+		wp_schedule_event( $now - ( 49 * HOUR_IN_SECONDS ), 'hourly', RetentionScheduler::HOOK );
+		$this->assertTrue( SettingsPage::is_overdue( $now ) );
+
+		RetentionScheduler::clear();
 		$this->store( $now - 47 * HOUR_IN_SECONDS, false, 0 );
 		$this->assertFalse( SettingsPage::is_overdue( $now ) );
 
@@ -136,19 +147,48 @@ final class SettingsPageTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Before the first run, Settings names the scheduled time and does not call it overdue.
+	 */
+	public function test_settings_names_the_first_run_before_retention_has_run(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		delete_option( RetentionRunner::REPORT_OPTION );
+		RetentionScheduler::clear();
+		$when = time() + HOUR_IN_SECONDS;
+		wp_schedule_event( $when, 'hourly', RetentionScheduler::HOOK );
+
+		$html = $this->render();
+
+		$this->assertStringContainsString( 'Retention has not run yet.', $html );
+		$this->assertStringContainsString( 'The first run is scheduled for', $html );
+		$this->assertStringContainsString( wp_date( 'Y-m-d H:i', $when ), $html );
+		$this->assertStringNotContainsString( 'system cron', $html );
+	}
+
+	/**
 	 * The warning is shown on a Formstead screen and not on the dashboard.
 	 */
 	public function test_notice_is_limited_to_formstead_screens(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		delete_option( RetentionRunner::REPORT_OPTION );
+		RetentionScheduler::clear();
 
 		set_current_screen( 'dashboard' );
 		$this->assertSame( '', $this->notice() );
 
 		set_current_screen( 'toplevel_page_' . Menu::MENU_SLUG );
 		$html = $this->notice();
+		$this->assertStringContainsString( 'Retention has not run yet.', $html );
 		$this->assertStringContainsString( 'wp formstead retention run', $html );
+		$this->assertStringNotContainsString( '48 hours', $html );
 		$this->assertStringNotContainsString( 'secret-body', $html );
+
+		wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', RetentionScheduler::HOOK );
+		$this->assertSame( '', $this->notice() );
+		RetentionScheduler::clear();
+
+		$this->store( time() - ( 49 * HOUR_IN_SECONDS ), false, 0 );
+		$html = $this->notice();
+		$this->assertStringContainsString( '48 hours', $html );
 
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
 		$this->assertSame( '', $this->notice() );
