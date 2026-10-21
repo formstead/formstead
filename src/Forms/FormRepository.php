@@ -8,6 +8,7 @@
 namespace Formstead\Forms;
 
 use Formstead\Database\Schema;
+use Formstead\Privacy\IdentityBackfill;
 use Formstead\Privacy\IdentityRepository;
 use WP_Error;
 
@@ -291,6 +292,8 @@ final class FormRepository {
 			return $cleared;
 		}
 
+		self::request_added_identity( $current, $form );
+
 		return new Form(
 			$current->id(),
 			$current->public_id(),
@@ -462,6 +465,24 @@ final class FormRepository {
 		}
 
 		return array_values( $names );
+	}
+
+	/**
+	 * Ask for a backfill when this save marks a field that was not identifying.
+	 *
+	 * Submissions stored before the mark are not indexed yet. The backfill
+	 * covers that form only.
+	 *
+	 * @param Form $current Form as it was stored before this save.
+	 * @param Form $form    Form the editor saved.
+	 */
+	private static function request_added_identity( Form $current, Form $form ): void {
+		$added = array_diff( $form->identity_fields(), $current->identity_fields() );
+		if ( array() === $added || $form->id() < 1 ) {
+			return;
+		}
+
+		IdentityBackfill::request_form( $form->id() );
 	}
 
 	/**

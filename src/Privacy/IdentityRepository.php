@@ -69,6 +69,67 @@ final class IdentityRepository {
 	}
 
 	/**
+	 * Store identifying hashes that are not indexed yet.
+	 *
+	 * A repeated backfill can see the same submission. Existing fields stay,
+	 * so a second pass does not create a second row.
+	 *
+	 * @param int                   $submission_id Submission id.
+	 * @param int                   $form_id       Form id.
+	 * @param array<string, string> $hashes       Field name to HMAC.
+	 * @param string                $created_at    UTC `Y-m-d H:i:s`.
+	 */
+	public function sync_submission( int $submission_id, int $form_id, array $hashes, string $created_at ): bool {
+		if ( array() === $hashes ) {
+			return true;
+		}
+
+		$present = $this->fields_for_submission( $submission_id );
+		$missing = array();
+		foreach ( $hashes as $field => $hash ) {
+			if ( ! isset( $present[ $field ] ) ) {
+				$missing[ $field ] = $hash;
+			}
+		}
+
+		return $this->insert_for_submission( $submission_id, $form_id, $missing, $created_at );
+	}
+
+	/**
+	 * Field names already indexed for one submission.
+	 *
+	 * @param int $submission_id Submission id.
+	 * @return array<string, true>
+	 */
+	private function fields_for_submission( int $submission_id ): array {
+		global $wpdb;
+
+		if ( $submission_id < 1 ) {
+			return array();
+		}
+
+		$table = Schema::identities_table();
+		$rows  = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT field FROM {$table} WHERE submission_id = %d",
+				$submission_id
+			)
+		);
+		if ( ! is_array( $rows ) ) {
+			return array();
+		}
+
+		$fields = array();
+		foreach ( $rows as $field ) {
+			if ( is_string( $field ) && '' !== $field ) {
+				$fields[ $field ] = true;
+			}
+		}
+
+		return $fields;
+	}
+
+	/**
 	 * Delete index rows for these submissions.
 	 *
 	 * @param int[] $submission_ids Submission ids.

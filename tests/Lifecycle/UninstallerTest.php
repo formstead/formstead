@@ -11,6 +11,7 @@ use Formstead\Database\Migrator;
 use Formstead\Database\Schema;
 use Formstead\Delivery\Scheduler;
 use Formstead\Lifecycle\Uninstaller;
+use Formstead\Privacy\IdentityBackfill;
 use Formstead\Retention\RetentionRunner;
 use Formstead\Retention\RetentionScheduler;
 use Formstead\Security\Capabilities;
@@ -87,8 +88,19 @@ final class UninstallerTest extends MigrationTestCase {
 		Capabilities::grant_to_administrator();
 		RetentionScheduler::ensure();
 		Scheduler::ensure_sweep();
+		update_option(
+			Migrator::IDENTITY_BACKFILL_OPTION,
+			array(
+				'status'   => 'pending',
+				'after_id' => 0,
+				'until_id' => 1,
+			),
+			false
+		);
+		IdentityBackfill::ensure();
 		$this->assertNotFalse( wp_next_scheduled( RetentionScheduler::HOOK ) );
 		$this->assertNotFalse( wp_next_scheduled( Scheduler::SWEEP ) );
+		$this->assertNotFalse( wp_next_scheduled( IdentityBackfill::HOOK ) );
 
 		Uninstaller::wipe();
 
@@ -111,6 +123,8 @@ final class UninstallerTest extends MigrationTestCase {
 		}
 		$this->assertFalse( wp_next_scheduled( RetentionScheduler::HOOK ) );
 		$this->assertFalse( wp_next_scheduled( Scheduler::SWEEP ) );
+		$this->assertFalse( wp_next_scheduled( IdentityBackfill::HOOK ) );
+		$this->assertFalse( get_option( Migrator::IDENTITY_BACKFILL_OPTION ) );
 	}
 
 	/**

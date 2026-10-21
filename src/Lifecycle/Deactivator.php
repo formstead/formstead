@@ -8,6 +8,7 @@
 namespace Formstead\Lifecycle;
 
 use Formstead\Delivery\Scheduler;
+use Formstead\Privacy\IdentityBackfill;
 use Formstead\Retention\RetentionScheduler;
 
 /**
@@ -18,10 +19,12 @@ final class Deactivator {
 	/**
 	 * Run on plugin deactivation.
 	 *
-	 * Scheduled sends and retention runs are removed. Stored submissions stay.
+	 * Scheduled sends, retention, and identity indexing are removed.
+	 * Stored submissions stay.
 	 */
 	public static function deactivate(): void {
 		Scheduler::clear();
 		RetentionScheduler::clear();
+		IdentityBackfill::clear();
 	}
 }
