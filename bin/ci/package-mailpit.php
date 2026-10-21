@@ -43,5 +43,20 @@ function formstead_package_mailpit_phpmailer( $phpmailer ): void {
 	// phpcs:enable WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 }
 
+/**
+ * Skip WordPress.org update checks during the package smoke test.
+ *
+ * A failed connection is written to debug.log, and that log has to stay empty.
+ * The job does not depend on reaching WordPress.org.
+ */
+function formstead_package_skip_update_checks(): void {
+	remove_action( 'admin_init', '_maybe_update_core' );
+	remove_action( 'admin_init', '_maybe_update_plugins' );
+	remove_action( 'admin_init', '_maybe_update_themes' );
+	remove_action( 'load-plugins.php', 'wp_update_plugins' );
+	remove_action( 'load-themes.php', 'wp_update_themes' );
+}
+
 add_filter( 'wp_mail_from', 'formstead_package_mailpit_from_email' );
 add_action( 'phpmailer_init', 'formstead_package_mailpit_phpmailer' );
+add_action( 'admin_init', 'formstead_package_skip_update_checks', 0 );
