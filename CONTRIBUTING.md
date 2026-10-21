@@ -35,11 +35,11 @@ If 8025 or 1025 is already in use, set `FORMSTEAD_MAILPIT_UI_PORT` and `FORMSTEA
 
 ## Tests and quality checks
 
-`npm run check` is a fast local check before you push. It runs PHPUnit, PHPCS, PHPStan, and Plugin Check inside `wp-env`. Plugin Check skips development paths that `.distignore` keeps out of the ZIP.
+`npm run check` is the check before you push and before you merge. It runs PHPUnit, PHPCS, PHPStan, and Plugin Check inside `wp-env`. Plugin Check skips development paths that `.distignore` keeps out of the ZIP.
 
-GitHub Actions runs those checks, a Playwright `e2e` job, and a separate `package` job that builds the ZIP and installs it on a clean WordPress. Merge only after `checks`, `package`, and `e2e` are green on the pull request.
+GitHub Actions does not start on a push, a pull request, or a schedule. After the last pull request of a plan is on `main`, open the Actions tab, choose CI, and run the workflow on `main`. That run is the full set: `checks` (PHPUnit on PHP 8.3–8.5 with WordPress 7.0, 7.1, and trunk; PHPCS, PHPStan, and Mailpit on PHP 8.3 / WordPress 7.1), `mysql`, `package`, `e2e`, and the PHP 7.4 syntax lint. The trunk cell may fail without failing the workflow. Fix a red run, with another pull request, before the next plan.
 
-Branch protection is unavailable on this private repository, so apply that rule by hand. Do not push directly to `main`, including fixes to CI.
+Branch protection is unavailable on this private repository. Do not push directly to `main`, including fixes to CI.
 
 ```sh
 npm run check
@@ -79,7 +79,8 @@ npm run e2e
 - One topic per pull request and per commit.
 - Open against `main`.
 - Link the GitHub issue with `Closes #n`.
-- Merge only after the `checks`, `package`, and `e2e` jobs are green. Do not push the branch to `main` directly.
+- Merge without waiting for GitHub Actions. `npm run check` is the check for that pull request. Do not push the branch to `main` directly.
+- After the last pull request of a plan is on `main`, run the CI workflow by hand on `main`.
 - Do not add domain logic in a scaffolding change, and do not mix refactors with behaviour changes.
 
 ## Commits

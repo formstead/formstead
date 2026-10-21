@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- GitHub Actions starts only when someone runs the CI workflow by hand. Run it on `main` after the last pull request of a plan. Pull requests, pushes, and the daily schedule no longer start it.
+
 ## [0.8.0] - 2026-10-21
 
 ### Added
