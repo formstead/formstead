@@ -229,7 +229,7 @@ final class FormsPage {
 	 * percent-encoded address survives; FormInput rejects a URL that
 	 * `esc_url_raw()` would change.
 	 *
-	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, retention_days: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, fields: array<int, array<string, string>>}
 	 */
 	private static function input_from_post(): array {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_load() before this runs.
@@ -240,6 +240,8 @@ final class FormsPage {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput rejects URLs that esc_url_raw() would change.
 		$url     = self::text_value( isset( $_POST['success_url'] ) ? wp_unslash( $_POST['success_url'] ) : '' );
 		$enabled = isset( $_POST['is_enabled'] ) ? '1' : '';
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput accepts only a whole number from 0 to 3650.
+		$retention = self::text_value( isset( $_POST['retention_days'] ) ? wp_unslash( $_POST['retention_days'] ) : '' );
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput rejects an origin that is not scheme, host, and port.
 		$origins = self::text_value( isset( $_POST['allowed_origins'] ) ? wp_unslash( $_POST['allowed_origins'] ) : '' );
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput accepts only a whole number inside the ceiling.
@@ -258,6 +260,7 @@ final class FormsPage {
 			'name'                 => $name,
 			'is_enabled'           => $enabled,
 			'success_url'          => $url,
+			'retention_days'       => $retention,
 			'allowed_origins'      => $origins,
 			'rate_per_minute'      => $minute,
 			'rate_per_hour'        => $hour,
@@ -374,7 +377,7 @@ final class FormsPage {
 	 * Values for the edit form.
 	 *
 	 * @param Form|null $form Saved form, or null for a new form.
-	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, retention_days: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, fields: array<int, array<string, string>>}
 	 */
 	private static function values_from_form( ?Form $form ): array {
 		if ( ! $form instanceof Form ) {
@@ -384,6 +387,7 @@ final class FormsPage {
 				'name'                 => '',
 				'is_enabled'           => '1',
 				'success_url'          => '',
+				'retention_days'       => '30',
 				'allowed_origins'      => '',
 				'rate_per_minute'      => '',
 				'rate_per_hour'        => '',
@@ -410,6 +414,7 @@ final class FormsPage {
 			'name'                 => $form->name(),
 			'is_enabled'           => $form->is_enabled() ? '1' : '',
 			'success_url'          => $form->success_url(),
+			'retention_days'       => (string) $form->retention_days(),
 			'allowed_origins'      => implode( "\n", $form->protection()->allowed_origins() ),
 			'rate_per_minute'      => null === $minute ? '' : (string) $minute,
 			'rate_per_hour'        => null === $hour ? '' : (string) $hour,
