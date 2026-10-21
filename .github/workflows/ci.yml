@@ -1,6 +1,6 @@
 name: CI
 
-# Started by hand on main after the last pull request of a plan.
+# Started by hand on main after merging a stage or its follow-up fix.
 # Pushes, pull requests, and the daily schedule do not start this workflow.
 on:
   workflow_dispatch:
@@ -292,8 +292,8 @@ jobs:
 
           assert_schema
           db_version="$(wp option get formstead_db_version --path=wordpress)"
-          if [[ "$db_version" != "7" ]]; then
-            echo "Expected formstead_db_version 7, got ${db_version}." >&2
+          if [[ "$db_version" != "8" ]]; then
+            echo "Expected formstead_db_version 8, got ${db_version}." >&2
             exit 1
           fi
 
@@ -733,6 +733,12 @@ jobs:
 
       - name: Seed the tests site
         run: npm run e2e:setup
+
+      - name: Build the Next.js example and verify the signature
+        run: |
+          npm ci --prefix examples/next
+          npm run build --prefix examples/next
+          npm test --prefix examples/next
 
       - name: Playwright
         run: npm run e2e

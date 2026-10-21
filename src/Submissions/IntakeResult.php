@@ -27,33 +27,43 @@ final class IntakeResult {
 	private ?Submission $submission;
 
 	/**
-	 * Delivery created with an accepted submission, or null.
+	 * Email delivery created with an accepted submission, or null.
 	 *
 	 * @var int|null
 	 */
 	private ?int $delivery_id;
 
 	/**
+	 * Webhook delivery created with an accepted submission, or null.
+	 *
+	 * @var int|null
+	 */
+	private ?int $webhook_delivery_id;
+
+	/**
 	 * Create an intake result.
 	 *
-	 * @param string          $state       Result state.
-	 * @param Submission|null $submission  Related submission.
-	 * @param int|null        $delivery_id Delivery created with the submission.
+	 * @param string          $state                Result state.
+	 * @param Submission|null $submission           Related submission.
+	 * @param int|null        $delivery_id          Email delivery created with the submission.
+	 * @param int|null        $webhook_delivery_id  Webhook delivery created with the submission.
 	 */
-	private function __construct( string $state, ?Submission $submission, ?int $delivery_id = null ) {
-		$this->state       = $state;
-		$this->submission  = $submission;
-		$this->delivery_id = $delivery_id;
+	private function __construct( string $state, ?Submission $submission, ?int $delivery_id = null, ?int $webhook_delivery_id = null ) {
+		$this->state               = $state;
+		$this->submission          = $submission;
+		$this->delivery_id         = $delivery_id;
+		$this->webhook_delivery_id = $webhook_delivery_id;
 	}
 
 	/**
 	 * A new submission was stored.
 	 *
-	 * @param Submission $submission  Stored submission.
-	 * @param int|null   $delivery_id Delivery created with the submission.
+	 * @param Submission $submission           Stored submission.
+	 * @param int|null   $delivery_id          Email delivery created with the submission.
+	 * @param int|null   $webhook_delivery_id  Webhook delivery created with the submission.
 	 */
-	public static function accepted( Submission $submission, ?int $delivery_id = null ): self {
-		return new self( 'accepted', $submission, $delivery_id );
+	public static function accepted( Submission $submission, ?int $delivery_id = null, ?int $webhook_delivery_id = null ): self {
+		return new self( 'accepted', $submission, $delivery_id, $webhook_delivery_id );
 	}
 
 	/**
@@ -133,5 +143,12 @@ final class IntakeResult {
 	 */
 	public function delivery_id(): ?int {
 		return $this->delivery_id;
+	}
+
+	/**
+	 * Webhook delivery created with an accepted submission, or null.
+	 */
+	public function webhook_delivery_id(): ?int {
+		return $this->webhook_delivery_id;
 	}
 }

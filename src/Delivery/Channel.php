@@ -16,6 +16,20 @@ use Formstead\Submissions\Submission;
 interface Channel {
 
 	/**
+	 * Stable channel name stored on a delivery.
+	 */
+	public function name(): string;
+
+	/**
+	 * Whether this form can send through the channel.
+	 *
+	 * A delivery whose channel is not configured is cancelled. `send()` is not called.
+	 *
+	 * @param Form $form Form that received the submission.
+	 */
+	public function is_configured( Form $form ): bool;
+
+	/**
 	 * Hand the submission off.
 	 *
 	 * Returns null when the other system accepted the message. An error code

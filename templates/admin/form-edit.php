@@ -21,20 +21,23 @@ $errors  = isset( $errors ) && is_array( $errors ) ? $errors : array();
 $updated = isset( $updated ) && $updated;
 $form    = isset( $form ) && $form instanceof Form ? $form : null;
 
-$form_id              = isset( $values['form_id'] ) ? (int) $values['form_id'] : 0;
-$schema_version       = isset( $values['schema_version'] ) ? (int) $values['schema_version'] : 0;
-$name                 = isset( $values['name'] ) ? (string) $values['name'] : '';
-$is_enabled           = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
-$success_url          = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
-$retention_days       = isset( $values['retention_days'] ) ? (string) $values['retention_days'] : '30';
-$allowed_origins      = isset( $values['allowed_origins'] ) ? (string) $values['allowed_origins'] : '';
-$rate_per_minute      = isset( $values['rate_per_minute'] ) ? (string) $values['rate_per_minute'] : '';
-$rate_per_hour        = isset( $values['rate_per_hour'] ) ? (string) $values['rate_per_hour'] : '';
-$notify_recipients    = isset( $values['notify_recipients'] ) ? (string) $values['notify_recipients'] : '';
-$reply_to_field       = isset( $values['reply_to_field'] ) ? (string) $values['reply_to_field'] : '';
-$mail_include_content = isset( $values['mail_include_content'] ) && '1' === (string) $values['mail_include_content'];
-$rows                 = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
-$email_fields         = array();
+$form_id                 = isset( $values['form_id'] ) ? (int) $values['form_id'] : 0;
+$schema_version          = isset( $values['schema_version'] ) ? (int) $values['schema_version'] : 0;
+$name                    = isset( $values['name'] ) ? (string) $values['name'] : '';
+$is_enabled              = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
+$success_url             = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
+$retention_days          = isset( $values['retention_days'] ) ? (string) $values['retention_days'] : '30';
+$allowed_origins         = isset( $values['allowed_origins'] ) ? (string) $values['allowed_origins'] : '';
+$rate_per_minute         = isset( $values['rate_per_minute'] ) ? (string) $values['rate_per_minute'] : '';
+$rate_per_hour           = isset( $values['rate_per_hour'] ) ? (string) $values['rate_per_hour'] : '';
+$notify_recipients       = isset( $values['notify_recipients'] ) ? (string) $values['notify_recipients'] : '';
+$reply_to_field          = isset( $values['reply_to_field'] ) ? (string) $values['reply_to_field'] : '';
+$mail_include_content    = isset( $values['mail_include_content'] ) && '1' === (string) $values['mail_include_content'];
+$webhook_url             = isset( $values['webhook_url'] ) ? (string) $values['webhook_url'] : '';
+$webhook_include_content = isset( $values['webhook_include_content'] ) && '1' === (string) $values['webhook_include_content'];
+$webhook_secret          = $form instanceof Form ? $form->webhook()->secret() : '';
+$rows                    = isset( $values['fields'] ) && is_array( $values['fields'] ) ? $values['fields'] : array();
+$email_fields            = array();
 foreach ( $rows as $formstead_row ) {
 	if ( ! is_array( $formstead_row ) ) {
 		continue;
@@ -218,6 +221,41 @@ $next_index       = count( $rows );
 			</tr>
 		</table>
 
+		<h2><?php echo esc_html__( 'Webhook', 'formstead' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><label for="formstead-webhook-url"><?php echo esc_html__( 'URL', 'formstead' ); ?></label></th>
+				<td>
+					<input name="webhook_url" id="formstead-webhook-url" type="url" class="large-text code" maxlength="2048" value="<?php echo esc_attr( $webhook_url ); ?>">
+					<?php if ( isset( $errors['webhook_url'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['webhook_url'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'An https address that is not on a private network. Leave this empty to store submissions without a webhook.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php echo esc_html__( 'Payload', 'formstead' ); ?></th>
+				<td>
+					<label for="formstead-webhook-content">
+						<input name="webhook_include_content" id="formstead-webhook-content" type="checkbox" value="1" <?php checked( $webhook_include_content ); ?>>
+						<?php echo esc_html__( 'Include submission fields', 'formstead' ); ?>
+					</label>
+					<p class="description"><?php echo esc_html__( 'The webhook always includes the receipt and the form. Submitted fields are included only when this is on.', 'formstead' ); ?></p>
+				</td>
+			</tr>
+			<?php if ( '' !== $webhook_secret ) : ?>
+				<tr>
+					<th scope="row"><label for="formstead-webhook-secret"><?php echo esc_html__( 'Secret', 'formstead' ); ?></label></th>
+					<td>
+						<input id="formstead-webhook-secret" type="text" class="large-text code" value="<?php echo esc_attr( $webhook_secret ); ?>" readonly>
+						<button type="submit" class="button" name="formstead_rotate_webhook" value="1" form="formstead-rotate-webhook"><?php echo esc_html__( 'Rotate secret', 'formstead' ); ?></button>
+						<p class="description"><?php echo esc_html__( 'Rotating the secret stops the previous one immediately.', 'formstead' ); ?></p>
+					</td>
+				</tr>
+			<?php endif; ?>
+		</table>
+
 		<h2><?php echo esc_html__( 'Fields', 'formstead' ); ?></h2>
 		<table class="widefat striped">
 			<thead>
@@ -388,4 +426,10 @@ $next_index       = count( $rows );
 
 	<?php submit_button( $form instanceof Form ? __( 'Save form', 'formstead' ) : __( 'Create form', 'formstead' ) ); ?>
 </form>
+<?php if ( $form instanceof Form && '' !== $webhook_secret ) : ?>
+	<form method="post" id="formstead-rotate-webhook" action="<?php echo esc_url( admin_url( 'admin.php?page=formstead-forms' ) ); ?>">
+		<?php wp_nonce_field( 'formstead_rotate_webhook_' . $form->id() ); ?>
+		<input type="hidden" name="form_id" value="<?php echo esc_attr( (string) $form->id() ); ?>">
+	</form>
+<?php endif; ?>
 </div>

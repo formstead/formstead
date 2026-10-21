@@ -37,7 +37,7 @@ If 8025 or 1025 is already in use, set `FORMSTEAD_MAILPIT_UI_PORT` and `FORMSTEA
 
 `npm run check` is the check before you push and before you merge. It runs PHPUnit, PHPCS, PHPStan, and Plugin Check inside `wp-env`. Plugin Check skips development paths that `.distignore` keeps out of the ZIP.
 
-GitHub Actions does not start on a push, a pull request, or a schedule. After the last pull request of a plan is on `main`, open the Actions tab, choose CI, and run the workflow on `main`. That run is the full set: `checks` (PHPUnit on PHP 8.3–8.5 with WordPress 7.0, 7.1, and trunk; PHPCS, PHPStan, and Mailpit on PHP 8.3 / WordPress 7.1), `mysql`, `package`, `e2e`, and the PHP 7.4 syntax lint. The trunk cell may fail without failing the workflow. Fix a red run, with another pull request, before the next plan.
+GitHub Actions does not start on a push, a pull request, or a schedule. After merging a stage into `main`, open the Actions tab, choose CI, and run the workflow on `main`. That run is the full set: `checks` (PHPUnit on PHP 8.3–8.5 with WordPress 7.0, 7.1, and trunk; PHPCS, PHPStan, and Mailpit on PHP 8.3 / WordPress 7.1), `mysql`, `package`, `e2e`, and the PHP 7.4 syntax lint. The trunk cell may fail without failing the workflow. Fix a red run before starting the next stage.
 
 Branch protection is unavailable on this private repository. Do not push directly to `main`, including fixes to CI.
 
@@ -76,20 +76,26 @@ npm run e2e
 
 ## Pull requests
 
-- One topic per pull request and per commit.
-- Open against `main`.
-- Link the GitHub issue with `Closes #n`.
-- Merge without waiting for GitHub Actions. `npm run check` is the check for that pull request. Do not push the branch to `main` directly.
-- After the last pull request of a plan is on `main`, run the CI workflow by hand on `main`.
-- Do not add domain logic in a scaffolding change, and do not mix refactors with behaviour changes.
+- Keep `main` as the only permanent branch. Use one short-lived branch and one pull request per roadmap stage, opened against `main`.
+- Make as many working commits as useful on that branch. Keep the pull request focused on the stage and include its fixes before merging.
+- Link an existing issue when useful. A separate issue or pull request for each implementation step is not required.
+- Run `npm run check` before merging. Use **Squash and merge** so a completed stage adds one commit to `main`; the source branch is deleted automatically.
+- Run the CI workflow by hand on `main` after merging. If it fails, use a short-lived fix branch and squash its pull request before starting the next stage.
+- Small fixes outside an active stage may use their own short-lived branch and squash pull request. Do not push directly to `main`.
 
 ## Commits
 
 Write commit messages in English, in the imperative mood, and say why the change exists.
 
+For a stage squash commit, include the stage number and summarize its result. Stages 0–9 are stored as ten commits, including their follow-up fixes. Earlier pull requests describe the archived development history.
+
 ```
-Add a network-activation guard so Multisite installs fail closed.
+Complete stage 9: add the admin API, signed webhooks, and Next.js integration.
 ```
+
+## Versions and releases
+
+Keep the plugin version, `readme.txt` stable tag, and database migrations consistent. Create Git tags and GitHub Releases for versions actually distributed for testing or publication; a completed stage does not require either. Record changes in `CHANGELOG.md`.
 
 ## Code
 

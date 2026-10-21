@@ -109,14 +109,12 @@ final class Scheduler {
 	}
 
 	/**
-	 * Worker using the filtered channel.
+	 * Worker that picks a channel for each delivery.
+	 *
+	 * `formstead_delivery_channel` receives the channel name and may return a
+	 * replacement. Tests use that to record a send.
 	 */
 	public static function worker(): DeliveryWorker {
-		$channel = apply_filters( 'formstead_delivery_channel', null );
-		if ( ! $channel instanceof Channel ) {
-			$channel = new EmailChannel();
-		}
-
-		return new DeliveryWorker( $channel );
+		return new DeliveryWorker();
 	}
 }

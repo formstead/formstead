@@ -11,6 +11,8 @@ namespace Formstead\Tests\Admin;
 // phpcs:disable WordPress.Security.ValidatedSanitizedInput -- the screen sanitizes input; the test posts raw values.
 
 use Formstead\Admin\FormsPage;
+use Formstead\Audit\AuditEvent;
+use Formstead\Database\Schema;
 use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
@@ -379,6 +381,173 @@ final class FormsPageTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A public https URL is stored with a generated secret and does not change the schema.
+	 */
+	public function test_webhook_settings_are_saved_without_the_posted_secret(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->insert_contact_form();
+		$this->post_form();
+		$_POST['form_id']                 = (string) $saved->id();
+		$_POST['schema_version']          = (string) $saved->schema_version();
+		$_POST['webhook_url']             = 'https://93.184.216.34/hook';
+		$_POST['webhook_include_content'] = '1';
+		$_POST['webhook_secret']          = 'whsec_posted-by-the-browser';
+		$_REQUEST                         = $_POST;
+
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 'https://93.184.216.34/hook', $loaded->webhook()->url() );
+		$this->assertTrue( $loaded->webhook()->includes_content() );
+		$this->assertSame( $saved->schema_version(), $loaded->schema_version() );
+		$this->assertNotSame( 'whsec_posted-by-the-browser', $loaded->webhook()->secret() );
+		$this->assertSame( 1, preg_match( '/\Awhsec_[A-Za-z0-9+\/]{43}=\z/', $loaded->webhook()->secret() ) );
+		$context = $this->audit_context( AuditEvent::FORM_UPDATED, $saved->id() );
+		$this->assertStringContainsString( 'webhook_url', $context );
+		$this->assertStringContainsString( 'webhook_include_content', $context );
+		$this->assertStringNotContainsString( '93.184.216.34', $context );
+		$this->assertStringNotContainsString( 'whsec_', $context );
+
+		$_GET['form'] = (string) $saved->id();
+		$html         = $this->render();
+		$this->assertStringContainsString( $loaded->webhook()->secret(), $html );
+		$this->assertStringContainsString( 'Rotate secret', $html );
+		$this->assertStringNotContainsString( 'name="webhook_secret"', $html );
+	}
+
+	/**
+	 * A private address is shown again and the stored webhook stays empty.
+	 */
+	public function test_private_webhook_url_is_rejected(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->insert_contact_form();
+		$this->post_form();
+		$_POST['form_id']        = (string) $saved->id();
+		$_POST['schema_version'] = (string) $saved->schema_version();
+		$_POST['webhook_url']    = 'https://127.0.0.1/hook';
+		$_REQUEST                = $_POST;
+
+		FormsPage::handle_load();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( '', $loaded->webhook()->url() );
+		$this->assertSame( '', $loaded->webhook()->secret() );
+		$this->assertStringContainsString( 'Enter an https URL that is not a private address', $this->render() );
+	}
+
+	/**
+	 * Clearing the URL removes the secret.
+	 */
+	public function test_clearing_the_webhook_url_removes_the_secret(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved = $this->save_webhook();
+		$this->assertNotSame( '', $saved->webhook()->secret() );
+
+		$this->post_form();
+		$_POST['form_id']        = (string) $saved->id();
+		$_POST['schema_version'] = (string) $saved->schema_version();
+		$_POST['webhook_url']    = '';
+		$_REQUEST                = $_POST;
+
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( '', $loaded->webhook()->url() );
+		$this->assertSame( '', $loaded->webhook()->secret() );
+		$this->assertFalse( $loaded->webhook()->includes_content() );
+	}
+
+	/**
+	 * Rotation without its nonce is rejected and the secret stays.
+	 */
+	public function test_rotation_without_nonce_is_rejected(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved                             = $this->save_webhook();
+		$_SERVER['REQUEST_METHOD']         = 'POST';
+		$_POST['formstead_rotate_webhook'] = '1';
+		$_POST['form_id']                  = (string) $saved->id();
+		$_REQUEST                          = $_POST;
+
+		try {
+			FormsPage::handle_load();
+			$this->fail( 'Expected the missing nonce to be rejected.' );
+		} catch ( \WPDieException $exception ) {
+			$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+			$this->assertInstanceOf( Form::class, $loaded );
+			$this->assertSame( $saved->webhook()->secret(), $loaded->webhook()->secret() );
+		}
+	}
+
+	/**
+	 * Rotation replaces the secret, keeps the URL, and writes an audit row without either value.
+	 */
+	public function test_rotation_replaces_the_secret_and_audits_without_it(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved  = $this->save_webhook();
+		$before = $saved->webhook()->secret();
+		$this->post_rotation( $saved );
+
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+		$this->assertSame( 'https://93.184.216.34/hook', $loaded->webhook()->url() );
+		$this->assertNotSame( $before, $loaded->webhook()->secret() );
+		$this->assertSame( $saved->schema_version(), $loaded->schema_version() );
+		$context = $this->audit_context( AuditEvent::WEBHOOK_SECRET_ROTATED, $saved->id() );
+		$this->assertNotSame( '', $context );
+		$this->assertStringNotContainsString( $before, $context );
+		$this->assertStringNotContainsString( $loaded->webhook()->secret(), $context );
+		$this->assertStringNotContainsString( '93.184.216.34', $context );
+	}
+
+	/**
+	 * Rotation without the manage-forms capability is rejected.
+	 */
+	public function test_rotation_without_capability_is_rejected(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		$saved = $this->save_webhook();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+		$before = $saved->webhook()->secret();
+		$this->post_rotation( $saved );
+
+		try {
+			FormsPage::handle_load();
+			$this->fail( 'Expected the missing capability to be rejected.' );
+		} catch ( \WPDieException $exception ) {
+			$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+			$this->assertInstanceOf( Form::class, $loaded );
+			$this->assertSame( $before, $loaded->webhook()->secret() );
+		}
+	}
+
+	/**
+	 * The edit screen shows the secret only to someone who can manage forms.
+	 */
+	public function test_webhook_secret_is_hidden_without_capability(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$saved        = $this->save_webhook();
+		$_GET['form'] = (string) $saved->id();
+		$this->assertStringContainsString( $saved->webhook()->secret(), $this->render() );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+		$level = ob_get_level();
+		try {
+			$this->render();
+			$this->fail( 'Expected the forms screen to reject a subscriber.' );
+		} catch ( \WPDieException $exception ) {
+			while ( ob_get_level() > $level ) {
+				ob_end_clean();
+			}
+			$this->assertStringNotContainsString( $saved->webhook()->secret(), $exception->getMessage() );
+		}
+	}
+
+	/**
 	 * An invalid recipient is shown again and nothing is stored.
 	 */
 	public function test_invalid_recipient_is_rejected(): void {
@@ -423,6 +592,55 @@ final class FormsPageTest extends WP_UnitTestCase {
 		foreach ( $warnings as $warning ) {
 			$this->assertStringNotContainsString( 'Array to string conversion', $warning );
 		}
+	}
+
+	/**
+	 * Save a public webhook on the contact form.
+	 */
+	private function save_webhook(): Form {
+		$saved = $this->insert_contact_form();
+		$this->post_form();
+		$_POST['form_id']        = (string) $saved->id();
+		$_POST['schema_version'] = (string) $saved->schema_version();
+		$_POST['webhook_url']    = 'https://93.184.216.34/hook';
+		$_REQUEST                = $_POST;
+		$this->save_expecting_redirect();
+
+		$loaded = ( new FormRepository() )->find_by_id( $saved->id() );
+		$this->assertInstanceOf( Form::class, $loaded );
+
+		return $loaded;
+	}
+
+	/**
+	 * Post the rotation form for a saved webhook.
+	 *
+	 * @param Form $form Form whose secret is rotated.
+	 */
+	private function post_rotation( Form $form ): void {
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST                     = array(
+			'formstead_rotate_webhook' => '1',
+			'form_id'                  => (string) $form->id(),
+		);
+		$_POST['_wpnonce']         = wp_create_nonce( 'formstead_rotate_webhook_' . $form->id() );
+		$_REQUEST                  = $_POST;
+	}
+
+	/**
+	 * Latest audit context for one event on a form.
+	 *
+	 * @param string $event   Event code.
+	 * @param int    $form_id Form id.
+	 */
+	private function audit_context( string $event, int $form_id ): string {
+		global $wpdb;
+
+		$table = Schema::audit_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the test reads the audit row it caused.
+		$context = $wpdb->get_var( $wpdb->prepare( "SELECT context FROM {$table} WHERE event = %s AND object_id = %d ORDER BY id DESC LIMIT 1", $event, $form_id ) );
+
+		return is_string( $context ) ? $context : '';
 	}
 
 	/**

@@ -27,11 +27,18 @@ final class Delivery {
 	private int $submission_id;
 
 	/**
-	 * Delivery channel. `email` for now.
+	 * Delivery channel. `email` or `webhook`.
 	 *
 	 * @var string
 	 */
 	private string $channel;
+
+	/**
+	 * Stable webhook id, or an empty string for email.
+	 *
+	 * @var string
+	 */
+	private string $event_id;
 
 	/**
 	 * Current status.
@@ -87,6 +94,7 @@ final class Delivery {
 	 * @param string $locked_until    UTC lock expiry, or an empty string.
 	 * @param string $lock_token      Claim token, or an empty string.
 	 * @param string $last_error      Error code, or an empty string.
+	 * @param string $event_id       Webhook id, or an empty string for email.
 	 */
 	public function __construct(
 		int $id,
@@ -97,7 +105,8 @@ final class Delivery {
 		string $next_attempt_at,
 		string $locked_until,
 		string $lock_token,
-		string $last_error
+		string $last_error,
+		string $event_id = ''
 	) {
 		$this->id              = $id;
 		$this->submission_id   = $submission_id;
@@ -108,6 +117,7 @@ final class Delivery {
 		$this->locked_until    = $locked_until;
 		$this->lock_token      = $lock_token;
 		$this->last_error      = $last_error;
+		$this->event_id        = $event_id;
 	}
 
 	/**
@@ -129,6 +139,13 @@ final class Delivery {
 	 */
 	public function channel(): string {
 		return $this->channel;
+	}
+
+	/**
+	 * Stable webhook id, or an empty string for email.
+	 */
+	public function event_id(): string {
+		return $this->event_id;
 	}
 
 	/**

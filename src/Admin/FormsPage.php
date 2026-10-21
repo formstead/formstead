@@ -98,6 +98,11 @@ final class FormsPage {
 		}
 
 		self::reset_request();
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- rotation checks its own nonce before writing.
+		if ( isset( $_POST['formstead_rotate_webhook'] ) ) {
+			self::rotate_webhook();
+		}
+
 		check_admin_referer( 'formstead_save_form' );
 
 		if ( ! current_user_can( Capabilities::MANAGE_FORMS ) ) {
@@ -226,8 +231,63 @@ final class FormsPage {
 		if ( $previous->identity_fields() !== $saved->identity_fields() ) {
 			$settings[] = 'identity';
 		}
+		if ( $previous->webhook()->url() !== $saved->webhook()->url() ) {
+			$settings[] = 'webhook_url';
+		}
+		if ( $previous->webhook()->includes_content() !== $saved->webhook()->includes_content() ) {
+			$settings[] = 'webhook_include_content';
+		}
 
 		return $settings;
+	}
+
+	/**
+	 * Replace the signing secret and leave the rest of the form unchanged.
+	 *
+	 * The nonce and capability are checked here, before any write. The audit
+	 * row names the form and does not include the secret or the URL.
+	 */
+	private static function rotate_webhook(): never {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified below before the secret changes.
+		$form_id = isset( $_POST['form_id'] ) ? absint( wp_unslash( $_POST['form_id'] ) ) : 0;
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		check_admin_referer( 'formstead_rotate_webhook_' . $form_id );
+
+		if ( ! current_user_can( Capabilities::MANAGE_FORMS ) ) {
+			wp_die(
+				esc_html__( 'Sorry, you are not allowed to manage forms.', 'formstead' ),
+				'',
+				array( 'response' => 403 )
+			);
+		}
+
+		$saved = ( new FormRepository() )->rotate_webhook_secret( $form_id );
+		if ( $saved instanceof WP_Error ) {
+			wp_die(
+				esc_html( $saved->get_error_message() ),
+				'',
+				array( 'response' => 404 )
+			);
+		}
+
+		AuditLog::record(
+			AuditEvent::WEBHOOK_SECRET_ROTATED,
+			'form',
+			$saved->id(),
+			array()
+		);
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'    => Menu::FORMS_SLUG,
+					'form'    => $saved->id(),
+					'updated' => '1',
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -310,7 +370,7 @@ final class FormsPage {
 	 * percent-encoded address survives; FormInput rejects a URL that
 	 * `esc_url_raw()` would change.
 	 *
-	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, retention_days: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, retention_days: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, webhook_url: string, webhook_include_content: string, fields: array<int, array<string, string>>}
 	 */
 	private static function input_from_post(): array {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_load() before this runs.
@@ -334,21 +394,26 @@ final class FormsPage {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput accepts only the name of an email field.
 		$reply_to = self::text_value( isset( $_POST['reply_to_field'] ) ? wp_unslash( $_POST['reply_to_field'] ) : '' );
 		$include  = isset( $_POST['mail_include_content'] ) ? '1' : '';
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- FormInput rejects a URL that is not public https.
+		$webhook_url     = self::text_value( isset( $_POST['webhook_url'] ) ? wp_unslash( $_POST['webhook_url'] ) : '' );
+		$webhook_content = isset( $_POST['webhook_include_content'] ) ? '1' : '';
 
 		return array(
-			'form_id'              => $form_id,
-			'schema_version'       => $version,
-			'name'                 => $name,
-			'is_enabled'           => $enabled,
-			'success_url'          => $url,
-			'retention_days'       => $retention,
-			'allowed_origins'      => $origins,
-			'rate_per_minute'      => $minute,
-			'rate_per_hour'        => $hour,
-			'notify_recipients'    => $recipients,
-			'reply_to_field'       => $reply_to,
-			'mail_include_content' => $include,
-			'fields'               => self::posted_fields(),
+			'form_id'                 => $form_id,
+			'schema_version'          => $version,
+			'name'                    => $name,
+			'is_enabled'              => $enabled,
+			'success_url'             => $url,
+			'retention_days'          => $retention,
+			'allowed_origins'         => $origins,
+			'rate_per_minute'         => $minute,
+			'rate_per_hour'           => $hour,
+			'notify_recipients'       => $recipients,
+			'reply_to_field'          => $reply_to,
+			'mail_include_content'    => $include,
+			'webhook_url'             => $webhook_url,
+			'webhook_include_content' => $webhook_content,
+			'fields'                  => self::posted_fields(),
 		);
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 	}
@@ -463,24 +528,26 @@ final class FormsPage {
 	 * Values for the edit form.
 	 *
 	 * @param Form|null $form Saved form, or null for a new form.
-	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, retention_days: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, fields: array<int, array<string, string>>}
+	 * @return array{form_id: int, schema_version: int, name: string, is_enabled: string, success_url: string, retention_days: string, allowed_origins: string, rate_per_minute: string, rate_per_hour: string, notify_recipients: string, reply_to_field: string, mail_include_content: string, webhook_url: string, webhook_include_content: string, fields: array<int, array<string, string>>}
 	 */
 	private static function values_from_form( ?Form $form ): array {
 		if ( ! $form instanceof Form ) {
 			return array(
-				'form_id'              => 0,
-				'schema_version'       => 1,
-				'name'                 => '',
-				'is_enabled'           => '1',
-				'success_url'          => '',
-				'retention_days'       => '30',
-				'allowed_origins'      => '',
-				'rate_per_minute'      => '',
-				'rate_per_hour'        => '',
-				'notify_recipients'    => self::default_recipient(),
-				'reply_to_field'       => '',
-				'mail_include_content' => '',
-				'fields'               => array(),
+				'form_id'                 => 0,
+				'schema_version'          => 1,
+				'name'                    => '',
+				'is_enabled'              => '1',
+				'success_url'             => '',
+				'retention_days'          => '30',
+				'allowed_origins'         => '',
+				'rate_per_minute'         => '',
+				'rate_per_hour'           => '',
+				'notify_recipients'       => self::default_recipient(),
+				'reply_to_field'          => '',
+				'mail_include_content'    => '',
+				'webhook_url'             => '',
+				'webhook_include_content' => '',
+				'fields'                  => array(),
 			);
 		}
 
@@ -496,19 +563,21 @@ final class FormsPage {
 		$reply_to = $form->notifications()->reply_to_field();
 
 		return array(
-			'form_id'              => $form->id(),
-			'schema_version'       => $form->schema_version(),
-			'name'                 => $form->name(),
-			'is_enabled'           => $form->is_enabled() ? '1' : '',
-			'success_url'          => $form->success_url(),
-			'retention_days'       => (string) $form->retention_days(),
-			'allowed_origins'      => implode( "\n", $form->protection()->allowed_origins() ),
-			'rate_per_minute'      => null === $minute ? '' : (string) $minute,
-			'rate_per_hour'        => null === $hour ? '' : (string) $hour,
-			'notify_recipients'    => implode( "\n", $form->notifications()->recipients() ),
-			'reply_to_field'       => is_string( $reply_to ) ? $reply_to : '',
-			'mail_include_content' => $form->notifications()->includes_content() ? '1' : '',
-			'fields'               => $rows,
+			'form_id'                 => $form->id(),
+			'schema_version'          => $form->schema_version(),
+			'name'                    => $form->name(),
+			'is_enabled'              => $form->is_enabled() ? '1' : '',
+			'success_url'             => $form->success_url(),
+			'retention_days'          => (string) $form->retention_days(),
+			'allowed_origins'         => implode( "\n", $form->protection()->allowed_origins() ),
+			'rate_per_minute'         => null === $minute ? '' : (string) $minute,
+			'rate_per_hour'           => null === $hour ? '' : (string) $hour,
+			'notify_recipients'       => implode( "\n", $form->notifications()->recipients() ),
+			'reply_to_field'          => is_string( $reply_to ) ? $reply_to : '',
+			'mail_include_content'    => $form->notifications()->includes_content() ? '1' : '',
+			'webhook_url'             => $form->webhook()->url(),
+			'webhook_include_content' => $form->webhook()->includes_content() ? '1' : '',
+			'fields'                  => $rows,
 		);
 	}
 

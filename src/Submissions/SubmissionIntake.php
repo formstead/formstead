@@ -21,8 +21,9 @@ use WP_Error;
  * Writes the key and the submission in one transaction.
  *
  * A replay or a conflict rolls the transaction back, so a second request
- * does not leave a new row. A form with recipients gets its delivery row
- * in this same transaction.
+ * does not leave a new row. A form with recipients gets an email delivery,
+ * and a form with a webhook URL gets a webhook delivery, in this same
+ * transaction. Spam gets neither.
  */
 final class SubmissionIntake {
 
@@ -60,8 +61,12 @@ final class SubmissionIntake {
 			return IntakeResult::failed();
 		}
 
-		if ( $result->is_accepted() && is_int( $result->delivery_id() ) ) {
-			Scheduler::schedule( $result->delivery_id() );
+		if ( $result->is_accepted() ) {
+			foreach ( array( $result->delivery_id(), $result->webhook_delivery_id() ) as $delivery_id ) {
+				if ( is_int( $delivery_id ) ) {
+					Scheduler::schedule( $delivery_id );
+				}
+			}
 		}
 
 		return $result;
@@ -160,6 +165,7 @@ final class SubmissionIntake {
 		}
 
 		$delivery_id = null;
+		$webhook_id  = null;
 		if ( ! $spam && $form->notifications()->has_recipients() ) {
 			$created = ( new DeliveryRepository() )->create( $saved->id() );
 			if ( $created instanceof WP_Error ) {
@@ -168,6 +174,14 @@ final class SubmissionIntake {
 			$delivery_id = $created;
 		}
 
-		return IntakeResult::accepted( $saved, $delivery_id );
+		if ( ! $spam && $form->webhook()->is_configured() ) {
+			$created = ( new DeliveryRepository() )->create( $saved->id(), 'webhook' );
+			if ( $created instanceof WP_Error ) {
+				return $created;
+			}
+			$webhook_id = $created;
+		}
+
+		return IntakeResult::accepted( $saved, $delivery_id, $webhook_id );
 	}
 }

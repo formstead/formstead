@@ -38,6 +38,22 @@ final class RecordingChannel implements Channel {
 	public bool $throw = false;
 
 	/**
+	 * Channel name. Tests that inject this double are exercising email.
+	 */
+	public function name(): string {
+		return 'email';
+	}
+
+	/**
+	 * Whether the form still has recipients.
+	 *
+	 * @param Form $form Form that received the submission.
+	 */
+	public function is_configured( Form $form ): bool {
+		return $form->notifications()->has_recipients();
+	}
+
+	/**
 	 * Record the call.
 	 *
 	 * @param Submission $submission Submission to send.

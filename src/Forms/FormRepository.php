@@ -49,7 +49,7 @@ final class FormRepository {
 
 		$table = Schema::forms_table();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, identifier.
-		$rows = $wpdb->get_results( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields FROM {$table} ORDER BY updated_at DESC, id DESC", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields, webhook_url, webhook_secret, webhook_include_content FROM {$table} ORDER BY updated_at DESC, id DESC", ARRAY_A );
 
 		if ( ! is_array( $rows ) ) {
 			return array();
@@ -125,25 +125,28 @@ final class FormRepository {
 			$saved     = $wpdb->insert(
 				$table,
 				array(
-					'public_id'            => $public_id,
-					'name'                 => $form->name(),
-					'is_enabled'           => $form->is_enabled() ? 1 : 0,
-					'fields'               => $fields,
-					'schema_version'       => 1,
-					'success_url'          => $form->success_url(),
-					'created_at'           => $now,
-					'updated_at'           => $now,
-					'allowed_origins'      => $form->protection()->origins_json(),
-					'rate_per_minute'      => $form->protection()->rate_per_minute(),
-					'rate_per_hour'        => $form->protection()->rate_per_hour(),
-					'honeypot_rejections'  => 0,
-					'notify_recipients'    => $form->notifications()->recipients_json(),
-					'reply_to_field'       => $form->notifications()->reply_to_field(),
-					'mail_include_content' => $form->notifications()->includes_content() ? 1 : 0,
-					'retention_days'       => $form->retention_days(),
-					'identity_fields'      => self::identity_json( $form ),
+					'public_id'               => $public_id,
+					'name'                    => $form->name(),
+					'is_enabled'              => $form->is_enabled() ? 1 : 0,
+					'fields'                  => $fields,
+					'schema_version'          => 1,
+					'success_url'             => $form->success_url(),
+					'created_at'              => $now,
+					'updated_at'              => $now,
+					'allowed_origins'         => $form->protection()->origins_json(),
+					'rate_per_minute'         => $form->protection()->rate_per_minute(),
+					'rate_per_hour'           => $form->protection()->rate_per_hour(),
+					'honeypot_rejections'     => 0,
+					'notify_recipients'       => $form->notifications()->recipients_json(),
+					'reply_to_field'          => $form->notifications()->reply_to_field(),
+					'mail_include_content'    => $form->notifications()->includes_content() ? 1 : 0,
+					'retention_days'          => $form->retention_days(),
+					'identity_fields'         => self::identity_json( $form ),
+					'webhook_url'             => self::nullable_text( $form->webhook()->url() ),
+					'webhook_secret'          => self::nullable_text( $form->webhook()->secret() ),
+					'webhook_include_content' => $form->webhook()->includes_content() ? 1 : 0,
 				),
-				array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%d', '%d', '%s' )
+				array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%d' )
 			);
 			$duplicate = false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
 			$wpdb->suppress_errors( $previous );
@@ -171,7 +174,8 @@ final class FormRepository {
 					0,
 					$form->notifications(),
 					$form->retention_days(),
-					$form->identity_fields()
+					$form->identity_fields(),
+					$form->webhook()
 				);
 			}
 
@@ -235,26 +239,29 @@ final class FormRepository {
 		$saved = $wpdb->update(
 			Schema::forms_table(),
 			array(
-				'name'                 => $form->name(),
-				'is_enabled'           => $form->is_enabled() ? 1 : 0,
-				'fields'               => FieldCodec::encode( $form->fields() ),
-				'schema_version'       => $version,
-				'success_url'          => $form->success_url(),
-				'updated_at'           => $now,
-				'allowed_origins'      => $form->protection()->origins_json(),
-				'rate_per_minute'      => $form->protection()->rate_per_minute(),
-				'rate_per_hour'        => $form->protection()->rate_per_hour(),
-				'notify_recipients'    => $form->notifications()->recipients_json(),
-				'reply_to_field'       => $form->notifications()->reply_to_field(),
-				'mail_include_content' => $form->notifications()->includes_content() ? 1 : 0,
-				'retention_days'       => $form->retention_days(),
-				'identity_fields'      => self::identity_json( $form ),
+				'name'                    => $form->name(),
+				'is_enabled'              => $form->is_enabled() ? 1 : 0,
+				'fields'                  => FieldCodec::encode( $form->fields() ),
+				'schema_version'          => $version,
+				'success_url'             => $form->success_url(),
+				'updated_at'              => $now,
+				'allowed_origins'         => $form->protection()->origins_json(),
+				'rate_per_minute'         => $form->protection()->rate_per_minute(),
+				'rate_per_hour'           => $form->protection()->rate_per_hour(),
+				'notify_recipients'       => $form->notifications()->recipients_json(),
+				'reply_to_field'          => $form->notifications()->reply_to_field(),
+				'mail_include_content'    => $form->notifications()->includes_content() ? 1 : 0,
+				'retention_days'          => $form->retention_days(),
+				'identity_fields'         => self::identity_json( $form ),
+				'webhook_url'             => self::nullable_text( $form->webhook()->url() ),
+				'webhook_secret'          => self::nullable_text( $form->webhook()->secret() ),
+				'webhook_include_content' => $form->webhook()->includes_content() ? 1 : 0,
 			),
 			array(
 				'id'             => $form->id(),
 				'schema_version' => $form->schema_version(),
 			),
-			array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d', '%d', '%s' ),
+			array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%d' ),
 			array( '%d', '%d' )
 		);
 		$wpdb->suppress_errors( $previous );
@@ -306,8 +313,59 @@ final class FormRepository {
 			$current->honeypot_rejections(),
 			$form->notifications(),
 			$form->retention_days(),
-			$form->identity_fields()
+			$form->identity_fields(),
+			$form->webhook()
 		);
+	}
+
+	/**
+	 * Replace the signing secret of a form that already has a webhook URL.
+	 *
+	 * The old secret stops working immediately. The schema version does not
+	 * change, because the fields did not change.
+	 *
+	 * @param int $form_id Form id.
+	 */
+	public function rotate_webhook_secret( int $form_id ): Form|WP_Error {
+		global $wpdb;
+
+		$current = $this->find_by_id( $form_id );
+		if ( ! $current instanceof Form || ! $current->webhook()->is_configured() ) {
+			return new WP_Error(
+				'formstead_form_missing',
+				__( 'This form could not be found.', 'formstead' )
+			);
+		}
+
+		$secret = FormWebhook::generate_secret();
+		$now    = $this->now();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- custom table.
+		$saved = $wpdb->update(
+			Schema::forms_table(),
+			array(
+				'webhook_secret' => $secret,
+				'updated_at'     => $now,
+			),
+			array( 'id' => $form_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+		if ( false === $saved ) {
+			return new WP_Error(
+				'formstead_form_save_failed',
+				__( 'The form could not be saved.', 'formstead' )
+			);
+		}
+
+		$rotated = $this->find_by_id( $form_id );
+		if ( ! $rotated instanceof Form ) {
+			return new WP_Error(
+				'formstead_form_missing',
+				__( 'This form could not be found.', 'formstead' )
+			);
+		}
+
+		return $rotated;
 	}
 
 	/**
@@ -378,10 +436,10 @@ final class FormRepository {
 		$row   = null;
 		if ( 'id' === $column ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields FROM {$table} WHERE id = %d", $value ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields, webhook_url, webhook_secret, webhook_include_content FROM {$table} WHERE id = %d", $value ), ARRAY_A );
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields FROM {$table} WHERE public_id = %s", $value ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields, webhook_url, webhook_secret, webhook_include_content FROM {$table} WHERE public_id = %s", $value ), ARRAY_A );
 		}
 
 		return $this->hydrate( is_array( $row ) ? $row : null );
@@ -425,8 +483,27 @@ final class FormRepository {
 			(int) ( $row['honeypot_rejections'] ?? 0 ),
 			$notifications,
 			(int) ( $row['retention_days'] ?? 30 ),
-			self::identity_names( $row['identity_fields'] ?? null )
+			self::identity_names( $row['identity_fields'] ?? null ),
+			FormWebhook::from_stored(
+				$row['webhook_url'] ?? null,
+				$row['webhook_secret'] ?? null,
+				$row['webhook_include_content'] ?? 0
+			)
 		);
+	}
+
+	/**
+	 * JSON list of identifying field names.
+	 *
+	 * @param Form $form Form being stored.
+	 */
+	/**
+	 * Empty text stored as NULL.
+	 *
+	 * @param string $value URL or secret.
+	 */
+	private static function nullable_text( string $value ): ?string {
+		return '' === $value ? null : $value;
 	}
 
 	/**

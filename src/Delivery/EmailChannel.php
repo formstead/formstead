@@ -24,6 +24,22 @@ use Formstead\Submissions\Submission;
 final class EmailChannel implements Channel {
 
 	/**
+	 * Channel name stored on a delivery.
+	 */
+	public function name(): string {
+		return 'email';
+	}
+
+	/**
+	 * Whether the form has at least one recipient.
+	 *
+	 * @param Form $form Form that received the submission.
+	 */
+	public function is_configured( Form $form ): bool {
+		return $form->notifications()->has_recipients();
+	}
+
+	/**
 	 * Send the notification, or return an error code.
 	 *
 	 * A mailer exception is left for the worker, which stores `mail_exception`

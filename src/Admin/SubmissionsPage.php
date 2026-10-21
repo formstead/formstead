@@ -9,6 +9,7 @@ namespace Formstead\Admin;
 
 use Formstead\Audit\AuditEvent;
 use Formstead\Audit\AuditLog;
+use Formstead\Delivery\Delivery;
 use Formstead\Delivery\DeliveryRepository;
 use Formstead\Delivery\DeliveryStatus;
 use Formstead\Forms\Form;
@@ -360,8 +361,8 @@ final class SubmissionsPage {
 		foreach ( ( new DeliveryRepository() )->for_submission( $submission_id ) as $delivery ) {
 			$pending = DeliveryStatus::PENDING === $delivery->status();
 			$rows[]  = array(
-				'channel'         => 'email' === $delivery->channel() ? __( 'Email', 'formstead' ) : $delivery->channel(),
-				'status'          => DeliveryStatus::label( $delivery->status() ),
+				'channel'         => self::channel_label( $delivery->channel() ),
+				'status'          => self::delivery_status_label( $delivery ),
 				'attempts'        => (string) $delivery->attempts(),
 				'last_error'      => $delivery->last_error(),
 				'next_attempt_at' => $pending ? $delivery->next_attempt_at() : '',
@@ -369,6 +370,34 @@ final class SubmissionsPage {
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * Channel name shown next to a delivery.
+	 *
+	 * @param string $channel Stored channel.
+	 */
+	private static function channel_label( string $channel ): string {
+		return match ( $channel ) {
+			'email' => __( 'Email', 'formstead' ),
+			'webhook' => __( 'Webhook', 'formstead' ),
+			default => $channel,
+		};
+	}
+
+	/**
+	 * Status text for one delivery.
+	 *
+	 * A webhook that was accepted was handed to the receiver, not to the mail system.
+	 *
+	 * @param Delivery $delivery Stored delivery.
+	 */
+	private static function delivery_status_label( Delivery $delivery ): string {
+		if ( 'webhook' === $delivery->channel() && DeliveryStatus::HANDED_OFF === $delivery->status() ) {
+			return __( 'Handed to the receiver', 'formstead' );
+		}
+
+		return DeliveryStatus::label( $delivery->status() );
 	}
 
 	/**

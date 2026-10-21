@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Keep one branch and squash pull request per roadmap stage, with automatic branch deletion. Tags and GitHub Releases are reserved for distributed versions. Stages 0–9 are consolidated into ten commits; the previous history is archived.
+
+## [0.9.0] - 2026-10-21
+
+### Added
+
+- Authenticated submissions API addressed by receipt id. It requires HTTPS outside local development, accepts a WordPress application password, and sends no CORS headers. A read does not mark the submission read. Deletion cancels a waiting delivery and is audited.
+- Signed webhook per form, using Standard Webhooks. Private addresses and redirects are refused before a request is sent. Retries stop after five attempts, and deleting the submission cancels a webhook that has not been sent.
+- Next.js example that posts from the server without an `Origin` header and verifies the webhook signature.
+- Integration notes for CORS, the admin API, and webhooks.
+
+### Changed
+
 - GitHub Actions starts only when someone runs the CI workflow by hand. Run it on `main` after the last pull request of a plan. Pull requests, pushes, and the daily schedule no longer start it.
 
 ## [0.8.1] - 2026-10-21
@@ -205,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/formstead/formstead/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/formstead/formstead/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/formstead/formstead/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/formstead/formstead/compare/v0.7.0...v0.7.1

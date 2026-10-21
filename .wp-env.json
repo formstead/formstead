@@ -12,6 +12,7 @@
 		"wp-content/mu-plugins": "./dev/mu-plugins"
 	},
 	"config": {
+		"WP_ENVIRONMENT_TYPE": "local",
 		"WP_DEBUG": true,
 		"WP_DEBUG_LOG": true,
 		"WP_DEBUG_DISPLAY": false,
@@ -24,6 +25,7 @@
 	"env": {
 		"tests": {
 			"config": {
+				"WP_ENVIRONMENT_TYPE": "local",
 				"FORMSTEAD_E2E": true,
 				"FORMSTEAD_E2E_FAULTS": true
 			}

@@ -9,6 +9,8 @@ namespace Formstead\Forms;
 
 use Formstead\Security\Limits;
 use Formstead\Security\OriginPolicy;
+use Formstead\Webhook\WebhookUrlPolicy;
+use WP_Error;
 
 /**
  * Validates admin input and builds a form, or returns field errors.
@@ -57,6 +59,7 @@ final class FormInput {
 		$notifications  = self::notifications( $input, $fields, $errors );
 		$retention_days = self::retention_days( $input, $errors );
 		$identity       = self::identity_fields( $input, $fields, $existing );
+		$webhook        = self::webhook( $input, $existing, $errors );
 
 		if ( array() !== $errors ) {
 			return new FormInputResult( null, $errors );
@@ -76,7 +79,8 @@ final class FormInput {
 			$existing instanceof Form ? $existing->honeypot_rejections() : 0,
 			$notifications,
 			$retention_days,
-			$identity
+			$identity,
+			$webhook
 		);
 
 		return new FormInputResult( $form, array() );
@@ -98,6 +102,39 @@ final class FormInput {
 		}
 
 		return isset( $input['schema_version'] ) ? (int) $input['schema_version'] : 0;
+	}
+
+	/**
+	 * Webhook URL, secret, and whether the body includes the submission.
+	 *
+	 * An empty URL clears the secret. The first saved URL creates a secret.
+	 * A later save keeps the secret; rotation is a separate action.
+	 *
+	 * @param array<string, mixed>  $input    Posted form values.
+	 * @param Form|null             $existing Form being edited.
+	 * @param array<string, string> $errors   Error map, updated in place.
+	 */
+	private static function webhook( array $input, ?Form $existing, array &$errors ): FormWebhook {
+		$url     = isset( $input['webhook_url'] ) && is_string( $input['webhook_url'] ) ? trim( $input['webhook_url'] ) : '';
+		$include = self::is_checked( $input['webhook_include_content'] ?? null );
+		if ( '' === $url ) {
+			return FormWebhook::none();
+		}
+
+		if ( strlen( $url ) > 2048 || ( new WebhookUrlPolicy() )->inspect( $url ) instanceof WP_Error ) {
+			$errors['webhook_url'] = __( 'Enter an https URL that is not a private address.', 'formstead' );
+			return FormWebhook::none();
+		}
+
+		$secret = '';
+		if ( $existing instanceof Form && '' !== $existing->webhook()->secret() ) {
+			$secret = $existing->webhook()->secret();
+		}
+		if ( '' === $secret ) {
+			$secret = FormWebhook::generate_secret();
+		}
+
+		return new FormWebhook( $url, $secret, $include );
 	}
 
 	/**

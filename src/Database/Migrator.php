@@ -104,6 +104,10 @@ final class Migrator {
 				}
 			}
 
+			if ( $installed > 0 && $installed < 8 ) {
+				self::upgrade_to_8();
+			}
+
 			Capabilities::grant_to_administrator();
 			update_option( Schema::VERSION_OPTION, Schema::VERSION, true );
 
@@ -332,6 +336,17 @@ final class Migrator {
 			'formstead_migration_backfill',
 			__( 'Formstead could not update its database.', 'formstead' )
 		);
+	}
+
+	/**
+	 * Schema version 8 adds webhook columns.
+	 *
+	 * The columns come from dbDelta(). Existing forms are left without a URL
+	 * or a secret, so this step does not generate either and does not backfill
+	 * event ids. Email deliveries keep a null event id.
+	 */
+	private static function upgrade_to_8(): void {
+		// Columns are already present. Nothing else is migrated.
 	}
 
 	/**

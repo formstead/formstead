@@ -8,6 +8,7 @@
 namespace Formstead\Delivery;
 
 use Formstead\Database\Schema;
+use Formstead\Webhook\EventId;
 use WP_Error;
 
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
@@ -28,21 +29,52 @@ final class DeliveryRepository {
 	public const MAX_ATTEMPTS = 5;
 
 	/**
-	 * Create a pending email delivery for a submission.
+	 * Create a pending delivery for a submission.
 	 *
 	 * Called inside the submission transaction. A failure rolls that transaction back.
+	 * A webhook delivery gets one event id, reused for every attempt. A duplicate id is tried again.
 	 *
-	 * @param int $submission_id Submission id.
+	 * @param int         $submission_id Submission id.
+	 * @param string      $channel       `email` or `webhook`.
+	 * @param string|null $event_id      Webhook id. Null generates one for a webhook and stores nothing for email.
 	 */
-	public function create( int $submission_id ): int|WP_Error {
-		global $wpdb;
-
-		if ( $submission_id < 1 ) {
+	public function create( int $submission_id, string $channel = 'email', ?string $event_id = null ): int|WP_Error {
+		if ( $submission_id < 1 || ( 'email' !== $channel && 'webhook' !== $channel ) ) {
 			return new WP_Error(
 				'formstead_delivery_save_failed',
 				__( 'The submission could not be saved.', 'formstead' )
 			);
 		}
+
+		if ( 'webhook' !== $channel ) {
+			return $this->insert_delivery( $submission_id, 'email', null );
+		}
+
+		$last = new WP_Error(
+			'formstead_delivery_save_failed',
+			__( 'The submission could not be saved.', 'formstead' )
+		);
+		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
+			$id   = is_string( $event_id ) && '' !== $event_id ? $event_id : EventId::generate();
+			$last = $this->insert_delivery( $submission_id, 'webhook', $id );
+			if ( ! $last instanceof WP_Error || ! $this->was_duplicate() ) {
+				return $last;
+			}
+			$event_id = null;
+		}
+
+		return $last;
+	}
+
+	/**
+	 * Insert one delivery row.
+	 *
+	 * @param int         $submission_id Submission id.
+	 * @param string      $channel       Channel name.
+	 * @param string|null $event_id      Webhook id, or null for email.
+	 */
+	private function insert_delivery( int $submission_id, string $channel, ?string $event_id ): int|WP_Error {
+		global $wpdb;
 
 		$now      = $this->now();
 		$previous = $wpdb->suppress_errors( true );
@@ -50,14 +82,15 @@ final class DeliveryRepository {
 			Schema::deliveries_table(),
 			array(
 				'submission_id'   => $submission_id,
-				'channel'         => 'email',
+				'channel'         => $channel,
 				'status'          => DeliveryStatus::PENDING,
 				'attempts'        => 0,
 				'next_attempt_at' => $now,
 				'created_at'      => $now,
 				'updated_at'      => $now,
+				'event_id'        => $event_id,
 			),
-			array( '%d', '%s', '%s', '%d', '%s', '%s', '%s' )
+			array( '%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s' )
 		);
 		$wpdb->suppress_errors( $previous );
 
@@ -70,6 +103,15 @@ final class DeliveryRepository {
 		}
 
 		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Whether the last write failed because the event id was already used.
+	 */
+	private function was_duplicate(): bool {
+		global $wpdb;
+
+		return false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
 	}
 
 	/**
@@ -154,7 +196,7 @@ final class DeliveryRepository {
 		$table = Schema::deliveries_table();
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT id, submission_id, channel, status, attempts, next_attempt_at, locked_until, lock_token, last_error FROM {$table} WHERE submission_id = %d ORDER BY id ASC",
+				"SELECT id, submission_id, channel, status, attempts, next_attempt_at, locked_until, lock_token, last_error, event_id FROM {$table} WHERE submission_id = %d ORDER BY id ASC",
 				$submission_id
 			),
 			ARRAY_A
@@ -228,7 +270,7 @@ final class DeliveryRepository {
 		$table = Schema::deliveries_table();
 		$row   = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT id, submission_id, channel, status, attempts, next_attempt_at, locked_until, lock_token, last_error FROM {$table} WHERE id = %d",
+				"SELECT id, submission_id, channel, status, attempts, next_attempt_at, locked_until, lock_token, last_error, event_id FROM {$table} WHERE id = %d",
 				$id
 			),
 			ARRAY_A
@@ -372,7 +414,7 @@ final class DeliveryRepository {
 		$table = Schema::deliveries_table();
 		$row   = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT id, submission_id, channel, status, attempts, next_attempt_at, locked_until, lock_token, last_error FROM {$table} WHERE id = %d AND lock_token = %s",
+				"SELECT id, submission_id, channel, status, attempts, next_attempt_at, locked_until, lock_token, last_error, event_id FROM {$table} WHERE id = %d AND lock_token = %s",
 				$id,
 				$token
 			),
@@ -423,7 +465,8 @@ final class DeliveryRepository {
 			(string) ( $row['next_attempt_at'] ?? '' ),
 			(string) ( $row['locked_until'] ?? '' ),
 			(string) ( $row['lock_token'] ?? '' ),
-			(string) ( $row['last_error'] ?? '' )
+			(string) ( $row['last_error'] ?? '' ),
+			(string) ( $row['event_id'] ?? '' )
 		);
 	}
 
