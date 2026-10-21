@@ -1,6 +1,6 @@
 /**
- * Activate Formstead on the tests site, seed the four forms, and build Astro
- * when that example exists.
+ * Activate Formstead on the tests site, seed the four forms, and build the
+ * examples. CI builds Next.js in its own step, so this skips that build there.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -51,6 +51,14 @@ const seeded = readSeed( wp( [ 'eval-file', 'tests/e2e/fixtures/seed.php' ] ) );
 const authDir = join( root, 'tests/e2e/.auth' );
 mkdirSync( authDir, { recursive: true } );
 writeFileSync( join( authDir, 'forms.json' ), JSON.stringify( seeded, null, 2 ) + '\n' );
+
+if ( ! process.env.CI ) {
+	const nextDir = join( root, 'examples/next' );
+	if ( existsSync( join( nextDir, 'package.json' ) ) ) {
+		execFileSync( 'npm', [ 'ci' ], { cwd: nextDir, stdio: 'inherit' } );
+		execFileSync( 'npm', [ 'run', 'build' ], { cwd: nextDir, stdio: 'inherit' } );
+	}
+}
 
 const astroDir = join( root, 'examples/astro' );
 if ( existsSync( join( astroDir, 'package.json' ) ) ) {
