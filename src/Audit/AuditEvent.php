@@ -24,6 +24,10 @@ final class AuditEvent {
 
 	public const RETENTION_RUN = 'retention_run';
 
+	public const PRIVACY_EXPORTED = 'privacy_exported';
+
+	public const PRIVACY_ERASED = 'privacy_erased';
+
 	/**
 	 * Codes the log accepts, in a stable order.
 	 *
@@ -37,6 +41,8 @@ final class AuditEvent {
 			self::SUBMISSIONS_EXPORTED,
 			self::SUBMISSIONS_DELETED,
 			self::RETENTION_RUN,
+			self::PRIVACY_EXPORTED,
+			self::PRIVACY_ERASED,
 		);
 	}
 
@@ -68,6 +74,10 @@ final class AuditEvent {
 				return __( 'Submissions deleted', 'formstead' );
 			case self::RETENTION_RUN:
 				return __( 'Retention run', 'formstead' );
+			case self::PRIVACY_EXPORTED:
+				return __( 'Personal data exported', 'formstead' );
+			case self::PRIVACY_ERASED:
+				return __( 'Personal data erased', 'formstead' );
 			default:
 				return '';
 		}
