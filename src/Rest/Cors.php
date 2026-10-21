@@ -67,7 +67,10 @@ final class Cors {
 
 		$response = new WP_REST_Response( null, 204 );
 		$response->header( 'Vary', 'Accept, Origin' );
-		self::grant( $response, $request );
+		// The admin API is not callable from a browser on another origin.
+		if ( ! Routes::is_admin_route( $request->get_route() ) ) {
+			self::grant( $response, $request );
+		}
 
 		return $response;
 	}
@@ -86,7 +89,7 @@ final class Cors {
 			return $result;
 		}
 
-		if ( ! Routes::is_namespace( $request->get_route() ) ) {
+		if ( ! Routes::is_namespace( $request->get_route() ) || Routes::is_admin_route( $request->get_route() ) ) {
 			return $result;
 		}
 
@@ -123,6 +126,10 @@ final class Cors {
 			header_remove( 'Access-Control-Max-Age' );
 		}
 
+		if ( Routes::is_admin_route( $request->get_route() ) ) {
+			return $served;
+		}
+
 		$origin = self::origin( $request );
 		if ( null !== $origin && $server instanceof WP_REST_Server && ! headers_sent() ) {
 			$server->send_header( 'Access-Control-Allow-Origin', $origin );
@@ -142,7 +149,7 @@ final class Cors {
 	 * @param WP_REST_Request  $request  Incoming request.
 	 */
 	public static function apply( WP_REST_Response $response, WP_REST_Request $request ): WP_REST_Response {
-		if ( Routes::is_namespace( $request->get_route() ) ) {
+		if ( Routes::is_namespace( $request->get_route() ) && ! Routes::is_admin_route( $request->get_route() ) ) {
 			self::grant( $response, $request );
 		}
 

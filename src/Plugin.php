@@ -20,6 +20,7 @@ use Formstead\Privacy\IdentityBackfill;
 use Formstead\Privacy\PrivacyEraser;
 use Formstead\Privacy\PrivacyExporter;
 use Formstead\Privacy\PrivacyPolicy;
+use Formstead\Rest\AdminSubmissionsController;
 use Formstead\Rest\Cors;
 use Formstead\Rest\HtmlResponder;
 use Formstead\Rest\SubmissionsController;
@@ -66,6 +67,7 @@ final class Plugin {
 		Menu::register();
 		SubmissionsExport::register();
 		SubmissionsController::register();
+		AdminSubmissionsController::register();
 		Cors::register();
 		HtmlResponder::register();
 		Scheduler::register();
