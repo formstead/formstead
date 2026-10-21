@@ -60,7 +60,7 @@ jobs:
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
 
       - name: PHPUnit
-        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain
 
       - name: PHPCS
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs
@@ -133,7 +133,7 @@ jobs:
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
 
       - name: PHPUnit
-        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain
 
   mysql:
     name: PHPUnit on MySQL 8.0
@@ -171,6 +171,13 @@ jobs:
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 7.1.3
 
       - name: PHPUnit
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        run: vendor/bin/phpunit --exclude-group explain
+        env:
+          WP_TESTS_DIR: /tmp/wordpress-tests-lib
+
+      - name: PHPUnit including index checks
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: vendor/bin/phpunit
         env:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
