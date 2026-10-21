@@ -61,6 +61,7 @@ $date_to    = $query->date_to() ?? '';
 	</form>
 
 	<?php if ( $table instanceof SubmissionsTable ) : ?>
+		<?php $table->views(); ?>
 		<form method="post">
 			<?php $table->display(); ?>
 		</form>
