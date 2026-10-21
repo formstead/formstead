@@ -8,6 +8,7 @@
 namespace Formstead\Privacy;
 
 use Formstead\Database\Schema;
+use WP_Error;
 
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- table name is an identifier. Dynamic IN lists are unpacked.
 
@@ -85,6 +86,10 @@ final class IdentityRepository {
 		}
 
 		$present = $this->fields_for_submission( $submission_id );
+		if ( null === $present ) {
+			return false;
+		}
+
 		$missing = array();
 		foreach ( $hashes as $field => $hash ) {
 			if ( ! isset( $present[ $field ] ) ) {
@@ -98,10 +103,12 @@ final class IdentityRepository {
 	/**
 	 * Field names already indexed for one submission.
 	 *
+	 * Null means the read failed. An empty list means nothing is indexed yet.
+	 *
 	 * @param int $submission_id Submission id.
-	 * @return array<string, true>
+	 * @return array<string, true>|null
 	 */
-	private function fields_for_submission( int $submission_id ): array {
+	private function fields_for_submission( int $submission_id ): ?array {
 		global $wpdb;
 
 		if ( $submission_id < 1 ) {
@@ -115,8 +122,8 @@ final class IdentityRepository {
 				$submission_id
 			)
 		);
-		if ( ! is_array( $rows ) ) {
-			return array();
+		if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
+			return null;
 		}
 
 		$fields = array();
@@ -234,9 +241,9 @@ final class IdentityRepository {
 	 * @param string $hash   HMAC-SHA256 hex.
 	 * @param int    $limit  Maximum rows.
 	 * @param int    $offset Rows to skip.
-	 * @return list<int>
+	 * @return list<int>|WP_Error Empty when nothing matches. `WP_Error` when the read fails.
 	 */
-	public function submission_ids_for_hash( string $hash, int $limit, int $offset = 0 ): array {
+	public function submission_ids_for_hash( string $hash, int $limit, int $offset = 0 ): array|WP_Error {
 		global $wpdb;
 
 		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $hash ) ) {
@@ -252,8 +259,11 @@ final class IdentityRepository {
 				max( 0, $offset )
 			)
 		);
-		if ( ! is_array( $rows ) ) {
-			return array();
+		if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
+			return new WP_Error(
+				'formstead_identity_index_unreadable',
+				__( 'Formstead could not read the identity index. Try the export or erase again.', 'formstead' )
+			);
 		}
 
 		$ids = array();

@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.8.0
+Stable tag: 0.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,6 +39,11 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.8.1 =
+* Index submissions already passed when an email field is marked during a backfill.
+* Refuse personal-data export and erase when the identity index cannot be read, instead of reporting that the person has no submissions.
+* Queue the backfill even if clearing the index fails. Repair a form already missing that queue with `wp formstead identities rebuild --form=<public_id>`.
 
 = 0.8.0 =
 * Index an identifying email field as an HMAC, and search the inbox for that exact address.
@@ -127,6 +132,9 @@ No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 * Initial installable skeleton.
 
 == Upgrade Notice ==
+
+= 0.8.1 =
+Personal-data export and erase no longer treat a failed index read as an empty result. If a form's identity index was left unfinished after a failed save, run `wp formstead identities rebuild --form=<public_id>`.
 
 = 0.8.0 =
 Existing email fields are marked as identifying the person. The index is built in the background. Until it finishes, personal-data export and erase ask you to run `wp formstead identities rebuild`.

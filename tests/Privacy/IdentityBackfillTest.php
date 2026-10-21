@@ -17,9 +17,11 @@ use Formstead\Forms\FormRepository;
 use Formstead\Delivery\Scheduler;
 use Formstead\Lifecycle\Deactivator;
 use Formstead\Privacy\IdentityBackfill;
+use Formstead\Privacy\PrivacyExporter;
 use Formstead\Retention\RetentionScheduler;
 use Formstead\Privacy\IdentityHasher;
 use Formstead\Submissions\SubmissionIntake;
+use WP_Error;
 use Formstead\Tests\TestCase\MigrationTestCase;
 
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- these tests install version 6 and read the index they just built.
@@ -186,6 +188,227 @@ final class IdentityBackfillTest extends MigrationTestCase {
 	}
 
 	/**
+	 * A field marked after the first batch is indexed on rows already passed.
+	 */
+	public function test_a_mark_added_during_backfill_indexes_rows_already_passed(): void {
+		$this->assertNull( Migrator::run() );
+		$form    = $this->two_email_form( array( 'email' ) );
+		$payload = '{"email":"ada@example.com","alt":"ada.alt@example.com"}';
+		$this->insert_submission( $form->id(), $payload, 'new' );
+		$this->insert_submission( $form->id(), $payload, 'new' );
+		$last = $this->insert_submission( $form->id(), $payload, 'new' );
+		update_option(
+			Migrator::IDENTITY_BACKFILL_OPTION,
+			array(
+				'status'   => 'pending',
+				'after_id' => 0,
+				'until_id' => $last,
+				'form_id'  => $form->id(),
+			),
+			false
+		);
+
+		$this->assertSame( 'pending', ( new IdentityBackfill() )->run( null, 1, 1 ) );
+		$updated = ( new FormRepository() )->update( $this->copy( $form, array( 'email', 'alt' ) ) );
+		$this->assertInstanceOf( Form::class, $updated );
+
+		$cursor = get_option( Migrator::IDENTITY_BACKFILL_OPTION );
+		$this->assertIsArray( $cursor );
+		$this->assertSame( 0, $cursor['after_id'] );
+		$this->assertSame( 'pending', $cursor['status'] );
+
+		$this->assertSame( 'done', ( new IdentityBackfill() )->run( null, null ) );
+		$exported = PrivacyExporter::export( 'ada.alt@example.com', 1 );
+		$this->assertIsArray( $exported );
+		$this->assertCount( 3, $exported['data'] );
+	}
+
+	/**
+	 * A rewind that lands during the batch select is kept.
+	 */
+	public function test_a_rewind_during_a_batch_is_not_overwritten(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+		$form    = $this->two_email_form( array( 'email', 'alt' ) );
+		$payload = '{"email":"ada@example.com","alt":"ada.alt@example.com"}';
+		$first   = $this->insert_submission( $form->id(), $payload, 'new' );
+		$this->insert_submission( $form->id(), $payload, 'new' );
+		$last = $this->insert_submission( $form->id(), $payload, 'new' );
+		update_option(
+			Migrator::IDENTITY_BACKFILL_OPTION,
+			array(
+				'status'   => 'pending',
+				'after_id' => $first,
+				'until_id' => $last,
+				'form_id'  => $form->id(),
+			),
+			false
+		);
+
+		$submissions = Schema::submissions_table();
+		$rewound     = false;
+		$filter      = static function ( $query ) use ( &$rewound, $form, $submissions ) {
+			if ( $rewound || ! is_string( $query ) || ! str_contains( $query, $submissions ) || ! str_contains( $query, 'WHERE id >' ) ) {
+				return $query;
+			}
+
+			$rewound = true;
+			IdentityBackfill::request_form( $form->id() );
+			return $query;
+		};
+
+		add_filter( 'query', $filter );
+		try {
+			$this->assertSame( 'done', ( new IdentityBackfill() )->run( null, null ) );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+
+		$this->assertTrue( $rewound );
+		$table = Schema::identities_table();
+		$this->assertSame( 6, (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE form_id = %d", $form->id() ) ) );
+	}
+
+	/**
+	 * A failed submission read does not mark the index finished.
+	 */
+	public function test_a_failed_read_leaves_the_backfill_pending(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+		$form = $this->form( array( 'email' ) );
+		$id   = $this->insert_submission( $form->id(), '{"email":"ada@example.com"}', 'new' );
+		update_option(
+			Migrator::IDENTITY_BACKFILL_OPTION,
+			array(
+				'status'   => 'pending',
+				'after_id' => 0,
+				'until_id' => $id,
+				'form_id'  => $form->id(),
+			),
+			false
+		);
+
+		$submissions = Schema::submissions_table();
+		$previous    = $wpdb->suppress_errors( true );
+		$filter      = static function ( $query ) use ( $submissions ) {
+			if ( is_string( $query ) && str_contains( $query, $submissions ) && str_contains( $query, 'WHERE id >' ) ) {
+				return 'SELECT id FROM ' . $submissions . '_missing';
+			}
+
+			return $query;
+		};
+
+		add_filter( 'query', $filter );
+		try {
+			$this->assertSame( 'pending', ( new IdentityBackfill() )->run( null, null ) );
+		} finally {
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $previous );
+		}
+
+		$cursor = get_option( Migrator::IDENTITY_BACKFILL_OPTION );
+		$this->assertIsArray( $cursor );
+		$this->assertSame( 0, $cursor['after_id'] );
+		$this->assertSame( 'pending', $cursor['status'] );
+
+		$this->assertSame( 'done', ( new IdentityBackfill() )->run( null, null ) );
+		$exported = PrivacyExporter::export( 'ada@example.com', 1 );
+		$this->assertIsArray( $exported );
+		$this->assertCount( 1, $exported['data'] );
+	}
+
+	/**
+	 * A failed lookup of indexed fields stops the batch instead of inserting duplicates.
+	 */
+	public function test_a_failed_field_lookup_does_not_advance_the_cursor(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+		$form = $this->form( array( 'email' ) );
+		$id   = $this->insert_submission( $form->id(), '{"email":"ada@example.com"}', 'new' );
+		update_option(
+			Migrator::IDENTITY_BACKFILL_OPTION,
+			array(
+				'status'   => 'pending',
+				'after_id' => 0,
+				'until_id' => $id,
+				'form_id'  => $form->id(),
+			),
+			false
+		);
+
+		$identities = Schema::identities_table();
+		$previous   = $wpdb->suppress_errors( true );
+		$filter     = static function ( $query ) use ( $identities ) {
+			if ( is_string( $query ) && str_contains( $query, $identities ) && str_contains( $query, 'SELECT field' ) ) {
+				return 'SELECT field FROM ' . $identities . '_missing';
+			}
+
+			return $query;
+		};
+
+		add_filter( 'query', $filter );
+		try {
+			$this->assertSame( 'pending', ( new IdentityBackfill() )->run( null, null ) );
+		} finally {
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $previous );
+		}
+
+		$cursor = get_option( Migrator::IDENTITY_BACKFILL_OPTION );
+		$this->assertIsArray( $cursor );
+		$this->assertSame( 0, $cursor['after_id'] );
+		$this->assertSame( 0, (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$identities} WHERE submission_id = %d", $id ) ) );
+	}
+
+	/**
+	 * Clearing the index can fail after the mark is stored, and the backfill is still queued.
+	 */
+	public function test_a_failed_index_clear_still_requests_a_backfill(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+		$form = $this->form( array() );
+		$id   = $this->insert_submission( $form->id(), '{"email":"ada@example.com"}', 'new' );
+
+		$identities = Schema::identities_table();
+		$previous   = $wpdb->suppress_errors( true );
+		$filter     = static function ( $query ) use ( $identities ) {
+			if ( is_string( $query ) && str_contains( $query, 'DELETE' ) && str_contains( $query, $identities ) ) {
+				return 'DELETE FROM ' . $identities . '_missing';
+			}
+
+			return $query;
+		};
+
+		add_filter( 'query', $filter );
+		try {
+			$updated = ( new FormRepository() )->update( $this->copy( $form, array( 'email' ) ) );
+		} finally {
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $previous );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $updated );
+		$this->assertSame( 'formstead_identity_index_failed', $updated->get_error_code() );
+
+		$stored = ( new FormRepository() )->find_by_id( $form->id() );
+		$this->assertInstanceOf( Form::class, $stored );
+		$this->assertSame( array( 'email' ), $stored->identity_fields() );
+
+		$cursor = get_option( Migrator::IDENTITY_BACKFILL_OPTION );
+		$this->assertIsArray( $cursor );
+		$this->assertSame( 'pending', $cursor['status'] );
+		$this->assertSame( 0, $cursor['after_id'] );
+		$this->assertSame( $form->id(), $cursor['form_id'] );
+
+		$this->assertSame( 'done', ( new IdentityBackfill() )->run( null, null ) );
+		$this->assertSame( 1, (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$identities} WHERE submission_id = %d", $id ) ) );
+	}
+
+	/**
 	 * A lock held by another run is left alone.
 	 */
 	public function test_a_current_lock_is_not_stolen(): void {
@@ -255,6 +478,37 @@ final class IdentityBackfillTest extends MigrationTestCase {
 		$this->insert_submission( $with_email, '{"address":"   "}', 'new' );
 		$this->insert_submission( $without_email, '{"note":"ada@example.com"}', 'new' );
 		update_option( Schema::VERSION_OPTION, 6 );
+	}
+
+	/**
+	 * Persist a form with two email fields.
+	 *
+	 * @param string[] $identity Identifying field names.
+	 */
+	private function two_email_form( array $identity ): Form {
+		$saved = ( new FormRepository() )->insert(
+			new Form(
+				0,
+				'',
+				'Contact',
+				true,
+				array(
+					new Field( 'email', 'Email', FieldType::Email, true, 255 ),
+					new Field( 'alt', 'Alt', FieldType::Email, false, 255 ),
+				),
+				1,
+				'https://example.com/thanks',
+				'',
+				'',
+				null,
+				0,
+				null,
+				30,
+				$identity
+			)
+		);
+		$this->assertInstanceOf( Form::class, $saved );
+		return $saved;
 	}
 
 	/**
