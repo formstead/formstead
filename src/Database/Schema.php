@@ -1,6 +1,6 @@
 <?php
 /**
- * Database schema version 6.
+ * Database schema version 7.
  *
  * @package Formstead
  */
@@ -15,7 +15,7 @@ namespace Formstead\Database;
  */
 final class Schema {
 
-	public const VERSION = 6;
+	public const VERSION = 7;
 
 	public const VERSION_OPTION = 'formstead_db_version';
 
@@ -76,6 +76,24 @@ final class Schema {
 	}
 
 	/**
+	 * Hashed identifying field values, including the site prefix.
+	 */
+	public static function identities_table(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . 'formstead_identities';
+	}
+
+	/**
+	 * Administrative audit events, including the site prefix.
+	 */
+	public static function audit_table(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . 'formstead_audit';
+	}
+
+	/**
 	 * Every Formstead table, including the site prefix.
 	 *
 	 * @return list<string>
@@ -88,6 +106,8 @@ final class Schema {
 			self::rate_limits_table(),
 			self::idempotency_keys_table(),
 			self::deliveries_table(),
+			self::identities_table(),
+			self::audit_table(),
 		);
 	}
 
@@ -108,6 +128,8 @@ final class Schema {
 		$rate_limits = self::rate_limits_table();
 		$keys        = self::idempotency_keys_table();
 		$deliveries  = self::deliveries_table();
+		$identities  = self::identities_table();
+		$audit       = self::audit_table();
 
 		// Table names are identifiers, so they cannot be placeholders.
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -130,6 +152,7 @@ final class Schema {
 				reply_to_field varchar(64) DEFAULT NULL,
 				mail_include_content tinyint(1) NOT NULL DEFAULT 0,
 				retention_days smallint(5) unsigned NOT NULL DEFAULT 30,
+				identity_fields text,
 				PRIMARY KEY  (id),
 				UNIQUE KEY public_id (public_id)
 			) {$charset} ENGINE=InnoDB;",
@@ -193,6 +216,30 @@ final class Schema {
 				KEY status_next (status,next_attempt_at),
 				KEY submission_id (submission_id),
 				KEY status_updated (status,updated_at)
+			) {$charset} ENGINE=InnoDB;",
+			"CREATE TABLE {$identities} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				submission_id bigint(20) unsigned NOT NULL,
+				form_id bigint(20) unsigned NOT NULL,
+				field varchar(64) NOT NULL,
+				value_hash char(64) NOT NULL,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY hash_submission (value_hash,submission_id),
+				KEY submission_id (submission_id),
+				KEY form_field (form_id,field)
+			) {$charset} ENGINE=InnoDB;",
+			"CREATE TABLE {$audit} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				event varchar(40) NOT NULL,
+				actor_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				object_type varchar(20) NOT NULL,
+				object_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				context text,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY created_at (created_at),
+				KEY event_created (event,created_at)
 			) {$charset} ENGINE=InnoDB;",
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared

@@ -56,8 +56,11 @@ final class UninstallerTest extends MigrationTestCase {
 
 		Uninstaller::wipe();
 
-		$this->assertContains( Schema::forms_table(), $this->table_names() );
-		$this->assertContains( Schema::submissions_table(), $this->table_names() );
+		$tables = $this->table_names();
+		$this->assertContains( Schema::forms_table(), $tables );
+		$this->assertContains( Schema::submissions_table(), $tables );
+		$this->assertContains( Schema::identities_table(), $tables );
+		$this->assertContains( Schema::audit_table(), $tables );
 		$this->assertSame( (string) Schema::VERSION, (string) get_option( Schema::VERSION_OPTION ) );
 		$this->assertIsArray( get_option( IpHasher::OPTION ) );
 		$role = get_role( 'administrator' );
@@ -93,6 +96,8 @@ final class UninstallerTest extends MigrationTestCase {
 		foreach ( Schema::tables() as $table ) {
 			$this->assertNotContains( $table, $tables, $table );
 		}
+		$this->assertNotContains( Schema::identities_table(), $tables );
+		$this->assertNotContains( Schema::audit_table(), $tables );
 		$this->assertFalse( get_option( Schema::VERSION_OPTION ) );
 		$this->assertFalse( get_option( Uninstaller::OPTION ) );
 		$this->assertFalse( get_option( RetentionRunner::REPORT_OPTION ) );
