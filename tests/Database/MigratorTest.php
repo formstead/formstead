@@ -536,6 +536,73 @@ final class MigratorTest extends MigrationTestCase {
 	}
 
 	/**
+	 * Schema version 7 gains webhook columns and a delivery event id.
+	 *
+	 * Existing forms stay without a webhook. The content flag defaults to off.
+	 * A delivery that already exists keeps a null event id.
+	 */
+	public function test_upgrade_from_version_7_adds_webhook_columns_without_configuration(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+
+		$forms      = Schema::forms_table();
+		$deliveries = Schema::deliveries_table();
+		$wpdb->query( "ALTER TABLE {$forms} DROP COLUMN webhook_url" );
+		$wpdb->query( "ALTER TABLE {$forms} DROP COLUMN webhook_secret" );
+		$wpdb->query( "ALTER TABLE {$forms} DROP COLUMN webhook_include_content" );
+		$wpdb->query( "ALTER TABLE {$deliveries} DROP INDEX event_id" );
+		$wpdb->query( "ALTER TABLE {$deliveries} DROP COLUMN event_id" );
+		$wpdb->insert(
+			$forms,
+			array(
+				'public_id'      => 'fs_abcdefghijklmnop',
+				'name'           => 'Contact',
+				'is_enabled'     => 1,
+				'fields'         => '[]',
+				'schema_version' => 1,
+				'success_url'    => 'https://example.com/thanks',
+				'created_at'     => '2026-10-20 10:00:00',
+				'updated_at'     => '2026-10-20 11:00:00',
+			)
+		);
+		$form_id = (int) $wpdb->insert_id;
+		$wpdb->insert(
+			$deliveries,
+			array(
+				'submission_id'   => 1,
+				'channel'         => 'email',
+				'status'          => 'pending',
+				'attempts'        => 0,
+				'next_attempt_at' => '2026-10-20 12:00:00',
+				'created_at'      => '2026-10-20 12:00:00',
+				'updated_at'      => '2026-10-20 12:00:00',
+			)
+		);
+		update_option( Schema::VERSION_OPTION, 7 );
+
+		$this->assertNull( Migrator::maybe_migrate() );
+		$this->assertSame( Schema::VERSION, (int) get_option( Schema::VERSION_OPTION ) );
+
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT webhook_url, webhook_secret, webhook_include_content FROM {$forms} WHERE id = %d", $form_id ), ARRAY_A );
+		$this->assertIsArray( $row );
+		$this->assertNull( $row['webhook_url'] );
+		$this->assertNull( $row['webhook_secret'] );
+		$this->assertSame( '0', (string) $row['webhook_include_content'] );
+		$this->assertNull( $wpdb->get_var( "SELECT event_id FROM {$deliveries}" ) );
+
+		$indexes = $wpdb->get_col( "SHOW INDEX FROM {$deliveries}", 2 );
+		$this->assertContains( 'event_id', $indexes );
+
+		$again = array();
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		foreach ( Schema::statements() as $statement ) {
+			$again = array_merge( $again, dbDelta( $statement ) );
+		}
+		$this->assertSame( array(), $again );
+	}
+
+	/**
 	 * A fresh install does not request an identity backfill.
 	 */
 	public function test_fresh_install_does_not_request_an_identity_backfill(): void {
