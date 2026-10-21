@@ -1,6 +1,6 @@
 <?php
 /**
- * Database schema version 7.
+ * Database schema version 8.
  *
  * @package Formstead
  */
@@ -15,7 +15,7 @@ namespace Formstead\Database;
  */
 final class Schema {
 
-	public const VERSION = 7;
+	public const VERSION = 8;
 
 	public const VERSION_OPTION = 'formstead_db_version';
 
@@ -153,6 +153,9 @@ final class Schema {
 				mail_include_content tinyint(1) NOT NULL DEFAULT 0,
 				retention_days smallint(5) unsigned NOT NULL DEFAULT 30,
 				identity_fields text,
+				webhook_url varchar(2048) DEFAULT NULL,
+				webhook_secret varchar(64) DEFAULT NULL,
+				webhook_include_content tinyint(1) NOT NULL DEFAULT 0,
 				PRIMARY KEY  (id),
 				UNIQUE KEY public_id (public_id)
 			) {$charset} ENGINE=InnoDB;",
@@ -212,10 +215,12 @@ final class Schema {
 				last_error varchar(64) DEFAULT NULL,
 				created_at datetime NOT NULL,
 				updated_at datetime NOT NULL,
+				event_id varchar(20) DEFAULT NULL,
 				PRIMARY KEY  (id),
 				KEY status_next (status,next_attempt_at),
 				KEY submission_id (submission_id),
-				KEY status_updated (status,updated_at)
+				KEY status_updated (status,updated_at),
+				UNIQUE KEY event_id (event_id)
 			) {$charset} ENGINE=InnoDB;",
 			"CREATE TABLE {$identities} (
 				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
