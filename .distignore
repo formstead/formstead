@@ -50,6 +50,11 @@
 /test-results/**
 /playwright-report
 /playwright-report/**
+/docs
+/docs/**
+/playwright.config.ts
+/tests/e2e/.auth
+/tests/e2e/.auth/**
 /*.zip
 .DS_Store
 /.idea
