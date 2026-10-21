@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-21
+
+### Fixed
+
+- The inbox shows its views: Inbox, Unread, Archived, Spam, and All, with counts for the current form and date filters.
+- Mark as unread stays unread. The screen returns to the list instead of opening the submission and marking it read again.
+- Deleting a submission rolls back when cancelling its delivery or removing its idempotency key fails.
+- CSV export reads each batch in creation order. Rows stored at the same second are all included, and a large form is not sorted again for every batch.
+
 ## [0.5.0] - 2026-10-21
 
 ### Added
@@ -128,7 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/formstead/formstead/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/formstead/formstead/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/formstead/formstead/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/formstead/formstead/compare/v0.3.1...v0.4.0
