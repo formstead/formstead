@@ -169,7 +169,8 @@ final class AuditTable extends \WP_List_Table {
 			return '';
 		}
 
-		return esc_html( wp_date( 'Y-m-d H:i', $created ) );
+		$formatted = wp_date( 'Y-m-d H:i', $created );
+		return is_string( $formatted ) ? esc_html( $formatted ) : '';
 	}
 
 	/**
