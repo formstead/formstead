@@ -17,6 +17,7 @@ use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Security\Capabilities;
+use Formstead\Submissions\SubmissionIntake;
 use Formstead\Submissions\SubmissionRepository;
 use WP_REST_Request;
 use WP_User;
@@ -218,6 +219,66 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 		$html = $this->render();
 		$this->assertStringContainsString( 'only-second', $html );
 		$this->assertStringNotContainsString( 'row-01', $html );
+	}
+
+	/**
+	 * Search by email finds a different case and hides a different address.
+	 */
+	public function test_search_by_email_filters_the_list(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$form = ( new FormRepository() )->insert(
+			new Form(
+				0,
+				'',
+				'Contact',
+				true,
+				array(
+					new Field( 'email', 'Email', FieldType::Email, true, 255 ),
+					new Field( 'note', 'Note', FieldType::Text, false, 255 ),
+				),
+				1,
+				'https://example.com/thanks',
+				'',
+				'',
+				null,
+				0,
+				null,
+				30,
+				array( 'email' )
+			)
+		);
+		$this->assertInstanceOf( Form::class, $form );
+		$intake = new SubmissionIntake();
+		$intake->accept(
+			$form,
+			array(
+				'email' => 'Ada@Example.com',
+				'note'  => 'from-ada',
+			),
+			null
+		);
+		$intake->accept(
+			$form,
+			array(
+				'email' => 'bea@example.com',
+				'note'  => 'from-bea',
+			),
+			null
+		);
+
+		$_GET = array( 's' => ' ada@example.com ' );
+		$html = $this->render();
+
+		$this->assertStringContainsString( 'Search by email', $html );
+		$this->assertStringContainsString( 'value="ada@example.com"', $html );
+		$this->assertStringContainsString( 'Ada@Example.com', $html );
+		$this->assertStringNotContainsString( 'bea@example.com', $html );
+		$this->assertStringContainsString( 's=ada@example.com', $html );
+
+		$_GET = array( 's' => 'other@example.com' );
+		$html = $this->render();
+		$this->assertStringNotContainsString( 'Ada@Example.com', $html );
+		$this->assertStringNotContainsString( 'bea@example.com', $html );
 	}
 
 	/**

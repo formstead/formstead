@@ -26,6 +26,7 @@ $notice     = isset( $notice ) ? (string) $notice : '';
 $form_id    = (int) $query->form_id();
 $date_from  = $query->date_from() ?? '';
 $date_to    = $query->date_to() ?? '';
+$search     = $query->search();
 ?>
 <div class="wrap">
 	<h1 class="wp-heading-inline"><?php echo esc_html__( 'Submissions', 'formstead' ); ?></h1>
@@ -57,6 +58,8 @@ $date_to    = $query->date_to() ?? '';
 		<input type="date" id="formstead-date-from" name="date_from" value="<?php echo esc_attr( $date_from ); ?>">
 		<label for="formstead-date-to"><?php echo esc_html__( 'To', 'formstead' ); ?></label>
 		<input type="date" id="formstead-date-to" name="date_to" value="<?php echo esc_attr( $date_to ); ?>">
+		<label for="formstead-email-search"><?php echo esc_html__( 'Search by email', 'formstead' ); ?></label>
+		<input type="search" id="formstead-email-search" name="s" value="<?php echo esc_attr( $search ); ?>">
 		<?php submit_button( __( 'Filter', 'formstead' ), 'secondary', '', false ); ?>
 	</form>
 

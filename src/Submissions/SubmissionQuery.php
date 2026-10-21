@@ -7,10 +7,13 @@
 
 namespace Formstead\Submissions;
 
+use Formstead\Privacy\IdentityHasher;
+
 /**
  * Form, view, and date range used by the inbox and the CSV export.
  *
  * An empty status list means every status. Dates are UTC calendar days.
+ * An email search is stored as an HMAC, plus the address the screen shows.
  */
 final class SubmissionQuery {
 
@@ -60,20 +63,38 @@ final class SubmissionQuery {
 	private ?string $date_to;
 
 	/**
+	 * HMAC of the searched address, or null when the inbox is not searching.
+	 *
+	 * @var string|null
+	 */
+	private ?string $identity_hash;
+
+	/**
+	 * Address typed into the search box, or an empty string.
+	 *
+	 * @var string
+	 */
+	private string $search;
+
+	/**
 	 * Create a query.
 	 *
-	 * @param int|null    $form_id   Form id, or null for every form.
-	 * @param string      $view      Inbox view slug.
-	 * @param string[]    $statuses  Statuses to include. Empty means every status.
-	 * @param string|null $date_from First UTC day.
-	 * @param string|null $date_to   Last UTC day.
+	 * @param int|null    $form_id       Form id, or null for every form.
+	 * @param string      $view          Inbox view slug.
+	 * @param string[]    $statuses      Statuses to include. Empty means every status.
+	 * @param string|null $date_from     First UTC day.
+	 * @param string|null $date_to       Last UTC day.
+	 * @param string|null $identity_hash HMAC of the searched address.
+	 * @param string      $search        Address shown in the search box.
 	 */
-	private function __construct( ?int $form_id, string $view, array $statuses, ?string $date_from, ?string $date_to ) {
-		$this->form_id   = $form_id;
-		$this->view      = $view;
-		$this->statuses  = $statuses;
-		$this->date_from = $date_from;
-		$this->date_to   = $date_to;
+	private function __construct( ?int $form_id, string $view, array $statuses, ?string $date_from, ?string $date_to, ?string $identity_hash, string $search ) {
+		$this->form_id       = $form_id;
+		$this->view          = $view;
+		$this->statuses      = $statuses;
+		$this->date_from     = $date_from;
+		$this->date_to       = $date_to;
+		$this->identity_hash = $identity_hash;
+		$this->search        = $search;
 	}
 
 	/**
@@ -85,16 +106,25 @@ final class SubmissionQuery {
 	 * @param string $view      Requested view.
 	 * @param string $date_from Requested first day.
 	 * @param string $date_to   Requested last day.
+	 * @param string $email     Address to match exactly, or an empty string.
 	 */
-	public static function from_values( int $form_id, string $view, string $date_from, string $date_to ): self {
-		$view = self::normalize_view( $view );
+	public static function from_values( int $form_id, string $view, string $date_from, string $date_to, string $email = '' ): self {
+		$view  = self::normalize_view( $view );
+		$email = trim( $email );
+		$hash  = '' === $email ? null : IdentityHasher::hash( $email );
+		if ( ! is_string( $hash ) ) {
+			$email = '';
+			$hash  = null;
+		}
 
 		return new self(
 			$form_id > 0 ? $form_id : null,
 			$view,
 			self::statuses_for_view( $view ),
 			self::date( $date_from ),
-			self::date( $date_to )
+			self::date( $date_to ),
+			$hash,
+			$email
 		);
 	}
 
@@ -182,5 +212,19 @@ final class SubmissionQuery {
 	 */
 	public function date_to(): ?string {
 		return $this->date_to;
+	}
+
+	/**
+	 * HMAC of the searched address, or null when the inbox is not searching.
+	 */
+	public function identity_hash(): ?string {
+		return $this->identity_hash;
+	}
+
+	/**
+	 * Address typed into the search box, or an empty string.
+	 */
+	public function search(): string {
+		return $this->search;
 	}
 }
