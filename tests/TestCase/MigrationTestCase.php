@@ -60,5 +60,6 @@ abstract class MigrationTestCase extends SchemaTestCase {
 
 		delete_option( Schema::VERSION_OPTION );
 		delete_option( Schema::LOCK_OPTION );
+		delete_option( Migrator::IDENTITY_BACKFILL_OPTION );
 	}
 }

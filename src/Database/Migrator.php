@@ -7,6 +7,8 @@
 
 namespace Formstead\Database;
 
+use Formstead\Forms\Field;
+use Formstead\Forms\FieldType;
 use Formstead\Security\Capabilities;
 use Formstead\Submissions\ReceiptId;
 use WP_Error;
@@ -30,6 +32,15 @@ final class Migrator {
 	 * Rows updated in one backfill query batch.
 	 */
 	private const BATCH = 100;
+
+	/**
+	 * Option that records an identity-index backfill still to run.
+	 *
+	 * Absent when there is nothing to index. Not autoloaded. The value is
+	 * `status`, `after_id`, and `until_id`. The migration stores `pending`
+	 * and does not index submissions itself.
+	 */
+	public const IDENTITY_BACKFILL_OPTION = 'formstead_identity_backfill';
 
 	/**
 	 * Migrate when the stored schema version is behind the code.
@@ -81,6 +92,13 @@ final class Migrator {
 
 			if ( $installed < 2 ) {
 				$upgraded = self::upgrade_to_2();
+				if ( $upgraded instanceof WP_Error ) {
+					return $upgraded;
+				}
+			}
+
+			if ( $installed > 0 && $installed < 7 ) {
+				$upgraded = self::upgrade_to_7();
 				if ( $upgraded instanceof WP_Error ) {
 					return $upgraded;
 				}
@@ -314,6 +332,162 @@ final class Migrator {
 			'formstead_migration_backfill',
 			__( 'Formstead could not update its database.', 'formstead' )
 		);
+	}
+
+	/**
+	 * Mark existing email fields as identifying and request an index backfill.
+	 *
+	 * Submissions are not indexed here. A large inbox would hold the request
+	 * that ran the migration. The backfill option is stored only when at
+	 * least one email field was marked and at least one submission exists.
+	 */
+	private static function upgrade_to_7(): ?WP_Error {
+		global $wpdb;
+
+		$forms   = Schema::forms_table();
+		$last_id = 0;
+		$marked  = false;
+
+		do {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT id, fields FROM {$forms} WHERE id > %d ORDER BY id ASC LIMIT %d",
+					$last_id,
+					self::BATCH
+				),
+				ARRAY_A
+			);
+
+			if ( ! is_array( $rows ) ) {
+				return new WP_Error(
+					'formstead_migration_backfill',
+					__( 'Formstead could not update its database.', 'formstead' )
+				);
+			}
+
+			if ( array() === $rows ) {
+				break;
+			}
+
+			foreach ( $rows as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+
+				$form_id = (int) ( $row['id'] ?? 0 );
+				$last_id = $form_id;
+				if ( $form_id < 1 ) {
+					continue;
+				}
+
+				$names = self::email_field_names( (string) ( $row['fields'] ?? '' ) );
+				$json  = wp_json_encode( $names );
+				if ( ! is_string( $json ) ) {
+					return new WP_Error(
+						'formstead_migration_backfill',
+						__( 'Formstead could not update its database.', 'formstead' )
+					);
+				}
+
+				$saved = $wpdb->update(
+					$forms,
+					array( 'identity_fields' => $json ),
+					array( 'id' => $form_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+				if ( false === $saved ) {
+					return new WP_Error(
+						'formstead_migration_backfill',
+						__( 'Formstead could not update its database.', 'formstead' )
+					);
+				}
+
+				if ( array() !== $names ) {
+					$marked = true;
+				}
+			}
+
+			$batch = count( $rows );
+		} while ( self::BATCH === $batch );
+
+		if ( ! $marked ) {
+			return null;
+		}
+
+		return self::request_identity_backfill();
+	}
+
+	/**
+	 * Email field names stored in a form's fields JSON.
+	 *
+	 * A text field is not identifying, even when its name looks like an address.
+	 * Unreadable JSON marks nothing.
+	 *
+	 * @param string $fields_json Stored fields.
+	 * @return list<string>
+	 */
+	private static function email_field_names( string $fields_json ): array {
+		$decoded = json_decode( $fields_json, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+
+		$names = array();
+		foreach ( $decoded as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$field = Field::from_array( $row );
+			if ( ! $field instanceof Field || FieldType::Email !== $field->type() ) {
+				continue;
+			}
+
+			$names[ $field->name() ] = $field->name();
+		}
+
+		return array_values( $names );
+	}
+
+	/**
+	 * Store a pending identity backfill when submissions already exist.
+	 */
+	private static function request_identity_backfill(): ?WP_Error {
+		global $wpdb;
+
+		$submissions = Schema::submissions_table();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$until = $wpdb->get_var( "SELECT MAX(id) FROM {$submissions}" );
+		if ( '' !== (string) $wpdb->last_error ) {
+			return new WP_Error(
+				'formstead_migration_backfill',
+				__( 'Formstead could not update its database.', 'formstead' )
+			);
+		}
+
+		$until_id = is_numeric( $until ) ? (int) $until : 0;
+		if ( $until_id < 1 ) {
+			return null;
+		}
+
+		$cursor = array(
+			'status'   => 'pending',
+			'after_id' => 0,
+			'until_id' => $until_id,
+		);
+		update_option( self::IDENTITY_BACKFILL_OPTION, $cursor, false );
+
+		$stored = get_option( self::IDENTITY_BACKFILL_OPTION );
+		if ( ! is_array( $stored ) || ( $stored['until_id'] ?? null ) !== $until_id || 'pending' !== ( $stored['status'] ?? '' ) ) {
+			return new WP_Error(
+				'formstead_migration_backfill',
+				__( 'Formstead could not update its database.', 'formstead' )
+			);
+		}
+
+		return null;
 	}
 
 	/**

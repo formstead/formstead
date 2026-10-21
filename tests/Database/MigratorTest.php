@@ -536,6 +536,163 @@ final class MigratorTest extends MigrationTestCase {
 	}
 
 	/**
+	 * A fresh install does not request an identity backfill.
+	 */
+	public function test_fresh_install_does_not_request_an_identity_backfill(): void {
+		$this->assertNull( Migrator::run() );
+
+		$this->assertFalse( get_option( Migrator::IDENTITY_BACKFILL_OPTION ) );
+		$this->assertSame( 'innodb', $this->engine( Schema::identities_table() ) );
+		$this->assertSame( 'innodb', $this->engine( Schema::audit_table() ) );
+	}
+
+	/**
+	 * Schema version 6 gains the identity index, the audit log, and identifying marks.
+	 *
+	 * Email fields are marked. A text field is not, even when its name is `email`.
+	 * Submissions stay unindexed. The backfill option only records that work is waiting.
+	 */
+	public function test_upgrade_from_version_6_marks_email_fields_and_requests_a_backfill(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+
+		$forms       = Schema::forms_table();
+		$submissions = Schema::submissions_table();
+		$identities  = Schema::identities_table();
+		$audit       = Schema::audit_table();
+		$wpdb->query( "DROP TABLE IF EXISTS {$identities}" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$audit}" );
+		$wpdb->query( "ALTER TABLE {$forms} DROP COLUMN identity_fields" );
+
+		$wpdb->insert(
+			$forms,
+			array(
+				'public_id'      => 'fs_abcdefghijklmnop',
+				'name'           => 'Contact',
+				'is_enabled'     => 1,
+				'fields'         => '[{"name":"email","label":"Not an address","type":"text","required":false,"max_length":255},{"name":"address","label":"Email","type":"email","required":true,"max_length":255}]',
+				'schema_version' => 1,
+				'success_url'    => 'https://example.com/thanks',
+				'created_at'     => '2026-10-20 10:00:00',
+				'updated_at'     => '2026-10-20 11:00:00',
+			)
+		);
+		$with_email = (int) $wpdb->insert_id;
+		$wpdb->insert(
+			$forms,
+			array(
+				'public_id'      => 'fs_bbcdefghijklmnop',
+				'name'           => 'Note',
+				'is_enabled'     => 1,
+				'fields'         => '[{"name":"note","label":"Note","type":"textarea","required":false,"max_length":1000}]',
+				'schema_version' => 1,
+				'success_url'    => 'https://example.com/thanks',
+				'created_at'     => '2026-10-20 10:00:00',
+				'updated_at'     => '2026-10-20 11:00:00',
+			)
+		);
+		$without_email = (int) $wpdb->insert_id;
+		$wpdb->insert(
+			$submissions,
+			array(
+				'form_id'        => $with_email,
+				'schema_version' => 1,
+				'receipt_id'     => 'fsr_abcdefghijklmnop',
+				'payload'        => '{"address":"ada@example.com"}',
+				'status'         => 'new',
+				'created_at'     => '2026-10-20 12:00:00',
+			)
+		);
+		$submission_id = (int) $wpdb->insert_id;
+		update_option( Schema::VERSION_OPTION, 6 );
+
+		$this->assertNull( Migrator::maybe_migrate() );
+		$this->assertSame( Schema::VERSION, (int) get_option( Schema::VERSION_OPTION ) );
+		$this->assertSame( '["address"]', (string) $wpdb->get_var( $wpdb->prepare( "SELECT identity_fields FROM {$forms} WHERE id = %d", $with_email ) ) );
+		$this->assertSame( '[]', (string) $wpdb->get_var( $wpdb->prepare( "SELECT identity_fields FROM {$forms} WHERE id = %d", $without_email ) ) );
+		$this->assertSame(
+			array(
+				'status'   => 'pending',
+				'after_id' => 0,
+				'until_id' => $submission_id,
+			),
+			get_option( Migrator::IDENTITY_BACKFILL_OPTION )
+		);
+		$this->assertSame( 0, (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$identities}" ) );
+
+		$identity_indexes = $wpdb->get_col( "SHOW INDEX FROM {$identities}", 2 );
+		foreach ( array( 'hash_submission', 'submission_id', 'form_field' ) as $index ) {
+			$this->assertContains( $index, $identity_indexes );
+		}
+		$audit_indexes = $wpdb->get_col( "SHOW INDEX FROM {$audit}", 2 );
+		foreach ( array( 'created_at', 'event_created' ) as $index ) {
+			$this->assertContains( $index, $audit_indexes );
+		}
+		$this->assertSame( 'innodb', $this->engine( $identities ) );
+		$this->assertSame( 'innodb', $this->engine( $audit ) );
+
+		$again = array();
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		foreach ( Schema::statements() as $statement ) {
+			$again = array_merge( $again, dbDelta( $statement ) );
+		}
+		$this->assertSame( array(), $again );
+	}
+
+	/**
+	 * Marking email fields does not request a backfill when no submission exists.
+	 */
+	public function test_upgrade_from_version_6_without_submissions_skips_the_backfill(): void {
+		global $wpdb;
+
+		$this->assertNull( Migrator::run() );
+
+		$forms      = Schema::forms_table();
+		$identities = Schema::identities_table();
+		$audit      = Schema::audit_table();
+		$wpdb->query( "ALTER TABLE {$forms} DROP COLUMN identity_fields" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$identities}" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$audit}" );
+		$wpdb->insert(
+			$forms,
+			array(
+				'public_id'      => 'fs_abcdefghijklmnop',
+				'name'           => 'Contact',
+				'is_enabled'     => 1,
+				'fields'         => '[{"name":"address","label":"Email","type":"email","required":true,"max_length":255}]',
+				'schema_version' => 1,
+				'success_url'    => 'https://example.com/thanks',
+				'created_at'     => '2026-10-20 10:00:00',
+				'updated_at'     => '2026-10-20 11:00:00',
+			)
+		);
+		update_option( Schema::VERSION_OPTION, 6 );
+
+		$this->assertNull( Migrator::maybe_migrate() );
+		$this->assertSame( '["address"]', (string) $wpdb->get_var( "SELECT identity_fields FROM {$forms}" ) );
+		$this->assertFalse( get_option( Migrator::IDENTITY_BACKFILL_OPTION ) );
+	}
+
+	/**
+	 * Storage engine of one table, in lower case.
+	 *
+	 * @param string $table Full table name.
+	 */
+	private function engine( string $table ): string {
+		global $wpdb;
+
+		$engine = $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s',
+				$table
+			)
+		);
+
+		return is_string( $engine ) ? strtolower( $engine ) : '';
+	}
+
+	/**
 	 * Activation creates the tables.
 	 */
 	public function test_activation_creates_tables(): void {
