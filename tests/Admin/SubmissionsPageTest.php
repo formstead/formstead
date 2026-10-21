@@ -343,6 +343,29 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A webhook delivery is named on the submission screen.
+	 */
+	public function test_detail_shows_the_webhook_channel(): void {
+		global $wpdb;
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$submission_id = $this->store_submission( 'visible-note' );
+		$created       = ( new DeliveryRepository() )->create( $submission_id, 'webhook' );
+		$this->assertIsInt( $created );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			Schema::deliveries_table(),
+			array( 'status' => 'handed_off' ),
+			array( 'id' => $created )
+		);
+
+		$_GET = array( 'submission' => (string) $submission_id );
+		$html = $this->render();
+		$this->assertStringContainsString( 'Webhook', $html );
+		$this->assertStringContainsString( 'Handed to the receiver', $html );
+	}
+
+	/**
 	 * GET on the public route does not return a stored submission.
 	 */
 	public function test_get_on_the_public_route_returns_no_submission_data(): void {
