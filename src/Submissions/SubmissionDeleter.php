@@ -14,8 +14,8 @@ use WP_Error;
 /**
  * Deletes submissions together with their open deliveries and idempotency keys.
  *
- * Retention and the privacy eraser use this service. A failed query rolls the
- * transaction back, so a delivery is not cancelled for a submission that stays.
+ * A failed query rolls the transaction back, so a delivery is not cancelled
+ * for a submission that stays.
  */
 final class SubmissionDeleter {
 
@@ -39,8 +39,18 @@ final class SubmissionDeleter {
 
 		$result = Transaction::run(
 			static function () use ( $clean ) {
-				( new DeliveryCanceller() )->cancel_for_submissions( $clean );
-				( new IdempotencyRepository() )->delete_for_submissions( $clean );
+				if ( ! ( new DeliveryCanceller() )->cancel_for_submissions( $clean ) ) {
+					return new WP_Error(
+						'formstead_submission_delete_failed',
+						__( 'The submissions could not be deleted.', 'formstead' )
+					);
+				}
+				if ( ! ( new IdempotencyRepository() )->delete_for_submissions( $clean ) ) {
+					return new WP_Error(
+						'formstead_submission_delete_failed',
+						__( 'The submissions could not be deleted.', 'formstead' )
+					);
+				}
 
 				$deleted = ( new SubmissionRepository() )->delete_ids( $clean );
 				if ( false === $deleted ) {

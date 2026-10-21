@@ -193,8 +193,9 @@ final class IdempotencyRepository {
 	 * Called inside the deletion transaction, before the submissions go away.
 	 *
 	 * @param int[] $submission_ids Submission ids.
+	 * @return bool False when the delete query fails.
 	 */
-	public function delete_for_submissions( array $submission_ids ): void {
+	public function delete_for_submissions( array $submission_ids ): bool {
 		global $wpdb;
 
 		$ids = array();
@@ -204,19 +205,21 @@ final class IdempotencyRepository {
 			}
 		}
 		if ( array() === $ids ) {
-			return;
+			return true;
 		}
 
 		$ids          = array_values( $ids );
 		$table        = Schema::idempotency_keys_table();
 		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
-		$wpdb->query(
+		$deleted      = $wpdb->query(
 			// phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the IN list is unpacked.
 			$wpdb->prepare(
 				"DELETE FROM {$table} WHERE submission_id IN ( {$placeholders} )",
 				...$ids
 			)
 		);
+
+		return false !== $deleted;
 	}
 
 	/**

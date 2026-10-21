@@ -52,11 +52,13 @@ final class SubmissionDeleterTest extends \WP_UnitTestCase {
 		$this->assertNotNull( $delivery );
 		$this->assertSame( DeliveryStatus::CANCELLED, $delivery->status() );
 
-		$worker = new DeliveryWorker( new RecordingChannel() );
+		$channel = new RecordingChannel();
+		$worker  = new DeliveryWorker( $channel );
 		$worker->send( (int) $first->delivery_id() );
 		$delivery = ( new DeliveryRepository() )->find( (int) $first->delivery_id() );
 		$this->assertNotNull( $delivery );
 		$this->assertSame( DeliveryStatus::CANCELLED, $delivery->status() );
+		$this->assertSame( 0, $channel->calls );
 
 		$again = $intake->accept( $form, array( 'note' => 'hello' ), IdempotencyKey::read( $this->request( 'same-key' ), array() ) );
 		$this->assertTrue( $again->is_accepted() );
@@ -84,6 +86,20 @@ final class SubmissionDeleterTest extends \WP_UnitTestCase {
 		$this->assertTrue( $again->is_accepted() );
 		$this->assertInstanceOf( Submission::class, $again->submission() );
 		$this->assertNotSame( $saved->id(), $again->submission()->id() );
+	}
+
+	/**
+	 * A failed delivery cancellation leaves the submission, its delivery, and its key.
+	 */
+	public function test_failed_delivery_cancel_rolls_back(): void {
+		$this->assert_delete_rolls_back( Schema::deliveries_table(), 'UPDATE', 'delivery' );
+	}
+
+	/**
+	 * A failed key deletion leaves the submission, its delivery, and its key.
+	 */
+	public function test_failed_key_delete_rolls_back(): void {
+		$this->assert_delete_rolls_back( Schema::idempotency_keys_table(), 'DELETE FROM', 'key' );
 	}
 
 	/**
@@ -116,6 +132,46 @@ final class SubmissionDeleterTest extends \WP_UnitTestCase {
 		$delivery = ( new DeliveryRepository() )->find( (int) $first->delivery_id() );
 		$this->assertNotNull( $delivery );
 		$this->assertSame( DeliveryStatus::PENDING, $delivery->status() );
+	}
+
+	/**
+	 * Break one statement and assert the whole delete is undone.
+	 *
+	 * @param string $table Table the failing statement names.
+	 * @param string $verb  Statement prefix to intercept.
+	 * @param string $label Distinguishes the idempotency key of this case.
+	 */
+	private function assert_delete_rolls_back( string $table, string $verb, string $label ): void {
+		global $wpdb;
+
+		$form   = $this->form( array( 'owner@example.com' ) );
+		$intake = new SubmissionIntake();
+		$first  = $intake->accept( $form, array( 'note' => 'hello' ), IdempotencyKey::read( $this->request( 'kept-' . $label ), array() ) );
+		$saved  = $first->submission();
+		$this->assertInstanceOf( Submission::class, $saved );
+
+		$previous = $wpdb->suppress_errors( true );
+		$filter   = static function ( $query ) use ( $table, $verb ) {
+			if ( is_string( $query ) && str_contains( $query, $verb ) && str_contains( $query, $table ) ) {
+				return $verb . ' ' . $table . '_missing';
+			}
+			return $query;
+		};
+		add_filter( 'query', $filter );
+		$deleted = ( new SubmissionDeleter() )->delete( array( $saved->id() ) );
+		remove_filter( 'query', $filter );
+		$wpdb->suppress_errors( $previous );
+
+		$this->assertInstanceOf( WP_Error::class, $deleted );
+		$this->assertNotNull( ( new SubmissionRepository() )->find( $saved->id() ) );
+		$delivery = ( new DeliveryRepository() )->find( (int) $first->delivery_id() );
+		$this->assertNotNull( $delivery );
+		$this->assertSame( DeliveryStatus::PENDING, $delivery->status() );
+
+		$keys = Schema::idempotency_keys_table();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$count = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$keys} WHERE submission_id = %d", $saved->id() ) );
+		$this->assertSame( 1, (int) $count );
 	}
 
 	/**
