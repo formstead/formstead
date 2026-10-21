@@ -9,6 +9,8 @@ namespace Formstead\Admin;
 
 defined( 'ABSPATH' ) || exit;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Security\Capabilities;
@@ -110,9 +112,11 @@ final class SubmissionsExport {
 		$size       = max( 1, $batch );
 		$after      = null;
 		$count      = 0;
+		$exported   = 0;
 		do {
-			$rows  = $repository->iterate_for_export( $query, $after, $size );
-			$count = count( $rows );
+			$rows      = $repository->iterate_for_export( $query, $after, $size );
+			$count     = count( $rows );
+			$exported += $count;
 			foreach ( $rows as $submission ) {
 				$after   = array(
 					'created_at' => $submission->created_at(),
@@ -132,6 +136,16 @@ final class SubmissionsExport {
 			fflush( $output );
 			flush();
 		} while ( $size === $count );
+
+		AuditLog::record(
+			AuditEvent::SUBMISSIONS_EXPORTED,
+			'form',
+			$form->id(),
+			array(
+				'rows' => $exported,
+				'view' => $query->view(),
+			)
+		);
 	}
 
 	/**

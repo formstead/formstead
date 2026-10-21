@@ -7,6 +7,8 @@
 
 namespace Formstead\Retention;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
 use Formstead\Delivery\DeliveryRepository;
 use Formstead\Forms\FormRepository;
 use Formstead\Security\RateLimiter;
@@ -108,9 +110,10 @@ final class RetentionRunner {
 	 * @param int|null $batch_limit Maximum batches. Null means no limit.
 	 * @param int|null $deadline    Unix time at which to stop. Null means no time limit.
 	 * @param int|null $now         Unix time used to decide what has expired.
+	 * @param string   $source      `cron` or `cli`. Anything else is recorded as cron.
 	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, backlog_since: int, errors: list<string>}|null
 	 */
-	public function run( ?int $batch_limit, ?int $deadline, ?int $now = null ): ?array {
+	public function run( ?int $batch_limit, ?int $deadline, ?int $now = null, string $source = 'cron' ): ?array {
 		$now     = $now ?? time();
 		$started = time();
 		$token   = $this->acquire_lock( $started );
@@ -122,6 +125,21 @@ final class RetentionRunner {
 			$report                  = $this->purge( $batch_limit, $deadline, $now, $started, $token );
 			$report['backlog_since'] = $this->backlog_since( $report['backlog'], $report['finished_at'] );
 			update_option( self::REPORT_OPTION, $report, false );
+			AuditLog::record(
+				AuditEvent::RETENTION_RUN,
+				'retention',
+				0,
+				array(
+					'source'      => 'cli' === $source ? 'cli' : 'cron',
+					'submissions' => $report['submissions'],
+					'spam'        => $report['spam'],
+					'deliveries'  => $report['deliveries'],
+					'keys'        => $report['keys'],
+					'rate_limits' => $report['rate_limits'],
+					'backlog'     => $report['backlog'],
+					'errors'      => $report['errors'],
+				)
+			);
 			return $report;
 		} finally {
 			$this->release_lock( $token );

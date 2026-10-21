@@ -141,6 +141,6 @@ final class RetentionCommand {
 			$batches = max( 1, (int) $assoc_args['batches'] );
 		}
 
-		return ( new RetentionRunner() )->run( $batches, null );
+		return ( new RetentionRunner() )->run( $batches, null, null, 'cli' );
 	}
 }
