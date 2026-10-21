@@ -8,8 +8,9 @@
  * @var Form|null                                                    $form       Current form, or null.
  * @var array<int, array{label: string, value: string, multiline: bool, items: list<string>}> $rows Fields to show.
  * @var array<int, array{channel: string, status: string, attempts: string, last_error: string, next_attempt_at: string}> $deliveries Email deliveries.
- * @var list<array{action: string, label: string}> $actions Status actions.
- * @var string                                      $notice  Result of the previous action.
+ * @var list<array{action: string, label: string}> $actions    Status actions.
+ * @var bool                                        $can_delete Whether the user can delete.
+ * @var string                                      $notice     Result of the previous action.
  */
 
 use Formstead\Admin\Menu;
@@ -24,7 +25,9 @@ $form       = isset( $form ) && $form instanceof Form ? $form : null;
 $rows       = isset( $rows ) && is_array( $rows ) ? $rows : array();
 $deliveries = isset( $deliveries ) && is_array( $deliveries ) ? $deliveries : array();
 $actions    = isset( $actions ) && is_array( $actions ) ? $actions : array();
+$can_delete = isset( $can_delete ) && $can_delete;
 $notice     = isset( $notice ) ? (string) $notice : '';
+$confirm    = 'return confirm(' . wp_json_encode( __( 'Delete this submission permanently?', 'formstead' ) ) . ');';
 $form_name  = $form instanceof Form ? $form->name() : '';
 ?>
 <div class="wrap">
@@ -59,6 +62,9 @@ $form_name  = $form instanceof Form ? $form->name() : '';
 				?>
 				<button type="submit" class="button" name="formstead_action" value="<?php echo esc_attr( $action_name ); ?>"><?php echo esc_html( $action_label ); ?></button>
 			<?php endforeach; ?>
+			<?php if ( $can_delete ) : ?>
+				<button type="submit" class="button button-link-delete" name="formstead_action" value="delete" onclick="<?php echo esc_attr( $confirm ); ?>"><?php echo esc_html__( 'Delete permanently', 'formstead' ); ?></button>
+			<?php endif; ?>
 		</form>
 		<h2><?php echo esc_html__( 'Email', 'formstead' ); ?></h2>
 		<?php if ( array() === $deliveries ) : ?>

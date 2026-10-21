@@ -10,6 +10,7 @@ namespace Formstead\Admin;
 defined( 'ABSPATH' ) || exit;
 
 use Formstead\Forms\Form;
+use Formstead\Security\Capabilities;
 use Formstead\Submissions\Submission;
 use Formstead\Submissions\SubmissionQuery;
 use Formstead\Submissions\SubmissionRepository;
@@ -150,12 +151,12 @@ final class SubmissionsTable extends \WP_List_Table {
 	}
 
 	/**
-	 * Bulk status actions.
+	 * Bulk actions. Delete is offered only to people who can delete.
 	 *
 	 * @return array<string, string>
 	 */
 	protected function get_bulk_actions(): array {
-		return array(
+		$actions = array(
 			'mark_read'   => __( 'Mark as read', 'formstead' ),
 			'mark_unread' => __( 'Mark as unread', 'formstead' ),
 			'archive'     => __( 'Archive', 'formstead' ),
@@ -163,6 +164,11 @@ final class SubmissionsTable extends \WP_List_Table {
 			'mark_spam'   => __( 'Mark as spam', 'formstead' ),
 			'not_spam'    => __( 'Not spam', 'formstead' ),
 		);
+		if ( current_user_can( Capabilities::DELETE_SUBMISSIONS ) ) {
+			$actions['delete'] = __( 'Delete permanently', 'formstead' );
+		}
+
+		return $actions;
 	}
 
 	/**

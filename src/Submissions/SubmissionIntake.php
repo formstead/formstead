@@ -68,7 +68,8 @@ final class SubmissionIntake {
 				);
 			}
 
-			$claim = ( new IdempotencyRepository() )->claim( $form->id(), $key->hash(), $body_hash );
+			$keys  = new IdempotencyRepository();
+			$claim = $keys->claim( $form->id(), $key->hash(), $body_hash );
 			if ( $claim->is_failed() ) {
 				return new WP_Error(
 					'formstead_submission_save_failed',
@@ -80,14 +81,17 @@ final class SubmissionIntake {
 			}
 			if ( $claim->is_replay() ) {
 				$existing = ( new SubmissionRepository() )->find( $claim->submission_id(), true );
-				if ( ! $existing instanceof Submission || $existing->form_id() !== $form->id() ) {
+				if ( $existing instanceof Submission && $existing->form_id() === $form->id() ) {
+					return new Rollback( IntakeResult::replayed( $existing ) );
+				}
+
+				$claim = $keys->reopen( $form->id(), $key->hash(), $body_hash );
+				if ( ! $claim->is_inserted() ) {
 					return new WP_Error(
 						'formstead_submission_save_failed',
 						__( 'The submission could not be saved.', 'formstead' )
 					);
 				}
-
-				return new Rollback( IntakeResult::replayed( $existing ) );
 			}
 		}
 

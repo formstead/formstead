@@ -17,9 +17,11 @@ use Formstead\Forms\FormVersion;
 use Formstead\Forms\FormVersionRepository;
 use Formstead\Security\Capabilities;
 use Formstead\Submissions\Submission;
+use Formstead\Submissions\SubmissionDeleter;
 use Formstead\Submissions\SubmissionQuery;
 use Formstead\Submissions\SubmissionRepository;
 use Formstead\Submissions\SubmissionStatus;
+use WP_Error;
 
 /**
  * Lists submissions and shows one submission.
@@ -28,6 +30,11 @@ use Formstead\Submissions\SubmissionStatus;
  * Opening a new submission marks it read.
  */
 final class SubmissionsPage {
+
+	/**
+	 * Bulk and single action that deletes.
+	 */
+	private const DELETE_ACTION = 'delete';
 
 	/**
 	 * Status stored for each detail action.
@@ -117,6 +124,7 @@ final class SubmissionsPage {
 		$rows       = $submission instanceof Submission ? self::detail_rows( $submission, $form ) : array();
 		$deliveries = $submission instanceof Submission ? self::delivery_rows( $submission->id() ) : array();
 		$actions    = $submission instanceof Submission ? self::detail_actions( $submission ) : array();
+		$can_delete = current_user_can( Capabilities::DELETE_SUBMISSIONS );
 		$notice     = self::notice();
 
 		include dirname( FORMSTEAD_FILE ) . '/templates/admin/submission-detail.php';
@@ -171,6 +179,14 @@ final class SubmissionsPage {
 		check_admin_referer( 'formstead_submission_' . $id );
 
 		$action = self::posted_text( 'formstead_action' );
+		if ( self::DELETE_ACTION === $action ) {
+			self::delete_and_redirect(
+				array( $id ),
+				array(
+					'page' => Menu::MENU_SLUG,
+				)
+			);
+		}
 		if ( ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
 			return;
 		}
@@ -196,12 +212,41 @@ final class SubmissionsPage {
 			$action = self::posted_text( 'action2' );
 		}
 		$ids = self::posted_ids( 'submission' );
-		if ( array() === $ids || '' === $action || '-1' === $action || ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
+		if ( array() === $ids || '' === $action || '-1' === $action ) {
+			self::redirect( self::list_redirect_args() );
+		}
+		if ( self::DELETE_ACTION === $action ) {
+			self::delete_and_redirect( $ids, self::list_redirect_args() );
+		}
+		if ( ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
 			self::redirect( self::list_redirect_args() );
 		}
 
 		$changed = ( new SubmissionRepository() )->set_status( $ids, self::STATUS_ACTIONS[ $action ] );
 		self::redirect( array_merge( self::list_redirect_args(), array( 'formstead_updated' => $changed ) ) );
+	}
+
+	/**
+	 * Delete, then leave the inbox list.
+	 *
+	 * @param int[]                $ids  Submission ids.
+	 * @param array<string, mixed> $args Redirect query arguments.
+	 */
+	private static function delete_and_redirect( array $ids, array $args ): void {
+		if ( ! current_user_can( Capabilities::DELETE_SUBMISSIONS ) ) {
+			wp_die(
+				esc_html__( 'Sorry, you are not allowed to delete submissions.', 'formstead' ),
+				'',
+				array( 'response' => 403 )
+			);
+		}
+
+		$deleted = ( new SubmissionDeleter() )->delete( $ids );
+		if ( $deleted instanceof WP_Error ) {
+			wp_die( esc_html( $deleted->get_error_message() ), '', array( 'response' => 500 ) );
+		}
+
+		self::redirect( array_merge( $args, array( 'formstead_deleted' => $deleted ) ) );
 	}
 
 	/**
@@ -224,6 +269,15 @@ final class SubmissionsPage {
 				/* translators: %s: number of submissions. */
 				_n( '%s submission updated.', '%s submissions updated.', $updated, 'formstead' ),
 				number_format_i18n( $updated )
+			);
+		}
+
+		$deleted = self::query_int( 'formstead_deleted' );
+		if ( $deleted > 0 ) {
+			return sprintf(
+				/* translators: %s: number of submissions. */
+				_n( '%s submission deleted.', '%s submissions deleted.', $deleted, 'formstead' ),
+				number_format_i18n( $deleted )
 			);
 		}
 
