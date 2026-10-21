@@ -18,6 +18,7 @@ Mail is handed to the site's mail system through WP-Cron. A site with little tra
 
 - Public contact: hello@formstead.dev
 - Security reports: [SECURITY.md](SECURITY.md) (`security@formstead.dev`)
+- Threat model: [docs/threat-model.md](docs/threat-model.md)
 - How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Changes: [CHANGELOG.md](CHANGELOG.md)
 
