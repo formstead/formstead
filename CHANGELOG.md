@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-21
+
+### Added
+
+- Index identifying email fields as an HMAC, so one person's submissions can be found without scanning every payload. Search the inbox for an exact address.
+- Export and erase that person's submissions through the WordPress personal-data tools, a page at a time, including when there are more submissions than one page.
+- Record form, settings, export, deletion, retention, and privacy actions in an audit log. The log stores event codes, not submission text, and is kept for 180 days.
+- Describe what is stored, how long it stays, and how it is removed, and suggest that wording on the WordPress privacy screen.
+
+### Changed
+
+- Updating marks existing email fields as identifying and builds their index in the background. Export and erase wait until that index is finished.
+
 ## [0.7.1] - 2026-10-21
 
 ### Fixed
@@ -180,7 +193,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/formstead/formstead/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/formstead/formstead/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/formstead/formstead/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/formstead/formstead/compare/v0.6.0...v0.6.1
