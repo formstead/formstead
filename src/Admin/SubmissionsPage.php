@@ -458,6 +458,9 @@ final class SubmissionsPage {
 		if ( null !== $query->date_to() ) {
 			$args['date_to'] = $query->date_to();
 		}
+		if ( '' !== $query->search() ) {
+			$args['s'] = $query->search();
+		}
 
 		return $args;
 	}
@@ -470,7 +473,8 @@ final class SubmissionsPage {
 			self::query_int( 'form_id' ),
 			self::query_text( 'inbox_view' ),
 			self::query_text( 'date_from' ),
-			self::query_text( 'date_to' )
+			self::query_text( 'date_to' ),
+			self::query_text( 's' )
 		);
 	}
 
