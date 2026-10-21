@@ -7,7 +7,10 @@
 
 namespace Formstead\Admin;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
 use Formstead\Lifecycle\Uninstaller;
+use Formstead\Privacy\IdentityBackfill;
 use Formstead\Retention\RetentionPeriods;
 use Formstead\Retention\RetentionRunner;
 use Formstead\Retention\RetentionScheduler;
@@ -54,6 +57,13 @@ final class SettingsPage {
 			delete_option( Uninstaller::OPTION );
 		}
 
+		AuditLog::record(
+			AuditEvent::SETTINGS_UPDATED,
+			'settings',
+			0,
+			array( 'settings' => array( 'delete_data_on_uninstall' ) )
+		);
+
 		wp_safe_redirect(
 			add_query_arg(
 				array(
@@ -78,14 +88,16 @@ final class SettingsPage {
 			);
 		}
 
-		$report          = self::report();
-		$overdue         = self::is_overdue();
-		$spam_days       = RetentionPeriods::spam_days();
-		$delivery_days   = RetentionPeriods::delivery_days();
-		$warning         = self::warning();
-		$next_run        = self::next_run();
-		$delete_data     = Uninstaller::enabled();
-		$can_delete_data = current_user_can( 'activate_plugins' );
+		$report           = self::report();
+		$overdue          = self::is_overdue();
+		$spam_days        = RetentionPeriods::spam_days();
+		$delivery_days    = RetentionPeriods::delivery_days();
+		$audit_days       = RetentionPeriods::audit_days();
+		$warning          = self::warning();
+		$next_run         = self::next_run();
+		$delete_data      = Uninstaller::enabled();
+		$identity_message = IdentityBackfill::message();
+		$can_delete_data  = current_user_can( 'activate_plugins' );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the screen query, not a submission.
 		$updated_flag = isset( $_GET['updated'] ) ? sanitize_text_field( wp_unslash( $_GET['updated'] ) ) : '';
 		$updated      = '1' === $updated_flag;
@@ -184,7 +196,7 @@ final class SettingsPage {
 	/**
 	 * Last run, with counts and known error codes only.
 	 *
-	 * @return array{finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, errors: list<string>}|null
+	 * @return array{finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, audit: int, backlog: bool, errors: list<string>}|null
 	 */
 	public static function report(): ?array {
 		$stored = get_option( RetentionRunner::REPORT_OPTION );
@@ -199,6 +211,7 @@ final class SettingsPage {
 			'deliveries'  => self::count( $stored['deliveries'] ?? null ),
 			'keys'        => self::count( $stored['keys'] ?? null ),
 			'rate_limits' => self::count( $stored['rate_limits'] ?? null ),
+			'audit'       => self::count( $stored['audit'] ?? null ),
 			'backlog'     => ! empty( $stored['backlog'] ),
 			'errors'      => self::errors( $stored['errors'] ?? null ),
 		);

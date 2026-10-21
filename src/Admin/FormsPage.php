@@ -7,7 +7,10 @@
 
 namespace Formstead\Admin;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
 use Formstead\Forms\Field;
+use Formstead\Forms\FieldCodec;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormInput;
@@ -136,6 +139,8 @@ final class FormsPage {
 			return;
 		}
 
+		self::audit_form( $form, $saved );
+
 		wp_safe_redirect(
 			add_query_arg(
 				array(
@@ -147,6 +152,82 @@ final class FormsPage {
 			)
 		);
 		exit;
+	}
+
+	/**
+	 * Record that a form was created or which settings changed.
+	 *
+	 * The context names the settings. It does not include their values.
+	 *
+	 * @param Form|null $previous Form before this save, or null when it is new.
+	 * @param Form      $saved    Form that was stored.
+	 */
+	private static function audit_form( ?Form $previous, Form $saved ): void {
+		if ( ! $previous instanceof Form ) {
+			AuditLog::record(
+				AuditEvent::FORM_CREATED,
+				'form',
+				$saved->id(),
+				array( 'fields' => array() !== $saved->fields() )
+			);
+			return;
+		}
+
+		AuditLog::record(
+			AuditEvent::FORM_UPDATED,
+			'form',
+			$saved->id(),
+			array(
+				'settings' => self::changed_settings( $previous, $saved ),
+				'fields'   => FieldCodec::encode( $previous->fields() ) !== FieldCodec::encode( $saved->fields() ),
+			)
+		);
+	}
+
+	/**
+	 * Setting codes whose stored value changed.
+	 *
+	 * @param Form $previous Form before this save.
+	 * @param Form $saved    Form that was stored.
+	 * @return list<string>
+	 */
+	private static function changed_settings( Form $previous, Form $saved ): array {
+		$settings = array();
+		if ( $previous->name() !== $saved->name() ) {
+			$settings[] = 'name';
+		}
+		if ( $previous->is_enabled() !== $saved->is_enabled() ) {
+			$settings[] = 'enabled';
+		}
+		if ( $previous->success_url() !== $saved->success_url() ) {
+			$settings[] = 'success_url';
+		}
+		if ( $previous->protection()->origins_json() !== $saved->protection()->origins_json() ) {
+			$settings[] = 'origins';
+		}
+		if ( $previous->protection()->rate_per_minute() !== $saved->protection()->rate_per_minute() ) {
+			$settings[] = 'rate_per_minute';
+		}
+		if ( $previous->protection()->rate_per_hour() !== $saved->protection()->rate_per_hour() ) {
+			$settings[] = 'rate_per_hour';
+		}
+		if ( $previous->notifications()->recipients_json() !== $saved->notifications()->recipients_json() ) {
+			$settings[] = 'recipients';
+		}
+		if ( $previous->notifications()->reply_to_field() !== $saved->notifications()->reply_to_field() ) {
+			$settings[] = 'reply_to';
+		}
+		if ( $previous->notifications()->includes_content() !== $saved->notifications()->includes_content() ) {
+			$settings[] = 'include_content';
+		}
+		if ( $previous->retention_days() !== $saved->retention_days() ) {
+			$settings[] = 'retention_days';
+		}
+		if ( $previous->identity_fields() !== $saved->identity_fields() ) {
+			$settings[] = 'identity';
+		}
+
+		return $settings;
 	}
 
 	/**
@@ -322,7 +403,7 @@ final class FormsPage {
 	 * @return array<string, string>
 	 */
 	private static function posted_row( array $row ): array {
-		return array(
+		$posted = array(
 			'name'       => self::text_value( $row['name'] ?? null ),
 			'label'      => self::label_value( $row['label'] ?? null ),
 			'type'       => self::text_value( $row['type'] ?? null ),
@@ -335,6 +416,11 @@ final class FormsPage {
 			'multiple'   => isset( $row['multiple'] ) ? '1' : '',
 			'remove'     => isset( $row['remove'] ) ? '1' : '',
 		);
+		if ( array_key_exists( 'identifies', $row ) ) {
+			$posted['identifies'] = '1' === (string) $row['identifies'] ? '1' : '0';
+		}
+
+		return $posted;
 	}
 
 	/**
@@ -398,9 +484,10 @@ final class FormsPage {
 			);
 		}
 
-		$rows = array();
+		$rows     = array();
+		$identity = $form->identity_fields();
 		foreach ( $form->fields() as $field ) {
-			$rows[] = self::row_from_field( $field );
+			$rows[] = self::row_from_field( $field, $identity );
 		}
 
 		$minute = $form->protection()->rate_per_minute();
@@ -442,10 +529,11 @@ final class FormsPage {
 	/**
 	 * One edit-form row for a saved field.
 	 *
-	 * @param Field $field Saved field.
+	 * @param Field    $field    Saved field.
+	 * @param string[] $identity Identifying field names.
 	 * @return array<string, string>
 	 */
-	private static function row_from_field( Field $field ): array {
+	private static function row_from_field( Field $field, array $identity ): array {
 		$lines = array();
 		foreach ( $field->settings()->options() as $option ) {
 			$lines[] = $option['value'] . '|' . $option['label'];
@@ -463,6 +551,7 @@ final class FormsPage {
 			'options'    => implode( "\n", $lines ),
 			'multiple'   => $field->settings()->multiple() ? '1' : '',
 			'remove'     => '',
+			'identifies' => in_array( $field->name(), $identity, true ) ? '1' : '0',
 		);
 	}
 
@@ -493,6 +582,7 @@ final class FormsPage {
 					'options'    => isset( $row['options'] ) ? (string) $row['options'] : '',
 					'multiple'   => isset( $row['multiple'] ) && '1' === (string) $row['multiple'] ? '1' : '',
 					'remove'     => isset( $row['remove'] ) && '1' === (string) $row['remove'] ? '1' : '',
+					'identifies' => isset( $row['identifies'] ) && '1' === (string) $row['identifies'] ? '1' : '0',
 				);
 			}
 		}
@@ -509,6 +599,7 @@ final class FormsPage {
 			'options'    => '',
 			'multiple'   => '',
 			'remove'     => '',
+			'identifies' => '1',
 		);
 		$last  = $normalized[ count( $normalized ) - 1 ] ?? null;
 		if ( ! is_array( $last ) || '' !== $last['name'] || '' !== $last['label'] || '' !== $last['type'] || '' !== $last['max_length'] || '' !== $last['min'] || '' !== $last['max'] || '' !== $last['scale'] || '' !== $last['options'] ) {

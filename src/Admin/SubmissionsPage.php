@@ -7,17 +7,16 @@
 
 namespace Formstead\Admin;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
 use Formstead\Delivery\DeliveryRepository;
 use Formstead\Delivery\DeliveryStatus;
-use Formstead\Forms\Field;
-use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
-use Formstead\Forms\FormVersion;
-use Formstead\Forms\FormVersionRepository;
 use Formstead\Security\Capabilities;
 use Formstead\Submissions\Submission;
 use Formstead\Submissions\SubmissionDeleter;
+use Formstead\Submissions\SubmissionRows;
 use Formstead\Submissions\SubmissionQuery;
 use Formstead\Submissions\SubmissionRepository;
 use Formstead\Submissions\SubmissionStatus;
@@ -186,7 +185,8 @@ final class SubmissionsPage {
 				array( $id ),
 				array(
 					'page' => Menu::MENU_SLUG,
-				)
+				),
+				'single'
 			);
 		}
 		if ( ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
@@ -224,7 +224,7 @@ final class SubmissionsPage {
 			self::redirect( self::list_redirect_args() );
 		}
 		if ( self::DELETE_ACTION === $action ) {
-			self::delete_and_redirect( $ids, self::list_redirect_args() );
+			self::delete_and_redirect( $ids, self::list_redirect_args(), 'bulk' );
 		}
 		if ( ! isset( self::STATUS_ACTIONS[ $action ] ) ) {
 			self::redirect( self::list_redirect_args() );
@@ -237,10 +237,11 @@ final class SubmissionsPage {
 	/**
 	 * Delete, then leave the inbox list.
 	 *
-	 * @param int[]                $ids  Submission ids.
-	 * @param array<string, mixed> $args Redirect query arguments.
+	 * @param int[]                $ids    Submission ids.
+	 * @param array<string, mixed> $args   Redirect query arguments.
+	 * @param string               $source `single` or `bulk`.
 	 */
-	private static function delete_and_redirect( array $ids, array $args ): void {
+	private static function delete_and_redirect( array $ids, array $args, string $source ): void {
 		if ( ! current_user_can( Capabilities::DELETE_SUBMISSIONS ) ) {
 			wp_die(
 				esc_html__( 'Sorry, you are not allowed to delete submissions.', 'formstead' ),
@@ -253,6 +254,21 @@ final class SubmissionsPage {
 		if ( $deleted instanceof WP_Error ) {
 			wp_die( esc_html( $deleted->get_error_message() ), '', array( 'response' => 500 ) );
 		}
+
+		$object_id = 0;
+		if ( 'single' === $source && isset( $ids[0] ) && is_int( $ids[0] ) ) {
+			$object_id = $ids[0];
+		}
+
+		AuditLog::record(
+			AuditEvent::SUBMISSIONS_DELETED,
+			'submission',
+			$object_id,
+			array(
+				'count'  => $deleted,
+				'source' => 'single' === $source ? 'single' : 'bulk',
+			)
+		);
 
 		self::redirect( array_merge( $args, array( 'formstead_deleted' => $deleted ) ) );
 	}
@@ -328,35 +344,7 @@ final class SubmissionsPage {
 	 * @return array<int, array{label: string, value: string, multiline: bool, items: list<string>}>
 	 */
 	private static function detail_rows( Submission $submission, ?Form $form ): array {
-		$snapshot = ( new FormVersionRepository() )->find( $submission->form_id(), $submission->schema_version() );
-		$fields   = $snapshot instanceof FormVersion ? $snapshot->fields() : array();
-		if ( array() === $fields && $form instanceof Form ) {
-			$fields = $form->fields();
-		}
-
-		$by_name = array();
-		foreach ( $fields as $field ) {
-			$by_name[ $field->name() ] = $field;
-		}
-
-		$rows = array();
-		foreach ( $submission->payload() as $name => $value ) {
-			$field   = $by_name[ $name ] ?? null;
-			$items   = array();
-			$display = self::display_value( $field, $value );
-			if ( is_array( $display ) ) {
-				$items   = $display;
-				$display = '';
-			}
-			$rows[] = array(
-				'label'     => $field instanceof Field ? $field->label() : $name,
-				'value'     => $display,
-				'multiline' => $field instanceof Field && FieldType::Textarea === $field->type(),
-				'items'     => $items,
-			);
-		}
-
-		return $rows;
+		return SubmissionRows::for_submission( $submission, $form );
 	}
 
 	/**
@@ -384,61 +372,6 @@ final class SubmissionsPage {
 	}
 
 	/**
-	 * Text, a yes/no answer, or a list of choice labels.
-	 *
-	 * @param Field|null               $field Field from the snapshot, when it is known.
-	 * @param string|bool|list<string> $value Stored value.
-	 * @return string|list<string>
-	 */
-	private static function display_value( ?Field $field, string|bool|array $value ): string|array {
-		if ( is_bool( $value ) ) {
-			return $value ? __( 'Yes', 'formstead' ) : __( 'No', 'formstead' );
-		}
-
-		if ( is_array( $value ) ) {
-			return self::choice_labels( $field, $value );
-		}
-
-		if ( $field instanceof Field && FieldType::Choice === $field->type() ) {
-			$labels = self::choice_labels( $field, array( $value ) );
-			return $labels[0] ?? $value;
-		}
-
-		return $value;
-	}
-
-	/**
-	 * Choice labels in the order configured on the field.
-	 *
-	 * A stored value that is no longer an option keeps the raw value.
-	 *
-	 * @param Field|null $field    Choice field, when it is known.
-	 * @param string[]   $selected Stored values.
-	 * @return list<string>
-	 */
-	private static function choice_labels( ?Field $field, array $selected ): array {
-		if ( ! $field instanceof Field ) {
-			return array_values( $selected );
-		}
-
-		$labels  = array();
-		$pending = array_fill_keys( $selected, true );
-		foreach ( $field->settings()->options() as $option ) {
-			if ( isset( $pending[ $option['value'] ] ) ) {
-				$labels[] = $option['label'];
-				unset( $pending[ $option['value'] ] );
-			}
-		}
-		foreach ( $selected as $value ) {
-			if ( isset( $pending[ $value ] ) ) {
-				$labels[] = $value;
-			}
-		}
-
-		return $labels;
-	}
-
-	/**
 	 * Query arguments that keep the current list filters.
 	 *
 	 * @return array<string, mixed>
@@ -458,6 +391,9 @@ final class SubmissionsPage {
 		if ( null !== $query->date_to() ) {
 			$args['date_to'] = $query->date_to();
 		}
+		if ( '' !== $query->search() ) {
+			$args['s'] = $query->search();
+		}
 
 		return $args;
 	}
@@ -470,7 +406,8 @@ final class SubmissionsPage {
 			self::query_int( 'form_id' ),
 			self::query_text( 'inbox_view' ),
 			self::query_text( 'date_from' ),
-			self::query_text( 'date_to' )
+			self::query_text( 'date_to' ),
+			self::query_text( 's' )
 		);
 	}
 

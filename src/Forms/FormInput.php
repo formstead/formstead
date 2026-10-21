@@ -56,6 +56,7 @@ final class FormInput {
 		$protection     = self::protection( $input, $errors );
 		$notifications  = self::notifications( $input, $fields, $errors );
 		$retention_days = self::retention_days( $input, $errors );
+		$identity       = self::identity_fields( $input, $fields, $existing );
 
 		if ( array() !== $errors ) {
 			return new FormInputResult( null, $errors );
@@ -74,7 +75,8 @@ final class FormInput {
 			$protection,
 			$existing instanceof Form ? $existing->honeypot_rejections() : 0,
 			$notifications,
-			$retention_days
+			$retention_days,
+			$identity
 		);
 
 		return new FormInputResult( $form, array() );
@@ -337,6 +339,69 @@ final class FormInput {
 		}
 
 		return esc_url_raw( $url ) === $url;
+	}
+
+	/**
+	 * Email fields that identify the person.
+	 *
+	 * A new email field is identifying unless the editor turns that off.
+	 * An existing mark stays when the request does not mention it. A text
+	 * field is never identifying, even when the request says it is.
+	 *
+	 * @param array<string, mixed> $input    Posted form values.
+	 * @param Field[]              $fields   Valid fields.
+	 * @param Form|null            $existing Form being edited, or null for a new form.
+	 * @return list<string>
+	 */
+	private static function identity_fields( array $input, array $fields, ?Form $existing ): array {
+		$previous = array();
+		$known    = array();
+		if ( $existing instanceof Form ) {
+			foreach ( $existing->identity_fields() as $name ) {
+				$previous[ $name ] = true;
+			}
+			foreach ( $existing->fields() as $field ) {
+				$known[ $field->name() ] = true;
+			}
+		}
+
+		$posted = array();
+		$raw    = $input['fields'] ?? array();
+		if ( is_array( $raw ) ) {
+			foreach ( $raw as $row ) {
+				if ( ! is_array( $row ) || self::is_checked( $row['remove'] ?? null ) || self::is_blank_row( $row ) ) {
+					continue;
+				}
+
+				$name = isset( $row['name'] ) && is_string( $row['name'] ) ? trim( $row['name'] ) : '';
+				if ( '' === $name || ! array_key_exists( 'identifies', $row ) ) {
+					continue;
+				}
+
+				$posted[ $name ] = self::is_checked( $row['identifies'] );
+			}
+		}
+
+		$names = array();
+		foreach ( $fields as $field ) {
+			if ( FieldType::Email !== $field->type() ) {
+				continue;
+			}
+
+			$name = $field->name();
+			if ( array_key_exists( $name, $posted ) ) {
+				if ( $posted[ $name ] ) {
+					$names[] = $name;
+				}
+				continue;
+			}
+
+			if ( ! isset( $known[ $name ] ) || isset( $previous[ $name ] ) ) {
+				$names[] = $name;
+			}
+		}
+
+		return $names;
 	}
 
 	/**

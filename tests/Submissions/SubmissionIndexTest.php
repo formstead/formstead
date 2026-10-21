@@ -12,6 +12,8 @@ use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
+use Formstead\Submissions\SubmissionQuery;
+use Formstead\Submissions\SubmissionRepository;
 
 /**
  * Confirms the inbox indexes on a 50,000 row table.
@@ -24,6 +26,7 @@ use Formstead\Forms\FormRepository;
  * @phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
  * @phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
  * @phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
+ * @phpcs:disable WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
  */
 final class SubmissionIndexTest extends \WP_UnitTestCase {
 
@@ -61,8 +64,11 @@ final class SubmissionIndexTest extends \WP_UnitTestCase {
 		$this->remove_fixtures();
 		$forms = $this->forms();
 		$this->insert_rows( $forms[0]->id(), $forms[1]->id() );
-		$table = Schema::submissions_table();
+		$this->insert_identities();
+		$table      = Schema::submissions_table();
+		$identities = Schema::identities_table();
 		$wpdb->query( "ANALYZE TABLE {$table}" );
+		$wpdb->query( "ANALYZE TABLE {$identities}" );
 
 		$hash = str_repeat( 'ab', 32 );
 		$this->assert_index(
@@ -112,6 +118,28 @@ final class SubmissionIndexTest extends \WP_UnitTestCase {
 			),
 			true
 		);
+
+		$method = new \ReflectionMethod( SubmissionRepository::class, 'where' );
+		$built  = $method->invoke(
+			new SubmissionRepository(),
+			SubmissionQuery::from_values( 0, SubmissionQuery::VIEW_ALL, '', '', 'Ada@Example.com' )
+		);
+		$this->assertIsArray( $built );
+		$this->assertIsString( $built['sql'] ?? null );
+		$this->assertIsArray( $built['args'] ?? null );
+		$search = $wpdb->prepare(
+			"SELECT id FROM {$table} WHERE {$built['sql']} ORDER BY created_at DESC, id DESC LIMIT 20",
+			...$built['args']
+		);
+		$this->assertIsString( $search );
+		$this->assertStringNotContainsString( 'ada@example.com', strtolower( $search ) );
+		$this->assert_key( 'hash_submission', $search );
+		$count = $wpdb->prepare(
+			"SELECT status, COUNT(*) AS total FROM {$table} WHERE {$built['sql']} GROUP BY status",
+			...$built['args']
+		);
+		$this->assertIsString( $count );
+		$this->assert_key( 'hash_submission', $count );
 	}
 
 	/**
@@ -205,18 +233,65 @@ final class SubmissionIndexTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * One identity row per fixture submission, so the optimizer can see the hash index.
+	 */
+	private function insert_identities(): void {
+		global $wpdb;
+
+		if ( array() === $this->form_ids ) {
+			return;
+		}
+
+		$submissions = Schema::submissions_table();
+		$identities  = Schema::identities_table();
+		$ids         = implode( ',', array_map( 'intval', $this->form_ids ) );
+		$inserted    = $wpdb->query(
+			"INSERT INTO {$identities} (submission_id, form_id, field, value_hash, created_at)
+			SELECT id, form_id, 'email', SHA2(CONCAT('email-', id), 256), created_at
+			FROM {$submissions}
+			WHERE form_id IN ({$ids}) AND receipt_id LIKE 'idx%'"
+		);
+		$this->assertSame( self::ROWS, $inserted, (string) $wpdb->last_error );
+	}
+
+	/**
+	 * Assert EXPLAIN uses this key on the identity lookup.
+	 *
+	 * A subquery is a separate EXPLAIN row. The address itself must not be in the SQL.
+	 *
+	 * @param string $index Index name.
+	 * @param string $sql   Query without EXPLAIN. Placeholders are already prepared.
+	 */
+	private function assert_key( string $index, string $sql ): void {
+		global $wpdb;
+
+		$rows = $wpdb->get_results( 'EXPLAIN ' . $sql, ARRAY_A );
+		$this->assertIsArray( $rows );
+		$keys = array();
+		foreach ( $rows as $row ) {
+			if ( is_array( $row ) ) {
+				$keys[] = (string) ( $row['key'] ?? '' );
+			}
+		}
+		$this->assertContains( $index, $keys, (string) wp_json_encode( $rows ) );
+	}
+
+	/**
 	 * Delete rows left by an earlier run that ANALYZE TABLE committed.
 	 */
 	private function remove_fixtures(): void {
 		global $wpdb;
 
 		$submissions = Schema::submissions_table();
+		$identities  = Schema::identities_table();
+		$wpdb->query( "DELETE {$identities} FROM {$identities} INNER JOIN {$submissions} ON {$submissions}.id = {$identities}.submission_id WHERE {$submissions}.receipt_id LIKE 'idx%'" );
 		$wpdb->query( "DELETE FROM {$submissions} WHERE receipt_id LIKE 'idx%'" );
 		if ( array() === $this->form_ids ) {
 			return;
 		}
 
 		$ids = implode( ',', array_map( 'intval', $this->form_ids ) );
+		$wpdb->query( "DELETE FROM {$identities} WHERE form_id IN ({$ids})" );
 		$wpdb->query( 'DELETE FROM ' . Schema::form_versions_table() . " WHERE form_id IN ({$ids})" );
 		$wpdb->query( 'DELETE FROM ' . Schema::forms_table() . " WHERE id IN ({$ids})" );
 	}

@@ -265,6 +265,9 @@ final class SubmissionsTable extends \WP_List_Table {
 		if ( null !== $this->query->date_to() ) {
 			$args['date_to'] = $this->query->date_to();
 		}
+		if ( '' !== $this->query->search() ) {
+			$args['s'] = $this->query->search();
+		}
 
 		return add_query_arg( $args, admin_url( 'admin.php' ) );
 	}

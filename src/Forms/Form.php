@@ -104,6 +104,13 @@ final class Form {
 	private int $retention_days;
 
 	/**
+	 * Email field names that identify the person who submitted the form.
+	 *
+	 * @var string[]
+	 */
+	private array $identity_fields;
+
+	/**
 	 * Create a form.
 	 *
 	 * @param int                    $id                  Database id, or zero for a new form.
@@ -119,6 +126,7 @@ final class Form {
 	 * @param int                    $honeypot_rejections Rejected honeypot submissions.
 	 * @param FormNotifications|null $notifications      Email settings. Null sends no mail.
 	 * @param int                    $retention_days     Days to keep submissions. Zero keeps them until deletion.
+	 * @param string[]               $identity_fields    Email field names that identify the person.
 	 */
 	public function __construct(
 		int $id,
@@ -133,7 +141,8 @@ final class Form {
 		?FormProtection $protection = null,
 		int $honeypot_rejections = 0,
 		?FormNotifications $notifications = null,
-		int $retention_days = 30
+		int $retention_days = 30,
+		array $identity_fields = array()
 	) {
 		$this->id                  = $id;
 		$this->public_id           = $public_id;
@@ -148,6 +157,7 @@ final class Form {
 		$this->honeypot_rejections = max( 0, $honeypot_rejections );
 		$this->notifications       = $notifications ?? FormNotifications::none();
 		$this->retention_days      = max( 0, $retention_days );
+		$this->identity_fields     = $identity_fields;
 	}
 
 	/**
@@ -241,6 +251,32 @@ final class Form {
 	 */
 	public function retention_days(): int {
 		return $this->retention_days;
+	}
+
+	/**
+	 * Email fields that identify the person who submitted the form.
+	 *
+	 * A name that is not an email field on the current schema is left out.
+	 * Changing this list does not change the meaning of an older submission.
+	 *
+	 * @return list<string>
+	 */
+	public function identity_fields(): array {
+		$email = array();
+		foreach ( $this->fields as $field ) {
+			if ( FieldType::Email === $field->type() ) {
+				$email[ $field->name() ] = true;
+			}
+		}
+
+		$names = array();
+		foreach ( $this->identity_fields as $name ) {
+			if ( isset( $email[ $name ] ) ) {
+				$names[ $name ] = $name;
+			}
+		}
+
+		return array_values( $names );
 	}
 
 	/**

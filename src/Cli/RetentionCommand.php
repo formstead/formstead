@@ -55,7 +55,7 @@ final class RetentionCommand {
 	 * Null means another run holds the lock. An error is last, because WP-CLI
 	 * stops the process there and the system cron can see the failure.
 	 *
-	 * @param array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, backlog_since: int, errors: list<string>}|null $report Retention report.
+	 * @param array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, audit: int, backlog: bool, backlog_since: int, errors: list<string>}|null $report Retention report.
 	 * @return list<array{level: string, text: string}>
 	 */
 	public static function messages( ?array $report ): array {
@@ -71,6 +71,7 @@ final class RetentionCommand {
 			self::line( 'log', sprintf( 'Deleted %d deliveries.', $report['deliveries'] ) ),
 			self::line( 'log', sprintf( 'Deleted %d idempotency keys.', $report['keys'] ) ),
 			self::line( 'log', sprintf( 'Deleted %d rate-limit counters.', $report['rate_limits'] ) ),
+			self::line( 'log', sprintf( 'Deleted %d audit events.', $report['audit'] ) ),
 		);
 
 		if ( $report['backlog'] ) {
@@ -133,7 +134,7 @@ final class RetentionCommand {
 	 * Null means another run holds the lock.
 	 *
 	 * @param array<string, mixed> $assoc_args Associative arguments.
-	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, backlog_since: int, errors: list<string>}|null
+	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, audit: int, backlog: bool, backlog_since: int, errors: list<string>}|null
 	 */
 	public static function process( array $assoc_args ): ?array {
 		$batches = null;
@@ -141,6 +142,6 @@ final class RetentionCommand {
 			$batches = max( 1, (int) $assoc_args['batches'] );
 		}
 
-		return ( new RetentionRunner() )->run( $batches, null );
+		return ( new RetentionRunner() )->run( $batches, null, null, 'cli' );
 	}
 }

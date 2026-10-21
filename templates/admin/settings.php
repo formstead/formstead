@@ -4,15 +4,17 @@
  *
  * @package Formstead
  *
- * @var array{finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, errors: list<string>}|null $report
+ * @var array{finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, audit: int, backlog: bool, errors: list<string>}|null $report
  * @var bool   $overdue
  * @var int    $spam_days
  * @var int    $delivery_days
+ * @var int    $audit_days
  * @var string $warning
  * @var int    $next_run
  * @var bool   $delete_data
  * @var bool   $can_delete_data
  * @var bool   $updated
+ * @var string $identity_message
  */
 
 use Formstead\Admin\Menu;
@@ -20,15 +22,17 @@ use Formstead\Admin\SettingsPage;
 
 defined( 'ABSPATH' ) || exit;
 
-$report          = isset( $report ) && is_array( $report ) ? $report : null;
-$overdue         = isset( $overdue ) && $overdue;
-$spam_days       = isset( $spam_days ) ? (int) $spam_days : 0;
-$delivery_days   = isset( $delivery_days ) ? (int) $delivery_days : 0;
-$warning         = isset( $warning ) ? (string) $warning : '';
-$next_run        = isset( $next_run ) ? (int) $next_run : 0;
-$delete_data     = isset( $delete_data ) && $delete_data;
-$can_delete_data = isset( $can_delete_data ) && $can_delete_data;
-$updated         = isset( $updated ) && $updated;
+$report           = isset( $report ) && is_array( $report ) ? $report : null;
+$overdue          = isset( $overdue ) && $overdue;
+$spam_days        = isset( $spam_days ) ? (int) $spam_days : 0;
+$delivery_days    = isset( $delivery_days ) ? (int) $delivery_days : 0;
+$audit_days       = isset( $audit_days ) ? (int) $audit_days : 0;
+$warning          = isset( $warning ) ? (string) $warning : '';
+$next_run         = isset( $next_run ) ? (int) $next_run : 0;
+$delete_data      = isset( $delete_data ) && $delete_data;
+$can_delete_data  = isset( $can_delete_data ) && $can_delete_data;
+$updated          = isset( $updated ) && $updated;
+$identity_message = isset( $identity_message ) ? (string) $identity_message : '';
 ?>
 <div class="wrap">
 	<h1><?php echo esc_html__( 'Settings', 'formstead' ); ?></h1>
@@ -73,7 +77,25 @@ $updated         = isset( $updated ) && $updated;
 				?>
 			</td>
 		</tr>
+		<tr>
+			<th scope="row"><?php echo esc_html__( 'Audit log', 'formstead' ); ?></th>
+			<td>
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: 1: number of days, 2: PHP constant name. */
+						__( '%1$s days. Constant: %2$s.', 'formstead' ),
+						number_format_i18n( $audit_days ),
+						'FORMSTEAD_AUDIT_RETENTION_DAYS'
+					)
+				);
+				?>
+			</td>
+		</tr>
 	</table>
+
+	<h2><?php echo esc_html__( 'Identity index', 'formstead' ); ?></h2>
+	<p><?php echo esc_html( $identity_message ); ?></p>
 
 	<h2><?php echo esc_html__( 'Last run', 'formstead' ); ?></h2>
 	<?php if ( null === $report || $report['finished_at'] < 1 ) : ?>
@@ -117,6 +139,10 @@ $updated         = isset( $updated ) && $updated;
 				<tr>
 					<th scope="row"><?php echo esc_html__( 'Rate-limit counters', 'formstead' ); ?></th>
 					<td><?php echo esc_html( number_format_i18n( $report['rate_limits'] ) ); ?></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php echo esc_html__( 'Audit events', 'formstead' ); ?></th>
+					<td><?php echo esc_html( number_format_i18n( $report['audit'] ) ); ?></td>
 				</tr>
 				<tr>
 					<th scope="row"><?php echo esc_html__( 'Rows still waiting', 'formstead' ); ?></th>

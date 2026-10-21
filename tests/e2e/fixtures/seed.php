@@ -294,7 +294,8 @@ function formstead_e2e_insert_form( string $name, string $public_id, string $suc
 			new FormProtection( $origins, $per_minute, $per_hour ),
 			0,
 			$notifications,
-			30
+			30,
+			array( 'email' )
 		)
 	);
 

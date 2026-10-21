@@ -15,14 +15,16 @@ use Formstead\Security\Limits;
  * The filter is not named `formstead_retention`. That string is the cron
  * event, and WordPress stores actions and filters on the same hook.
  *
- * A form has its own period for submissions. Spam and finished deliveries use
- * these global periods. Values outside 1 to 3650 days are clamped.
+ * A form has its own period for submissions. Spam, finished deliveries, and
+ * the audit log use these global periods. Values outside 1 to 3650 days are clamped.
  */
 final class RetentionPeriods {
 
 	public const SPAM_DAYS = 7;
 
 	public const DELIVERY_DAYS = 30;
+
+	public const AUDIT_DAYS = 180;
 
 	public const MIN_DAYS = 1;
 
@@ -43,23 +45,31 @@ final class RetentionPeriods {
 	}
 
 	/**
+	 * Days before an audit row is deleted.
+	 */
+	public static function audit_days(): int {
+		return self::configured()['audit_days'];
+	}
+
+	/**
 	 * Effective periods after constants, the filter, and the bounds.
 	 *
-	 * @return array{spam_days: int, delivery_days: int}
+	 * @return array{spam_days: int, delivery_days: int, audit_days: int}
 	 */
 	private static function configured(): array {
 		$defaults = array(
 			'spam_days'     => self::constant_int( 'FORMSTEAD_SPAM_RETENTION_DAYS', self::SPAM_DAYS ),
 			'delivery_days' => self::constant_int( 'FORMSTEAD_DELIVERY_RETENTION_DAYS', self::DELIVERY_DAYS ),
+			'audit_days'    => self::constant_int( 'FORMSTEAD_AUDIT_RETENTION_DAYS', self::AUDIT_DAYS ),
 		);
 
 		/**
 		 * Filters the global retention periods, in days.
 		 *
-		 * Keys: `spam_days`, `delivery_days`. Values are clamped to 1–3650.
+		 * Keys: `spam_days`, `delivery_days`, `audit_days`. Values are clamped to 1–3650.
 		 * A form's own period is stored on the form and is not part of this filter.
 		 *
-		 * @param array{spam_days: int, delivery_days: int} $periods Periods from constants or the built-in defaults.
+		 * @param array{spam_days: int, delivery_days: int, audit_days: int} $periods Periods from constants or the built-in defaults.
 		 */
 		$filtered = apply_filters( 'formstead_retention_periods', $defaults );
 		if ( ! is_array( $filtered ) ) {
@@ -69,6 +79,7 @@ final class RetentionPeriods {
 		return array(
 			'spam_days'     => Limits::clamp( $filtered['spam_days'] ?? $defaults['spam_days'], self::MIN_DAYS, self::MAX_DAYS, self::SPAM_DAYS ),
 			'delivery_days' => Limits::clamp( $filtered['delivery_days'] ?? $defaults['delivery_days'], self::MIN_DAYS, self::MAX_DAYS, self::DELIVERY_DAYS ),
+			'audit_days'    => Limits::clamp( $filtered['audit_days'] ?? $defaults['audit_days'], self::MIN_DAYS, self::MAX_DAYS, self::AUDIT_DAYS ),
 		);
 	}
 

@@ -221,7 +221,8 @@ final class SubmissionRepository {
 				(int) $query->form_id(),
 				SubmissionQuery::VIEW_ALL,
 				$query->date_from() ?? '',
-				$query->date_to() ?? ''
+				$query->date_to() ?? '',
+				$query->search()
 			)
 		);
 		$table = Schema::submissions_table();
@@ -448,6 +449,14 @@ final class SubmissionRepository {
 		if ( null !== $query->date_to() ) {
 			$sql[]  = 'created_at <= %s';
 			$args[] = $query->date_to() . ' 23:59:59';
+		}
+
+		$hash = $query->identity_hash();
+		if ( is_string( $hash ) ) {
+			$identities  = Schema::identities_table();
+			$submissions = Schema::submissions_table();
+			$sql[]       = "EXISTS ( SELECT 1 FROM {$identities} WHERE value_hash = %s AND submission_id = {$submissions}.id )";
+			$args[]      = $hash;
 		}
 
 		return array(

@@ -24,6 +24,8 @@ final class Menu {
 
 	public const SETTINGS_SLUG = 'formstead-settings';
 
+	public const AUDIT_SLUG = 'formstead-audit';
+
 	/**
 	 * Hook the menu on `admin_menu`.
 	 */
@@ -33,7 +35,7 @@ final class Menu {
 	}
 
 	/**
-	 * Add the inbox, forms, and settings screens.
+	 * Add the inbox, forms, audit log, and settings screens.
 	 */
 	public static function add_pages(): void {
 		$unread = UnreadCounter::count();
@@ -73,6 +75,15 @@ final class Menu {
 			FormsPage::set_hook( $forms_hook );
 			add_action( 'load-' . $forms_hook, array( FormsPage::class, 'handle_load' ) );
 		}
+
+		add_submenu_page(
+			self::MENU_SLUG,
+			__( 'Audit log', 'formstead' ),
+			__( 'Audit log', 'formstead' ),
+			Capabilities::MANAGE_FORMS,
+			self::AUDIT_SLUG,
+			array( AuditPage::class, 'render' )
+		);
 
 		$settings_hook = add_submenu_page(
 			self::MENU_SLUG,

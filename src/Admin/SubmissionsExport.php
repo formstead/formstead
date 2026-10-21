@@ -9,6 +9,8 @@ namespace Formstead\Admin;
 
 defined( 'ABSPATH' ) || exit;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormRepository;
 use Formstead\Security\Capabilities;
@@ -93,7 +95,8 @@ final class SubmissionsExport {
 			$form->id(),
 			$query->view(),
 			$query->date_from() ?? '',
-			$query->date_to() ?? ''
+			$query->date_to() ?? '',
+			$query->search()
 		);
 		$fields = CsvColumns::fields( $form );
 		$header = array();
@@ -109,9 +112,11 @@ final class SubmissionsExport {
 		$size       = max( 1, $batch );
 		$after      = null;
 		$count      = 0;
+		$exported   = 0;
 		do {
-			$rows  = $repository->iterate_for_export( $query, $after, $size );
-			$count = count( $rows );
+			$rows      = $repository->iterate_for_export( $query, $after, $size );
+			$count     = count( $rows );
+			$exported += $count;
 			foreach ( $rows as $submission ) {
 				$after   = array(
 					'created_at' => $submission->created_at(),
@@ -131,6 +136,16 @@ final class SubmissionsExport {
 			fflush( $output );
 			flush();
 		} while ( $size === $count );
+
+		AuditLog::record(
+			AuditEvent::SUBMISSIONS_EXPORTED,
+			'form',
+			$form->id(),
+			array(
+				'rows' => $exported,
+				'view' => $query->view(),
+			)
+		);
 	}
 
 	/**
@@ -150,6 +165,9 @@ final class SubmissionsExport {
 		if ( null !== $query->date_to() ) {
 			$args['date_to'] = $query->date_to();
 		}
+		if ( '' !== $query->search() ) {
+			$args['s'] = $query->search();
+		}
 
 		return wp_nonce_url( add_query_arg( $args, admin_url( 'admin-post.php' ) ), 'formstead_export' );
 	}
@@ -162,7 +180,8 @@ final class SubmissionsExport {
 			self::query_int( 'form_id' ),
 			self::query_text( 'inbox_view' ),
 			self::query_text( 'date_from' ),
-			self::query_text( 'date_to' )
+			self::query_text( 'date_to' ),
+			current_user_can( Capabilities::READ_SUBMISSIONS ) ? self::query_text( 's' ) : ''
 		);
 	}
 

@@ -10,11 +10,16 @@ namespace Formstead;
 use Formstead\Admin\Menu;
 use Formstead\Admin\SubmissionsExport;
 use Formstead\Cli\DeliveriesCommand;
+use Formstead\Cli\IdentitiesCommand;
 use Formstead\Cli\RetentionCommand;
 use Formstead\Database\Migrator;
 use Formstead\Delivery\Scheduler;
 use Formstead\Retention\RetentionScheduler;
 use Formstead\Lifecycle\Requirements;
+use Formstead\Privacy\IdentityBackfill;
+use Formstead\Privacy\PrivacyEraser;
+use Formstead\Privacy\PrivacyExporter;
+use Formstead\Privacy\PrivacyPolicy;
 use Formstead\Rest\Cors;
 use Formstead\Rest\HtmlResponder;
 use Formstead\Rest\SubmissionsController;
@@ -65,8 +70,13 @@ final class Plugin {
 		HtmlResponder::register();
 		Scheduler::register();
 		RetentionScheduler::register();
+		IdentityBackfill::register();
+		PrivacyExporter::register();
+		PrivacyEraser::register();
+		PrivacyPolicy::register();
 		DeliveriesCommand::register();
 		RetentionCommand::register();
+		IdentitiesCommand::register();
 	}
 
 	/**

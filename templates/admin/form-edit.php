@@ -247,6 +247,7 @@ $next_index       = count( $rows );
 					$row_options  = isset( $row['options'] ) ? (string) $row['options'] : '';
 					$row_multiple = isset( $row['multiple'] ) && '1' === (string) $row['multiple'];
 					$required     = isset( $row['required'] ) && '1' === (string) $row['required'];
+					$identifies   = isset( $row['identifies'] ) && '1' === (string) $row['identifies'];
 					$prefix       = 'fields.' . $index;
 					?>
 					<tr data-field-row>
@@ -285,6 +286,13 @@ $next_index       = count( $rows );
 							<?php endif; ?>
 						</td>
 						<td>
+							<div data-settings-for="email">
+								<input type="hidden" name="fields[<?php echo esc_attr( (string) $index ); ?>][identifies]" value="0">
+								<label>
+									<input name="fields[<?php echo esc_attr( (string) $index ); ?>][identifies]" type="checkbox" value="1" <?php checked( $identifies ); ?>>
+									<?php echo esc_html__( 'Identifies the person', 'formstead' ); ?>
+								</label>
+							</div>
 							<div data-settings-for="number">
 								<label>
 									<?php echo esc_html__( 'Min', 'formstead' ); ?>
@@ -351,6 +359,13 @@ $next_index       = count( $rows );
 				<td><input name="fields[__INDEX__][required]" type="checkbox" value="1" aria-label="<?php echo esc_attr__( 'Required', 'formstead' ); ?>"></td>
 				<td><input name="fields[__INDEX__][max_length]" type="number" min="1" max="10000" value="" class="small-text" aria-label="<?php echo esc_attr__( 'Max length', 'formstead' ); ?>"></td>
 				<td>
+					<div data-settings-for="email">
+						<input type="hidden" name="fields[__INDEX__][identifies]" value="0">
+						<label>
+							<input name="fields[__INDEX__][identifies]" type="checkbox" value="1" checked>
+							<?php echo esc_html__( 'Identifies the person', 'formstead' ); ?>
+						</label>
+					</div>
 					<div data-settings-for="number">
 						<label><?php echo esc_html__( 'Min', 'formstead' ); ?> <input name="fields[__INDEX__][min]" type="text" value="" class="small-text"></label>
 						<label><?php echo esc_html__( 'Max', 'formstead' ); ?> <input name="fields[__INDEX__][max]" type="text" value="" class="small-text"></label>

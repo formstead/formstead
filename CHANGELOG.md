@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- GitHub Actions starts only when someone runs the CI workflow by hand. Run it on `main` after the last pull request of a plan. Pull requests, pushes, and the daily schedule no longer start it.
+
+## [0.8.1] - 2026-10-21
+
+### Fixed
+
+- Adding an identifying email field while its backfill is in progress indexes submissions that were already passed.
+- A failed read of the identity index keeps the backfill unfinished, and personal-data export and erase report the failure instead of an empty result.
+- Saving a new identifying field still queues that backfill when the index cannot be cleared. A form already left without that queue can be repaired with `wp formstead identities rebuild --form=<public_id>`.
+
+## [0.8.0] - 2026-10-21
+
+### Added
+
+- Index identifying email fields as an HMAC, so one person's submissions can be found without scanning every payload. Search the inbox for an exact address.
+- Export and erase that person's submissions through the WordPress personal-data tools, a page at a time, including when there are more submissions than one page.
+- Record form, settings, export, deletion, retention, and privacy actions in an audit log. The log stores event codes, not submission text, and is kept for 180 days.
+- Describe what is stored, how long it stays, and how it is removed, and suggest that wording on the WordPress privacy screen.
+
+### Changed
+
+- Updating marks existing email fields as identifying and builds their index in the background. Export and erase wait until that index is finished.
+
 ## [0.7.1] - 2026-10-21
 
 ### Fixed
@@ -180,7 +205,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/formstead/formstead/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/formstead/formstead/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/formstead/formstead/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/formstead/formstead/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/formstead/formstead/compare/v0.6.0...v0.6.1

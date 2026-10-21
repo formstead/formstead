@@ -55,6 +55,7 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 	public function test_default_periods(): void {
 		$this->assertSame( 7, RetentionPeriods::spam_days() );
 		$this->assertSame( 30, RetentionPeriods::delivery_days() );
+		$this->assertSame( 180, RetentionPeriods::audit_days() );
 	}
 
 	/**
@@ -73,6 +74,7 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 
 		$this->assertSame( 3650, RetentionPeriods::spam_days() );
 		$this->assertSame( 1, RetentionPeriods::delivery_days() );
+		$this->assertSame( 180, RetentionPeriods::audit_days() );
 	}
 
 	/**
@@ -272,6 +274,41 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Audit rows older than 180 days are deleted. A row stored at the cutoff stays.
+	 */
+	public function test_only_audit_rows_older_than_the_period_are_deleted(): void {
+		$now    = time();
+		$cutoff = $now - ( 180 * DAY_IN_SECONDS );
+		$this->audit_at( 900001, $cutoff - 1 );
+		$this->audit_at( 900002, $cutoff );
+		$this->audit_at( 900003, $now );
+
+		$report = ( new RetentionRunner() )->run( null, null, $now );
+
+		$this->assertIsArray( $report );
+		$this->assertSame( 1, $report['audit'] );
+		$this->assertFalse( $report['backlog'] );
+		$this->assertNull( $this->audit_id( 900001 ) );
+		$this->assertNotNull( $this->audit_id( 900002 ) );
+		$this->assertNotNull( $this->audit_id( 900003 ) );
+	}
+
+	/**
+	 * An audit row still inside the period keeps a stopped run marked as a backlog.
+	 */
+	public function test_an_expired_audit_row_is_part_of_the_backlog(): void {
+		$now = time();
+		$this->audit_at( 900004, $now - ( 181 * DAY_IN_SECONDS ) );
+
+		$report = ( new RetentionRunner() )->run( 0, null, $now );
+
+		$this->assertIsArray( $report );
+		$this->assertSame( 0, $report['audit'] );
+		$this->assertTrue( $report['backlog'] );
+		$this->assertNotNull( $this->audit_id( 900004 ) );
+	}
+
+	/**
 	 * The command deletes every expired row when no batch limit is given.
 	 */
 	public function test_cli_runs_until_nothing_is_left(): void {
@@ -299,6 +336,7 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 			'deliveries'    => 5,
 			'keys'          => 6,
 			'rate_limits'   => 7,
+			'audit'         => 8,
 			'backlog'       => false,
 			'backlog_since' => 0,
 			'errors'        => array( 'submission_delete_failed' ),
@@ -312,6 +350,7 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 		$this->assertContains( 'Deleted 5 deliveries.', $texts );
 		$this->assertContains( 'Deleted 6 idempotency keys.', $texts );
 		$this->assertContains( 'Deleted 7 rate-limit counters.', $texts );
+		$this->assertContains( 'Deleted 8 audit events.', $texts );
 		$this->assertContains( 'Retention failed: submission_delete_failed', $texts );
 
 		$report['errors']  = array();
@@ -479,6 +518,46 @@ final class RetentionRunnerTest extends \WP_UnitTestCase {
 		$saved = ( new SubmissionRepository() )->insert( $form, array( 'note' => 'secret-body' ), $status );
 		$this->assertInstanceOf( Submission::class, $saved );
 		return $saved;
+	}
+
+	/**
+	 * Store one audit row at a UTC timestamp.
+	 *
+	 * @param int $object_id Object id used to find the row again.
+	 * @param int $timestamp Unix time.
+	 */
+	private function audit_at( int $object_id, int $timestamp ): void {
+		global $wpdb;
+
+		$wpdb->insert(
+			Schema::audit_table(),
+			array(
+				'event'       => 'form_created',
+				'actor_id'    => 0,
+				'object_type' => 'form',
+				'object_id'   => $object_id,
+				'context'     => '{}',
+				'created_at'  => gmdate( 'Y-m-d H:i:s', $timestamp ),
+			),
+			array( '%s', '%d', '%s', '%d', '%s', '%s' )
+		);
+	}
+
+	/**
+	 * Id of a planted audit row, or null when retention removed it.
+	 *
+	 * @param int $object_id Object id passed to audit_at().
+	 */
+	private function audit_id( int $object_id ): ?int {
+		global $wpdb;
+
+		$table = Schema::audit_table();
+		$found = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE object_id = %d AND event = %s", $object_id, 'form_created' ) );
+		if ( ! is_numeric( $found ) ) {
+			return null;
+		}
+
+		return (int) $found;
 	}
 
 	/**

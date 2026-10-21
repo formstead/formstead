@@ -9,6 +9,7 @@ namespace Formstead\Submissions;
 
 use Formstead\Database\Transaction;
 use Formstead\Delivery\DeliveryCanceller;
+use Formstead\Privacy\IdentityRepository;
 use WP_Error;
 
 /**
@@ -46,6 +47,12 @@ final class SubmissionDeleter {
 					);
 				}
 				if ( ! ( new IdempotencyRepository() )->delete_for_submissions( $clean ) ) {
+					return new WP_Error(
+						'formstead_submission_delete_failed',
+						__( 'The submissions could not be deleted.', 'formstead' )
+					);
+				}
+				if ( ! ( new IdentityRepository() )->delete_for_submissions( $clean ) ) {
 					return new WP_Error(
 						'formstead_submission_delete_failed',
 						__( 'The submissions could not be deleted.', 'formstead' )

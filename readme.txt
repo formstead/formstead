@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.7.1
+Stable tag: 0.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,6 +17,10 @@ Formstead receives form submissions from static and headless sites on an existin
 Version 0.7.0 is the technical MVP. The source repository includes HTML and Astro examples that post with and without JavaScript, including from another site. The installable package does not include those examples. Version 0.6.0 keeps each form's submissions for a number of days, 30 by default. Forms that already exist get the same 30 days, and the first cleanup deletes older submissions. Use 0 to keep a form's submissions until someone deletes them. Settings shows the last cleanup and warns when it is overdue. The inbox lists submissions; opening a new one marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
 
 Network activation on WordPress Multisite is not supported.
+
+== Privacy ==
+
+Formstead stores submissions on this site. An email field can be marked as identifying the person. That address is indexed as an HMAC so the inbox can search for an exact address and so WordPress can export or erase that person's submissions. The index does not keep a second copy of the address. Erasure deletes the whole submission, including a waiting notification. An audit log records the action, and other form, settings, export, deletion, and retention actions, without the field values or the address. Audit rows are kept for 180 days. Submissions follow the retention period set on the form. A host backup, a server log, and mail already handed to the site mail system are outside the plugin. The source repository describes these flows in `docs/data-flows.md`. The plugin suggests wording for the site privacy policy.
 
 == Installation ==
 
@@ -35,6 +39,18 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.8.1 =
+* Index submissions already passed when an email field is marked during a backfill.
+* Refuse personal-data export and erase when the identity index cannot be read, instead of reporting that the person has no submissions.
+* Queue the backfill even if clearing the index fails. Repair a form already missing that queue with `wp formstead identities rebuild --form=<public_id>`.
+
+= 0.8.0 =
+* Index an identifying email field as an HMAC, and search the inbox for that exact address.
+* Export and erase one person's submissions from Tools, including when there are more than one page of them.
+* Record form, settings, export, deletion, retention, and privacy actions without storing the submission text. Keep that log for 180 days.
+* Describe what is stored and how it is removed, and suggest privacy-policy text in WordPress.
+* Mark existing email fields as identifying on update, and build their index in the background.
 
 = 0.7.1 =
 * End-to-end tests stop only this project's database.
@@ -116,6 +132,12 @@ No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 * Initial installable skeleton.
 
 == Upgrade Notice ==
+
+= 0.8.1 =
+Personal-data export and erase no longer treat a failed index read as an empty result. If a form's identity index was left unfinished after a failed save, run `wp formstead identities rebuild --form=<public_id>`.
+
+= 0.8.0 =
+Existing email fields are marked as identifying the person. The index is built in the background. Until it finishes, personal-data export and erase ask you to run `wp formstead identities rebuild`.
 
 = 0.6.0 =
 Existing forms now keep submissions for 30 days. The first cleanup deletes older submissions. Set a form to 0 to keep them until someone deletes them.

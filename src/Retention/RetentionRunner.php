@@ -7,6 +7,9 @@
 
 namespace Formstead\Retention;
 
+use Formstead\Audit\AuditEvent;
+use Formstead\Audit\AuditLog;
+use Formstead\Database\Schema;
 use Formstead\Delivery\DeliveryRepository;
 use Formstead\Forms\FormRepository;
 use Formstead\Security\RateLimiter;
@@ -108,9 +111,10 @@ final class RetentionRunner {
 	 * @param int|null $batch_limit Maximum batches. Null means no limit.
 	 * @param int|null $deadline    Unix time at which to stop. Null means no time limit.
 	 * @param int|null $now         Unix time used to decide what has expired.
-	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, backlog_since: int, errors: list<string>}|null
+	 * @param string   $source      `cron` or `cli`. Anything else is recorded as cron.
+	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, audit: int, backlog: bool, backlog_since: int, errors: list<string>}|null
 	 */
-	public function run( ?int $batch_limit, ?int $deadline, ?int $now = null ): ?array {
+	public function run( ?int $batch_limit, ?int $deadline, ?int $now = null, string $source = 'cron' ): ?array {
 		$now     = $now ?? time();
 		$started = time();
 		$token   = $this->acquire_lock( $started );
@@ -122,6 +126,22 @@ final class RetentionRunner {
 			$report                  = $this->purge( $batch_limit, $deadline, $now, $started, $token );
 			$report['backlog_since'] = $this->backlog_since( $report['backlog'], $report['finished_at'] );
 			update_option( self::REPORT_OPTION, $report, false );
+			AuditLog::record(
+				AuditEvent::RETENTION_RUN,
+				'retention',
+				0,
+				array(
+					'source'      => 'cli' === $source ? 'cli' : 'cron',
+					'submissions' => $report['submissions'],
+					'spam'        => $report['spam'],
+					'deliveries'  => $report['deliveries'],
+					'keys'        => $report['keys'],
+					'rate_limits' => $report['rate_limits'],
+					'audit'       => $report['audit'],
+					'backlog'     => $report['backlog'],
+					'errors'      => $report['errors'],
+				)
+			);
 			return $report;
 		} finally {
 			$this->release_lock( $token );
@@ -136,7 +156,7 @@ final class RetentionRunner {
 	 * @param int      $now         Unix time used to decide what has expired.
 	 * @param int      $started     Wall-clock start of this run.
 	 * @param string   $token       Lock token owned by this run.
-	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, backlog: bool, errors: list<string>}
+	 * @return array{started_at: int, finished_at: int, submissions: int, spam: int, deliveries: int, keys: int, rate_limits: int, audit: int, backlog: bool, errors: list<string>}
 	 */
 	private function purge( ?int $batch_limit, ?int $deadline, int $now, int $started, string $token ): array {
 		$submissions = 0;
@@ -144,6 +164,7 @@ final class RetentionRunner {
 		$deliveries  = 0;
 		$keys        = 0;
 		$rates       = 0;
+		$audit       = 0;
 		$errors      = array();
 		$batches     = 0;
 		$stopped     = false;
@@ -206,6 +227,19 @@ final class RetentionRunner {
 			$stopped = $outcome['stopped'];
 		}
 
+		if ( ! $stopped ) {
+			$outcome = $this->drain(
+				fn (): int => $this->delete_audit_before( $this->before( $now, RetentionPeriods::audit_days() ) ),
+				$batch_limit,
+				$deadline,
+				$batches,
+				$token
+			);
+			$audit   = $outcome['deleted'];
+			$batches = $outcome['batches'];
+			$stopped = $outcome['stopped'];
+		}
+
 		return array(
 			'started_at'  => $started,
 			'finished_at' => time(),
@@ -214,6 +248,7 @@ final class RetentionRunner {
 			'deliveries'  => $deliveries,
 			'keys'        => $keys,
 			'rate_limits' => $rates,
+			'audit'       => $audit,
 			'backlog'     => $stopped && $this->has_expired( $now ),
 			'errors'      => array_values( $errors ),
 		);
@@ -323,7 +358,56 @@ final class RetentionRunner {
 			return true;
 		}
 
-		return $this->rates->has_expired( $now );
+		if ( $this->rates->has_expired( $now ) ) {
+			return true;
+		}
+
+		return $this->has_expired_audit( $this->before( $now, RetentionPeriods::audit_days() ) );
+	}
+
+	/**
+	 * Delete one batch of audit rows stored before this time.
+	 *
+	 * A row stored at exactly `$before` is kept.
+	 *
+	 * @param string $before UTC `Y-m-d H:i:s` cutoff.
+	 */
+	private function delete_audit_before( string $before ): int {
+		global $wpdb;
+
+		$table = Schema::audit_table();
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE created_at < %s ORDER BY created_at ASC, id ASC LIMIT %d",
+				$before,
+				$this->batch_size
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return is_int( $deleted ) ? $deleted : 0;
+	}
+
+	/**
+	 * Whether an audit row is still older than this time.
+	 *
+	 * @param string $before UTC `Y-m-d H:i:s` cutoff.
+	 */
+	private function has_expired_audit( string $before ): bool {
+		global $wpdb;
+
+		$table = Schema::audit_table();
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
+		$found = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE created_at < %s LIMIT 1",
+				$before
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return is_numeric( $found );
 	}
 
 	/**

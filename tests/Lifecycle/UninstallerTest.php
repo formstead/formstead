@@ -11,6 +11,7 @@ use Formstead\Database\Migrator;
 use Formstead\Database\Schema;
 use Formstead\Delivery\Scheduler;
 use Formstead\Lifecycle\Uninstaller;
+use Formstead\Privacy\IdentityBackfill;
 use Formstead\Retention\RetentionRunner;
 use Formstead\Retention\RetentionScheduler;
 use Formstead\Security\Capabilities;
@@ -56,8 +57,11 @@ final class UninstallerTest extends MigrationTestCase {
 
 		Uninstaller::wipe();
 
-		$this->assertContains( Schema::forms_table(), $this->table_names() );
-		$this->assertContains( Schema::submissions_table(), $this->table_names() );
+		$tables = $this->table_names();
+		$this->assertContains( Schema::forms_table(), $tables );
+		$this->assertContains( Schema::submissions_table(), $tables );
+		$this->assertContains( Schema::identities_table(), $tables );
+		$this->assertContains( Schema::audit_table(), $tables );
 		$this->assertSame( (string) Schema::VERSION, (string) get_option( Schema::VERSION_OPTION ) );
 		$this->assertIsArray( get_option( IpHasher::OPTION ) );
 		$role = get_role( 'administrator' );
@@ -84,8 +88,19 @@ final class UninstallerTest extends MigrationTestCase {
 		Capabilities::grant_to_administrator();
 		RetentionScheduler::ensure();
 		Scheduler::ensure_sweep();
+		update_option(
+			Migrator::IDENTITY_BACKFILL_OPTION,
+			array(
+				'status'   => 'pending',
+				'after_id' => 0,
+				'until_id' => 1,
+			),
+			false
+		);
+		IdentityBackfill::ensure();
 		$this->assertNotFalse( wp_next_scheduled( RetentionScheduler::HOOK ) );
 		$this->assertNotFalse( wp_next_scheduled( Scheduler::SWEEP ) );
+		$this->assertNotFalse( wp_next_scheduled( IdentityBackfill::HOOK ) );
 
 		Uninstaller::wipe();
 
@@ -93,6 +108,8 @@ final class UninstallerTest extends MigrationTestCase {
 		foreach ( Schema::tables() as $table ) {
 			$this->assertNotContains( $table, $tables, $table );
 		}
+		$this->assertNotContains( Schema::identities_table(), $tables );
+		$this->assertNotContains( Schema::audit_table(), $tables );
 		$this->assertFalse( get_option( Schema::VERSION_OPTION ) );
 		$this->assertFalse( get_option( Uninstaller::OPTION ) );
 		$this->assertFalse( get_option( RetentionRunner::REPORT_OPTION ) );
@@ -106,6 +123,8 @@ final class UninstallerTest extends MigrationTestCase {
 		}
 		$this->assertFalse( wp_next_scheduled( RetentionScheduler::HOOK ) );
 		$this->assertFalse( wp_next_scheduled( Scheduler::SWEEP ) );
+		$this->assertFalse( wp_next_scheduled( IdentityBackfill::HOOK ) );
+		$this->assertFalse( get_option( Migrator::IDENTITY_BACKFILL_OPTION ) );
 	}
 
 	/**
