@@ -7,7 +7,9 @@
 
 namespace Formstead\Tests\Forms;
 
+use Formstead\Forms\Field;
 use Formstead\Forms\FieldType;
+use Formstead\Forms\Form;
 use Formstead\Forms\FormInput;
 use WP_UnitTestCase;
 
@@ -309,6 +311,81 @@ final class FormInputTest extends WP_UnitTestCase {
 			$result                  = FormInput::validate( $input );
 			$this->assertArrayHasKey( 'retention_days', $result->errors(), $days );
 		}
+	}
+
+	/**
+	 * A new email field identifies the person unless the editor turns that off.
+	 *
+	 * A text field is not identifying, even when the request asks for it.
+	 */
+	public function test_a_new_email_field_identifies_the_person_by_default(): void {
+		$input             = $this->input();
+		$input['fields'][] = array(
+			'name'       => 'email',
+			'label'      => 'Email',
+			'type'       => 'email',
+			'max_length' => '255',
+		);
+		$input['fields'][] = array(
+			'name'       => 'sender',
+			'label'      => 'Sender',
+			'type'       => 'text',
+			'max_length' => '255',
+			'identifies' => '1',
+		);
+
+		$marked = FormInput::validate( $input );
+		$this->assertTrue( $marked->is_valid() );
+		$this->assertSame( array( 'email' ), $marked->form()->identity_fields() );
+
+		$input['fields'][2]['identifies'] = '0';
+		$plain                            = FormInput::validate( $input );
+		$this->assertTrue( $plain->is_valid() );
+		$this->assertSame( array(), $plain->form()->identity_fields() );
+	}
+
+	/**
+	 * An existing mark stays when the request does not mention it, and an explicit 0 removes it.
+	 */
+	public function test_an_existing_identifying_mark_is_kept_until_it_is_turned_off(): void {
+		$existing = new Form(
+			4,
+			'fs_abcdefghijklmnop',
+			'Contact',
+			true,
+			array( new Field( 'email', 'Email', FieldType::Email, true, 255 ) ),
+			2,
+			'https://example.com/thanks',
+			'2026-10-21 00:00:00',
+			'2026-10-21 00:00:00',
+			null,
+			0,
+			null,
+			30,
+			array( 'email' )
+		);
+		$input    = array(
+			'name'           => 'Contact',
+			'success_url'    => 'https://example.com/thanks',
+			'schema_version' => '2',
+			'fields'         => array(
+				array(
+					'name'       => 'email',
+					'label'      => 'Email',
+					'type'       => 'email',
+					'max_length' => '255',
+				),
+			),
+		);
+
+		$kept = FormInput::validate( $input, $existing );
+		$this->assertTrue( $kept->is_valid() );
+		$this->assertSame( array( 'email' ), $kept->form()->identity_fields() );
+
+		$input['fields'][0]['identifies'] = '0';
+		$cleared                          = FormInput::validate( $input, $existing );
+		$this->assertTrue( $cleared->is_valid() );
+		$this->assertSame( array(), $cleared->form()->identity_fields() );
 	}
 
 	/**

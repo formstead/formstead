@@ -99,6 +99,12 @@
 
 		var row = select.closest( '[data-field-row]' );
 		if ( row ) {
+			if ( 'email' === select.value ) {
+				var identifies = row.querySelector( 'input[type="checkbox"][name$="[identifies]"]' );
+				if ( identifies ) {
+					identifies.checked = true;
+				}
+			}
 			showSettings( row );
 		}
 		refreshReplyTo();

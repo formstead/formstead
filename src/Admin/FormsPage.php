@@ -322,7 +322,7 @@ final class FormsPage {
 	 * @return array<string, string>
 	 */
 	private static function posted_row( array $row ): array {
-		return array(
+		$posted = array(
 			'name'       => self::text_value( $row['name'] ?? null ),
 			'label'      => self::label_value( $row['label'] ?? null ),
 			'type'       => self::text_value( $row['type'] ?? null ),
@@ -335,6 +335,11 @@ final class FormsPage {
 			'multiple'   => isset( $row['multiple'] ) ? '1' : '',
 			'remove'     => isset( $row['remove'] ) ? '1' : '',
 		);
+		if ( array_key_exists( 'identifies', $row ) ) {
+			$posted['identifies'] = '1' === (string) $row['identifies'] ? '1' : '0';
+		}
+
+		return $posted;
 	}
 
 	/**
@@ -398,9 +403,10 @@ final class FormsPage {
 			);
 		}
 
-		$rows = array();
+		$rows     = array();
+		$identity = $form->identity_fields();
 		foreach ( $form->fields() as $field ) {
-			$rows[] = self::row_from_field( $field );
+			$rows[] = self::row_from_field( $field, $identity );
 		}
 
 		$minute = $form->protection()->rate_per_minute();
@@ -442,10 +448,11 @@ final class FormsPage {
 	/**
 	 * One edit-form row for a saved field.
 	 *
-	 * @param Field $field Saved field.
+	 * @param Field    $field    Saved field.
+	 * @param string[] $identity Identifying field names.
 	 * @return array<string, string>
 	 */
-	private static function row_from_field( Field $field ): array {
+	private static function row_from_field( Field $field, array $identity ): array {
 		$lines = array();
 		foreach ( $field->settings()->options() as $option ) {
 			$lines[] = $option['value'] . '|' . $option['label'];
@@ -463,6 +470,7 @@ final class FormsPage {
 			'options'    => implode( "\n", $lines ),
 			'multiple'   => $field->settings()->multiple() ? '1' : '',
 			'remove'     => '',
+			'identifies' => in_array( $field->name(), $identity, true ) ? '1' : '0',
 		);
 	}
 
@@ -493,6 +501,7 @@ final class FormsPage {
 					'options'    => isset( $row['options'] ) ? (string) $row['options'] : '',
 					'multiple'   => isset( $row['multiple'] ) && '1' === (string) $row['multiple'] ? '1' : '',
 					'remove'     => isset( $row['remove'] ) && '1' === (string) $row['remove'] ? '1' : '',
+					'identifies' => isset( $row['identifies'] ) && '1' === (string) $row['identifies'] ? '1' : '0',
 				);
 			}
 		}
@@ -509,6 +518,7 @@ final class FormsPage {
 			'options'    => '',
 			'multiple'   => '',
 			'remove'     => '',
+			'identifies' => '1',
 		);
 		$last  = $normalized[ count( $normalized ) - 1 ] ?? null;
 		if ( ! is_array( $last ) || '' !== $last['name'] || '' !== $last['label'] || '' !== $last['type'] || '' !== $last['max_length'] || '' !== $last['min'] || '' !== $last['max'] || '' !== $last['scale'] || '' !== $last['options'] ) {

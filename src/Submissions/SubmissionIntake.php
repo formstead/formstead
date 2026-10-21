@@ -12,6 +12,8 @@ use Formstead\Database\Transaction;
 use Formstead\Delivery\DeliveryRepository;
 use Formstead\Delivery\Scheduler;
 use Formstead\Forms\Form;
+use Formstead\Privacy\IdentityHasher;
+use Formstead\Privacy\IdentityRepository;
 use Formstead\Security\Limits;
 use WP_Error;
 
@@ -142,6 +144,19 @@ final class SubmissionIntake {
 					__( 'The submission could not be saved.', 'formstead' )
 				);
 			}
+		}
+
+		$indexed = ( new IdentityRepository() )->insert_for_submission(
+			$saved->id(),
+			$form->id(),
+			IdentityHasher::hashes( $form, $values ),
+			$saved->created_at()
+		);
+		if ( ! $indexed ) {
+			return new WP_Error(
+				'formstead_submission_save_failed',
+				__( 'The submission could not be saved.', 'formstead' )
+			);
 		}
 
 		$delivery_id = null;

@@ -8,6 +8,7 @@
 namespace Formstead\Forms;
 
 use Formstead\Database\Schema;
+use Formstead\Privacy\IdentityRepository;
 use WP_Error;
 
 /**
@@ -47,7 +48,7 @@ final class FormRepository {
 
 		$table = Schema::forms_table();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, identifier.
-		$rows = $wpdb->get_results( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days FROM {$table} ORDER BY updated_at DESC, id DESC", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields FROM {$table} ORDER BY updated_at DESC, id DESC", ARRAY_A );
 
 		if ( ! is_array( $rows ) ) {
 			return array();
@@ -139,8 +140,9 @@ final class FormRepository {
 					'reply_to_field'       => $form->notifications()->reply_to_field(),
 					'mail_include_content' => $form->notifications()->includes_content() ? 1 : 0,
 					'retention_days'       => $form->retention_days(),
+					'identity_fields'      => self::identity_json( $form ),
 				),
-				array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%d', '%d' )
+				array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%d', '%d', '%s' )
 			);
 			$duplicate = false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
 			$wpdb->suppress_errors( $previous );
@@ -167,7 +169,8 @@ final class FormRepository {
 					$form->protection(),
 					0,
 					$form->notifications(),
-					$form->retention_days()
+					$form->retention_days(),
+					$form->identity_fields()
 				);
 			}
 
@@ -244,12 +247,13 @@ final class FormRepository {
 				'reply_to_field'       => $form->notifications()->reply_to_field(),
 				'mail_include_content' => $form->notifications()->includes_content() ? 1 : 0,
 				'retention_days'       => $form->retention_days(),
+				'identity_fields'      => self::identity_json( $form ),
 			),
 			array(
 				'id'             => $form->id(),
 				'schema_version' => $form->schema_version(),
 			),
-			array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d', '%d' ),
+			array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d', '%d', '%s' ),
 			array( '%d', '%d' )
 		);
 		$wpdb->suppress_errors( $previous );
@@ -268,6 +272,11 @@ final class FormRepository {
 
 			$unchanged = $this->find_by_id( $form->id() );
 			if ( ! $fields_changed && $unchanged instanceof Form && $unchanged->schema_version() === $form->schema_version() ) {
+				$cleared = self::clear_identity( $form );
+				if ( $cleared instanceof WP_Error ) {
+					return $cleared;
+				}
+
 				return $unchanged;
 			}
 
@@ -275,6 +284,11 @@ final class FormRepository {
 				'formstead_form_conflict',
 				__( 'This form was saved somewhere else. Reload the screen and try again.', 'formstead' )
 			);
+		}
+
+		$cleared = self::clear_identity( $form );
+		if ( $cleared instanceof WP_Error ) {
+			return $cleared;
 		}
 
 		return new Form(
@@ -290,7 +304,8 @@ final class FormRepository {
 			$form->protection(),
 			$current->honeypot_rejections(),
 			$form->notifications(),
-			$form->retention_days()
+			$form->retention_days(),
+			$form->identity_fields()
 		);
 	}
 
@@ -362,10 +377,10 @@ final class FormRepository {
 		$row   = null;
 		if ( 'id' === $column ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days FROM {$table} WHERE id = %d", $value ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields FROM {$table} WHERE id = %d", $value ), ARRAY_A );
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days FROM {$table} WHERE public_id = %s", $value ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days, identity_fields FROM {$table} WHERE public_id = %s", $value ), ARRAY_A );
 		}
 
 		return $this->hydrate( is_array( $row ) ? $row : null );
@@ -408,8 +423,69 @@ final class FormRepository {
 			$protection,
 			(int) ( $row['honeypot_rejections'] ?? 0 ),
 			$notifications,
-			(int) ( $row['retention_days'] ?? 30 )
+			(int) ( $row['retention_days'] ?? 30 ),
+			self::identity_names( $row['identity_fields'] ?? null )
 		);
+	}
+
+	/**
+	 * JSON list of identifying field names.
+	 *
+	 * @param Form $form Form being stored.
+	 */
+	private static function identity_json( Form $form ): string {
+		$json = wp_json_encode( $form->identity_fields() );
+		return is_string( $json ) ? $json : '[]';
+	}
+
+	/**
+	 * Field names stored in the identity column.
+	 *
+	 * @param mixed $stored JSON list, or null when the column is empty.
+	 * @return list<string>
+	 */
+	private static function identity_names( mixed $stored ): array {
+		if ( ! is_string( $stored ) || '' === $stored ) {
+			return array();
+		}
+
+		$decoded = json_decode( $stored, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+
+		$names = array();
+		foreach ( $decoded as $name ) {
+			if ( is_string( $name ) && 1 === preg_match( '/\A[a-z][a-z0-9_]{0,63}\z/', $name ) ) {
+				$names[ $name ] = $name;
+			}
+		}
+
+		return array_values( $names );
+	}
+
+	/**
+	 * Drop index rows for fields that are no longer identifying.
+	 *
+	 * The form row is already saved. A later save runs this again, so a failed
+	 * delete can be repeated without restoring the mark.
+	 *
+	 * @param Form $form Form that was saved.
+	 */
+	private static function clear_identity( Form $form ): ?WP_Error {
+		if ( $form->id() < 1 ) {
+			return null;
+		}
+
+		$cleared = ( new IdentityRepository() )->delete_except( $form->id(), $form->identity_fields() );
+		if ( ! $cleared ) {
+			return new WP_Error(
+				'formstead_identity_index_failed',
+				__( 'The form was saved, but the identity index could not be updated.', 'formstead' )
+			);
+		}
+
+		return null;
 	}
 
 	/**
