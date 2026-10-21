@@ -77,6 +77,10 @@ test( 'admin screens have no accessibility violations', async ( { page } ) => {
 	await page.goto( '/wp-admin/admin.php?page=formstead-settings' );
 	await expect( page.getByRole( 'heading', { name: 'Settings' } ) ).toBeVisible();
 	await expectAccessible( page, '#wpbody-content' );
+
+	await page.goto( '/wp-admin/admin.php?page=formstead-audit' );
+	await expect( page.getByRole( 'heading', { name: 'Audit log' } ) ).toBeVisible();
+	await expectAccessible( page, '#wpbody-content' );
 } );
 
 test( 'the field editor can add and remove a row from the keyboard', async ( { page } ) => {
