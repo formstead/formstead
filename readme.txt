@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.8.1
+Stable tag: 0.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,13 +14,13 @@ Receive form submissions from static and headless sites on an existing WordPress
 
 Formstead receives form submissions from static and headless sites on an existing WordPress install. Plain HTML, Astro, and Next.js post to WordPress. WordPress stores submissions in a private inbox. The site frontend stays with its author.
 
-Version 0.7.0 is the technical MVP. The source repository includes HTML and Astro examples that post with and without JavaScript, including from another site. The installable package does not include those examples. Version 0.6.0 keeps each form's submissions for a number of days, 30 by default. Forms that already exist get the same 30 days, and the first cleanup deletes older submissions. Use 0 to keep a form's submissions until someone deletes them. Settings shows the last cleanup and warns when it is overdue. The inbox lists submissions; opening a new one marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
+Version 0.9.0 ends Core beta. It adds an authenticated submissions API and a signed webhook for each form. The Next.js example and the integration notes stay in the source repository. Version 0.7.0 is the technical MVP. The source repository includes HTML and Astro examples that post with and without JavaScript, including from another site. The installable package does not include those examples. Version 0.6.0 keeps each form's submissions for a number of days, 30 by default. Forms that already exist get the same 30 days, and the first cleanup deletes older submissions. Use 0 to keep a form's submissions until someone deletes them. Settings shows the last cleanup and warns when it is overdue. The inbox lists submissions; opening a new one marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
 
 Network activation on WordPress Multisite is not supported.
 
 == Privacy ==
 
-Formstead stores submissions on this site. An email field can be marked as identifying the person. That address is indexed as an HMAC so the inbox can search for an exact address and so WordPress can export or erase that person's submissions. The index does not keep a second copy of the address. Erasure deletes the whole submission, including a waiting notification. An audit log records the action, and other form, settings, export, deletion, and retention actions, without the field values or the address. Audit rows are kept for 180 days. Submissions follow the retention period set on the form. A host backup, a server log, and mail already handed to the site mail system are outside the plugin. The source repository describes these flows in `docs/data-flows.md`. The plugin suggests wording for the site privacy policy.
+Formstead stores submissions on this site. An email field can be marked as identifying the person. That address is indexed as an HMAC so the inbox can search for an exact address and so WordPress can export or erase that person's submissions. The index does not keep a second copy of the address. Erasure deletes the whole submission, including a waiting notification. An audit log records the action, and other form, settings, export, deletion, and retention actions, without the field values or the address. Audit rows are kept for 180 days. Submissions follow the retention period set on the form. A host backup, a server log, and mail already handed to the site mail system are outside the plugin. A form can also send a signed webhook. Field values are included only when that option is on, and the signing secret is stored on the form. The source repository describes these flows in `docs/data-flows.md`. The plugin suggests wording for the site privacy policy.
 
 == Installation ==
 
@@ -39,6 +39,11 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.9.0 =
+* Add an authenticated submissions API addressed by receipt id. It requires HTTPS outside local development, uses a WordPress application password, and sends no CORS headers. Reading a submission does not mark it read.
+* Add a signed webhook per form. Private addresses and redirects are refused. A waiting webhook is cancelled when the submission is deleted, and retries stop after five attempts.
+* Add a Next.js example and integration notes in the source repository. The installable package does not include them.
 
 = 0.8.1 =
 * Index submissions already passed when an email field is marked during a backfill.
@@ -132,6 +137,9 @@ No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 * Initial installable skeleton.
 
 == Upgrade Notice ==
+
+= 0.9.0 =
+Existing forms do not send a webhook until a URL is saved. The database upgrade adds the webhook columns and does not change stored submissions.
 
 = 0.8.1 =
 Personal-data export and erase no longer treat a failed index read as an empty result. If a form's identity index was left unfinished after a failed save, run `wp formstead identities rebuild --form=<public_id>`.
