@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.6.0
+Stable tag: 0.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -35,6 +35,12 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.6.1 =
+* Keep the retention lock for the whole run, so a long cleanup is not started twice.
+* `wp formstead retention run` reports every deleted count, warns when rows are still waiting, and exits with an error when deletion fails.
+* Do not warn that retention is overdue before the first scheduled run. Settings shows when that run will happen.
+* On a network, uninstall removes capabilities only on sites that chose to delete their data.
 
 = 0.6.0 =
 * Keep each form's submissions for a number of days, 30 by default. Use 0 to keep them until someone deletes them.
