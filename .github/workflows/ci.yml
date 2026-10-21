@@ -60,7 +60,7 @@ jobs:
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
 
       - name: PHPUnit
-        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain,multisite
 
       - name: PHPCS
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs
@@ -133,7 +133,7 @@ jobs:
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
 
       - name: PHPUnit
-        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain,multisite
 
   mysql:
     name: PHPUnit on MySQL 8.0
@@ -172,13 +172,18 @@ jobs:
 
       - name: PHPUnit
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
-        run: vendor/bin/phpunit --exclude-group explain
+        run: vendor/bin/phpunit --exclude-group explain,multisite
         env:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
 
       - name: PHPUnit including index checks
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: vendor/bin/phpunit
+        run: vendor/bin/phpunit --exclude-group multisite
+        env:
+          WP_TESTS_DIR: /tmp/wordpress-tests-lib
+
+      - name: PHPUnit multisite
+        run: WP_MULTISITE=1 vendor/bin/phpunit --group multisite
         env:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
 
@@ -340,8 +345,8 @@ jobs:
 
           assert_schema
           db_version="$(wp option get formstead_db_version --path=wordpress)"
-          if [[ "$db_version" != "5" ]]; then
-            echo "Expected formstead_db_version 5, got ${db_version}." >&2
+          if [[ "$db_version" != "6" ]]; then
+            echo "Expected formstead_db_version 6, got ${db_version}." >&2
             exit 1
           fi
 
@@ -699,6 +704,43 @@ jobs:
           wp plugin deactivate formstead --path=wordpress
           wp plugin uninstall formstead --path=wordpress
           assert_schema
+          assert_debug_log
+
+          # Opt-in uninstall removes tables, options, and capabilities.
+          wp plugin install formstead.zip --activate --path=wordpress
+          wp option update formstead_delete_data_on_uninstall 1 --path=wordpress
+          wp plugin uninstall formstead --deactivate --path=wordpress
+
+          found="$(wp db query "SHOW TABLES" --skip-column-names --path=wordpress)"
+          while IFS= read -r table; do
+            if [[ "$table" == "${prefix}formstead_"* ]]; then
+              echo "Table ${table} remained after the opt-in uninstall." >&2
+              exit 1
+            fi
+          done <<<"$found"
+
+          options="$(wp db query "SELECT option_name FROM ${prefix}options" --skip-column-names --path=wordpress)"
+          while IFS= read -r name; do
+            if [[ "$name" == formstead_* || "$name" == _transient_formstead_* || "$name" == _transient_timeout_formstead_* ]]; then
+              echo "Option ${name} remained after the opt-in uninstall." >&2
+              exit 1
+            fi
+          done <<<"$options"
+
+          wp eval '
+            $role = get_role( "administrator" );
+            if ( ! $role ) {
+              fwrite( STDERR, "The administrator role is missing.\n" );
+              exit( 1 );
+            }
+            foreach ( array( "formstead_manage_forms", "formstead_read_submissions", "formstead_export_submissions", "formstead_delete_submissions" ) as $cap ) {
+              if ( $role->has_cap( $cap ) ) {
+                fwrite( STDERR, "Capability {$cap} remained after uninstall.\n" );
+                exit( 1 );
+              }
+            }
+          ' --path=wordpress
+          echo "Opt-in uninstall removed Formstead data."
           assert_debug_log
 
       - name: Upload ZIP

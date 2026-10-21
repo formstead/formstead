@@ -18,6 +18,16 @@ final class FormInput {
 	private const NAME_PATTERN = '/^[a-z][a-z0-9_]{0,63}$/';
 
 	/**
+	 * Days used when the editor does not send a retention period.
+	 */
+	private const DEFAULT_RETENTION_DAYS = 30;
+
+	/**
+	 * Longest retention period the editor accepts. Zero keeps submissions.
+	 */
+	private const MAX_RETENTION_DAYS = 3650;
+
+	/**
 	 * Validate a form save.
 	 *
 	 * An empty trailing field row is ignored. A row marked for removal is ignored.
@@ -42,9 +52,10 @@ final class FormInput {
 			$errors['success_url'] = __( 'Enter an absolute http or https URL.', 'formstead' );
 		}
 
-		$fields        = self::fields( $input, $errors );
-		$protection    = self::protection( $input, $errors );
-		$notifications = self::notifications( $input, $fields, $errors );
+		$fields         = self::fields( $input, $errors );
+		$protection     = self::protection( $input, $errors );
+		$notifications  = self::notifications( $input, $fields, $errors );
+		$retention_days = self::retention_days( $input, $errors );
 
 		if ( array() !== $errors ) {
 			return new FormInputResult( null, $errors );
@@ -62,7 +73,8 @@ final class FormInput {
 			$existing instanceof Form ? $existing->updated_at() : '',
 			$protection,
 			$existing instanceof Form ? $existing->honeypot_rejections() : 0,
-			$notifications
+			$notifications,
+			$retention_days
 		);
 
 		return new FormInputResult( $form, array() );
@@ -165,6 +177,36 @@ final class FormInput {
 
 		$errors['reply_to_field'] = __( 'Choose an email field.', 'formstead' );
 		return null;
+	}
+
+	/**
+	 * Days to keep submissions.
+	 *
+	 * A missing value uses 30 days. An empty value, a number above 3650, or
+	 * anything that is not a whole number is rejected. Zero keeps submissions
+	 * until someone deletes them.
+	 *
+	 * @param array<string, mixed>  $input  Posted form values.
+	 * @param array<string, string> $errors Error map, updated in place.
+	 */
+	private static function retention_days( array $input, array &$errors ): int {
+		if ( ! array_key_exists( 'retention_days', $input ) ) {
+			return self::DEFAULT_RETENTION_DAYS;
+		}
+
+		$text = is_string( $input['retention_days'] ) ? trim( $input['retention_days'] ) : '';
+		if ( 1 !== preg_match( '/^[0-9]+$/', $text ) ) {
+			$errors['retention_days'] = __( 'Enter a whole number of days from 0 to 3650.', 'formstead' );
+			return self::DEFAULT_RETENTION_DAYS;
+		}
+
+		$days = (int) $text;
+		if ( $days > self::MAX_RETENTION_DAYS ) {
+			$errors['retention_days'] = __( 'Enter a whole number of days from 0 to 3650.', 'formstead' );
+			return self::DEFAULT_RETENTION_DAYS;
+		}
+
+		return $days;
 	}
 
 	/**

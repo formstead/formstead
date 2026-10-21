@@ -22,15 +22,18 @@ final class Menu {
 
 	public const FORMS_SLUG = 'formstead-forms';
 
+	public const SETTINGS_SLUG = 'formstead-settings';
+
 	/**
 	 * Hook the menu on `admin_menu`.
 	 */
 	public static function register(): void {
 		add_action( 'admin_menu', array( self::class, 'add_pages' ) );
+		add_action( 'admin_notices', array( SettingsPage::class, 'notice' ) );
 	}
 
 	/**
-	 * Add the inbox and forms screens.
+	 * Add the inbox, forms, and settings screens.
 	 */
 	public static function add_pages(): void {
 		$unread = UnreadCounter::count();
@@ -69,6 +72,19 @@ final class Menu {
 		if ( is_string( $forms_hook ) ) {
 			FormsPage::set_hook( $forms_hook );
 			add_action( 'load-' . $forms_hook, array( FormsPage::class, 'handle_load' ) );
+		}
+
+		$settings_hook = add_submenu_page(
+			self::MENU_SLUG,
+			__( 'Settings', 'formstead' ),
+			__( 'Settings', 'formstead' ),
+			Capabilities::MANAGE_FORMS,
+			self::SETTINGS_SLUG,
+			array( SettingsPage::class, 'render' )
+		);
+
+		if ( is_string( $settings_hook ) ) {
+			add_action( 'load-' . $settings_hook, array( SettingsPage::class, 'handle_load' ) );
 		}
 
 		add_action( 'admin_enqueue_scripts', array( FormsPage::class, 'enqueue' ) );

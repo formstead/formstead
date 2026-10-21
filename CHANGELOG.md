@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-21
+
+### Fixed
+
+- A long retention run keeps its lock, so a second cleanup does not start after 15 minutes.
+- `wp formstead retention run` lists every deleted count, warns when rows are still waiting, and exits with an error when submissions could not be deleted.
+- Settings does not warn that retention is overdue before the first scheduled run. Until then it shows when that run will happen.
+- Uninstall on a network removes capabilities only on sites that opted in.
+
+## [0.6.0] - 2026-10-21
+
+### Added
+
+- Each form keeps submissions for a number of days, 30 by default. Zero keeps them until someone deletes them. The period covers every status, including archived and spam.
+- Spam is deleted after the shorter of the form period and `FORMSTEAD_SPAM_RETENTION_DAYS` (7 days). Finished deliveries are deleted after `FORMSTEAD_DELIVERY_RETENTION_DAYS` (30 days). Expired idempotency keys and rate-limit counters are deleted on the same run.
+- Hourly cleanup through WP-Cron, and `wp formstead retention run` for system cron. A run that finds more rows than it can delete reports a backlog.
+- Settings shows the last cleanup and warns when the last full run is older than 48 hours or a backlog has lasted longer than 24 hours.
+- An option to delete all Formstead data when the plugin is uninstalled. It stays off until someone who can activate plugins turns it on. Uninstall without the option keeps the data.
+
+### Changed
+
+- Forms that already exist keep submissions for 30 days. The first cleanup deletes older submissions.
+
 ## [0.5.1] - 2026-10-21
 
 ### Fixed
@@ -137,7 +160,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/formstead/formstead/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/formstead/formstead/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/formstead/formstead/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/formstead/formstead/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/formstead/formstead/compare/v0.4.0...v0.4.1

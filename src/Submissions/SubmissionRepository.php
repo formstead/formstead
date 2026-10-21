@@ -333,6 +333,63 @@ final class SubmissionRepository {
 	}
 
 	/**
+	 * Ids stored before this time for one form, oldest first.
+	 *
+	 * A row stored at exactly `$before` is kept.
+	 *
+	 * @param int    $form_id Form id.
+	 * @param string $before  UTC `Y-m-d H:i:s` cutoff.
+	 * @param int    $limit   Maximum ids.
+	 * @return int[]
+	 */
+	public function ids_created_before( int $form_id, string $before, int $limit ): array {
+		global $wpdb;
+
+		if ( $form_id < 1 || $limit < 1 ) {
+			return array();
+		}
+
+		$table = Schema::submissions_table();
+		$ids   = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE form_id = %d AND created_at < %s ORDER BY created_at ASC, id ASC LIMIT %d",
+				$form_id,
+				$before,
+				$limit
+			)
+		);
+
+		return $this->int_list( $ids );
+	}
+
+	/**
+	 * Spam ids stored before this time, oldest first, from every form.
+	 *
+	 * @param string $before UTC `Y-m-d H:i:s` cutoff.
+	 * @param int    $limit  Maximum ids.
+	 * @return int[]
+	 */
+	public function spam_ids_created_before( string $before, int $limit ): array {
+		global $wpdb;
+
+		if ( $limit < 1 ) {
+			return array();
+		}
+
+		$table = Schema::submissions_table();
+		$ids   = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE status = %s AND created_at < %s ORDER BY created_at ASC, id ASC LIMIT %d",
+				SubmissionStatus::SPAM,
+				$before,
+				$limit
+			)
+		);
+
+		return $this->int_list( $ids );
+	}
+
+	/**
 	 * Load one submission. The caller marks a new row as read.
 	 *
 	 * A locking read sees a row committed by another connection after this
@@ -414,6 +471,28 @@ final class SubmissionRepository {
 
 		$prepared = $wpdb->prepare( $sql, ...$args );
 		return is_string( $prepared ) ? $prepared : $sql;
+	}
+
+	/**
+	 * Integer ids from a wpdb column.
+	 *
+	 * @param mixed $ids Values from get_col().
+	 * @return int[]
+	 */
+	private function int_list( mixed $ids ): array {
+		if ( ! is_array( $ids ) ) {
+			return array();
+		}
+
+		$clean = array();
+		foreach ( $ids as $id ) {
+			$number = (int) $id;
+			if ( $number > 0 ) {
+				$clean[] = $number;
+			}
+		}
+
+		return $clean;
 	}
 
 	/**

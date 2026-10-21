@@ -26,6 +26,7 @@ $schema_version       = isset( $values['schema_version'] ) ? (int) $values['sche
 $name                 = isset( $values['name'] ) ? (string) $values['name'] : '';
 $is_enabled           = isset( $values['is_enabled'] ) && '1' === (string) $values['is_enabled'];
 $success_url          = isset( $values['success_url'] ) ? (string) $values['success_url'] : '';
+$retention_days       = isset( $values['retention_days'] ) ? (string) $values['retention_days'] : '30';
 $allowed_origins      = isset( $values['allowed_origins'] ) ? (string) $values['allowed_origins'] : '';
 $rate_per_minute      = isset( $values['rate_per_minute'] ) ? (string) $values['rate_per_minute'] : '';
 $rate_per_hour        = isset( $values['rate_per_hour'] ) ? (string) $values['rate_per_hour'] : '';
@@ -98,6 +99,17 @@ $next_index       = count( $rows );
 						<p class="description"><?php echo esc_html( $errors['success_url'] ); ?></p>
 					<?php else : ?>
 						<p class="description"><?php echo esc_html__( 'Absolute http or https URL. The form never redirects to an address from the request.', 'formstead' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="formstead-retention"><?php echo esc_html__( 'Keep submissions for (days)', 'formstead' ); ?></label></th>
+				<td>
+					<input name="retention_days" id="formstead-retention" type="number" min="0" max="3650" class="small-text" value="<?php echo esc_attr( $retention_days ); ?>" required>
+					<?php if ( isset( $errors['retention_days'] ) ) : ?>
+						<p class="description"><?php echo esc_html( $errors['retention_days'] ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php echo esc_html__( 'Submissions older than this are deleted. Use 0 to keep them until someone deletes them.', 'formstead' ); ?></p>
 					<?php endif; ?>
 				</td>
 			</tr>

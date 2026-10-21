@@ -164,6 +164,60 @@ final class DeliveryRepository {
 	}
 
 	/**
+	 * Delete finished deliveries last changed before this time.
+	 *
+	 * Pending and processing rows are left alone. A row changed at exactly
+	 * `$before` is kept.
+	 *
+	 * @param string $before UTC `Y-m-d H:i:s` cutoff.
+	 * @param int    $limit  Maximum rows.
+	 */
+	public function delete_finished_before( string $before, int $limit ): int {
+		global $wpdb;
+
+		$limit   = max( 1, $limit );
+		$table   = Schema::deliveries_table();
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE status IN (%s, %s, %s) AND updated_at < %s ORDER BY updated_at ASC, id ASC LIMIT %d",
+				DeliveryStatus::HANDED_OFF,
+				DeliveryStatus::FAILED,
+				DeliveryStatus::CANCELLED,
+				$before,
+				$limit
+			)
+		);
+		if ( ! is_int( $deleted ) ) {
+			$this->log_failure( 0 );
+			return 0;
+		}
+
+		return $deleted;
+	}
+
+	/**
+	 * Whether a finished delivery is still older than this time.
+	 *
+	 * @param string $before UTC `Y-m-d H:i:s` cutoff.
+	 */
+	public function has_finished_before( string $before ): bool {
+		global $wpdb;
+
+		$table = Schema::deliveries_table();
+		$found = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE status IN (%s, %s, %s) AND updated_at < %s LIMIT 1",
+				DeliveryStatus::HANDED_OFF,
+				DeliveryStatus::FAILED,
+				DeliveryStatus::CANCELLED,
+				$before
+			)
+		);
+
+		return is_numeric( $found );
+	}
+
+	/**
 	 * Load one delivery.
 	 *
 	 * @param int $id Delivery id.

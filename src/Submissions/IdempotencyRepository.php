@@ -263,19 +263,42 @@ final class IdempotencyRepository {
 	/**
 	 * Delete expired keys, up to one batch.
 	 *
-	 * @param int $now Unix time.
+	 * @param int $now   Unix time.
+	 * @param int $limit Maximum rows. A full batch means older keys may remain.
 	 */
-	public function prune_expired( int $now ): void {
+	public function prune_expired( int $now, int $limit = self::PRUNE_BATCH ): int {
 		global $wpdb;
 
-		$table = Schema::idempotency_keys_table();
-		$wpdb->query(
+		$limit   = max( 1, $limit );
+		$table   = Schema::idempotency_keys_table();
+		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$table} WHERE expires_at <= %d LIMIT %d",
 				$now,
-				self::PRUNE_BATCH
+				$limit
 			)
 		);
+
+		return is_int( $deleted ) ? $deleted : 0;
+	}
+
+	/**
+	 * Whether an expired key is still stored.
+	 *
+	 * @param int $now Unix time.
+	 */
+	public function has_expired( int $now ): bool {
+		global $wpdb;
+
+		$table = Schema::idempotency_keys_table();
+		$found = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE expires_at <= %d LIMIT 1",
+				$now
+			)
+		);
+
+		return is_numeric( $found );
 	}
 
 	/**

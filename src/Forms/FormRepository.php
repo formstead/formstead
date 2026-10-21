@@ -47,7 +47,7 @@ final class FormRepository {
 
 		$table = Schema::forms_table();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, identifier.
-		$rows = $wpdb->get_results( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content FROM {$table} ORDER BY updated_at DESC, id DESC", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days FROM {$table} ORDER BY updated_at DESC, id DESC", ARRAY_A );
 
 		if ( ! is_array( $rows ) ) {
 			return array();
@@ -62,6 +62,44 @@ final class FormRepository {
 		}
 
 		return $forms;
+	}
+
+	/**
+	 * Forms that delete submissions after a number of days.
+	 *
+	 * A period of zero is omitted. Those submissions stay until someone deletes them.
+	 *
+	 * @return list<array{id: int, days: int}>
+	 */
+	public function retention_periods(): array {
+		global $wpdb;
+
+		$table = Schema::forms_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, identifier.
+		$rows = $wpdb->get_results( "SELECT id, retention_days FROM {$table} WHERE retention_days > 0 ORDER BY id ASC", ARRAY_A );
+		if ( ! is_array( $rows ) ) {
+			return array();
+		}
+
+		$periods = array();
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$id   = (int) ( $row['id'] ?? 0 );
+			$days = (int) ( $row['retention_days'] ?? 0 );
+			if ( $id < 1 || $days < 1 ) {
+				continue;
+			}
+
+			$periods[] = array(
+				'id'   => $id,
+				'days' => $days,
+			);
+		}
+
+		return $periods;
 	}
 
 	/**
@@ -100,8 +138,9 @@ final class FormRepository {
 					'notify_recipients'    => $form->notifications()->recipients_json(),
 					'reply_to_field'       => $form->notifications()->reply_to_field(),
 					'mail_include_content' => $form->notifications()->includes_content() ? 1 : 0,
+					'retention_days'       => $form->retention_days(),
 				),
-				array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%d' )
+				array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%d', '%d' )
 			);
 			$duplicate = false !== stripos( (string) $wpdb->last_error, 'Duplicate' );
 			$wpdb->suppress_errors( $previous );
@@ -127,7 +166,8 @@ final class FormRepository {
 					$now,
 					$form->protection(),
 					0,
-					$form->notifications()
+					$form->notifications(),
+					$form->retention_days()
 				);
 			}
 
@@ -203,12 +243,13 @@ final class FormRepository {
 				'notify_recipients'    => $form->notifications()->recipients_json(),
 				'reply_to_field'       => $form->notifications()->reply_to_field(),
 				'mail_include_content' => $form->notifications()->includes_content() ? 1 : 0,
+				'retention_days'       => $form->retention_days(),
 			),
 			array(
 				'id'             => $form->id(),
 				'schema_version' => $form->schema_version(),
 			),
-			array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d' ),
+			array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d', '%d' ),
 			array( '%d', '%d' )
 		);
 		$wpdb->suppress_errors( $previous );
@@ -248,7 +289,8 @@ final class FormRepository {
 			$now,
 			$form->protection(),
 			$current->honeypot_rejections(),
-			$form->notifications()
+			$form->notifications(),
+			$form->retention_days()
 		);
 	}
 
@@ -320,10 +362,10 @@ final class FormRepository {
 		$row   = null;
 		if ( 'id' === $column ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content FROM {$table} WHERE id = %d", $value ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days FROM {$table} WHERE id = %d", $value ), ARRAY_A );
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an identifier.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content FROM {$table} WHERE public_id = %s", $value ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, public_id, name, is_enabled, fields, schema_version, success_url, created_at, updated_at, allowed_origins, rate_per_minute, rate_per_hour, honeypot_rejections, notify_recipients, reply_to_field, mail_include_content, retention_days FROM {$table} WHERE public_id = %s", $value ), ARRAY_A );
 		}
 
 		return $this->hydrate( is_array( $row ) ? $row : null );
@@ -365,7 +407,8 @@ final class FormRepository {
 			(string) ( $row['updated_at'] ?? '' ),
 			$protection,
 			(int) ( $row['honeypot_rejections'] ?? 0 ),
-			$notifications
+			$notifications,
+			(int) ( $row['retention_days'] ?? 30 )
 		);
 	}
 

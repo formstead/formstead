@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.5.1
+Stable tag: 0.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Receive form submissions from static and headless sites on an existing WordPress
 
 Formstead receives form submissions from static and headless sites on an existing WordPress install. Plain HTML, Astro, and Next.js post to WordPress. WordPress stores submissions in a private inbox. The site frontend stays with its author.
 
-Version 0.5.1 lists submissions in an inbox. Opening a new submission marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
+Version 0.6.0 keeps each form's submissions for a number of days, 30 by default. Forms that already exist get the same 30 days, and the first cleanup deletes older submissions. Use 0 to keep a form's submissions until someone deletes them. Settings shows the last cleanup and warns when it is overdue. The inbox lists submissions; opening a new one marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
 
 Network activation on WordPress Multisite is not supported.
 
@@ -35,6 +35,19 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 == Changelog ==
+
+= 0.6.1 =
+* Keep the retention lock for the whole run, so a long cleanup is not started twice.
+* `wp formstead retention run` reports every deleted count, warns when rows are still waiting, and exits with an error when deletion fails.
+* Do not warn that retention is overdue before the first scheduled run. Settings shows when that run will happen.
+* On a network, uninstall removes capabilities only on sites that chose to delete their data.
+
+= 0.6.0 =
+* Keep each form's submissions for a number of days, 30 by default. Use 0 to keep them until someone deletes them.
+* Delete spam after the shorter period, and delete finished deliveries, expired idempotency keys, and rate-limit counters on the same cleanup.
+* Run the cleanup every hour, or with `wp formstead retention run` from system cron. Settings shows the last cleanup and warns when it is overdue.
+* Choose to delete all Formstead data on uninstall. The choice stays off until someone who can activate plugins turns it on.
+* Existing forms keep submissions for 30 days. The first cleanup deletes older submissions.
 
 = 0.5.1 =
 * Show the inbox views, with counts for the current form and date filters.
@@ -90,3 +103,8 @@ No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 = 0.0.1 =
 * Initial installable skeleton.
+
+== Upgrade Notice ==
+
+= 0.6.0 =
+Existing forms now keep submissions for 30 days. The first cleanup deletes older submissions. Set a form to 0 to keep them until someone deletes them.
