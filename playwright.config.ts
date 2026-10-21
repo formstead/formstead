@@ -36,9 +36,16 @@ export default defineConfig( {
 			use: { ...devices[ 'Desktop Chrome' ] },
 		},
 	],
-	webServer: {
-		command: 'node tests/e2e/serve-examples.mjs',
-		url: 'http://127.0.0.1:4400/health',
-		reuseExistingServer: ! process.env.CI,
-	},
+	webServer: [
+		{
+			command: 'node tests/e2e/serve-examples.mjs',
+			url: 'http://127.0.0.1:4400/health',
+			reuseExistingServer: ! process.env.CI,
+		},
+		{
+			command: 'npm run preview --prefix examples/astro',
+			url: 'http://127.0.0.1:4321/',
+			reuseExistingServer: ! process.env.CI,
+		},
+	],
 } );

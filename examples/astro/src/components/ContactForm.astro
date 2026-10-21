@@ -1,0 +1,39 @@
+---
+interface Props {
+	endpoint: string;
+	enhance?: boolean;
+}
+
+const { endpoint, enhance = false } = Astro.props;
+---
+
+<form method="post" action={endpoint} data-enhance={enhance ? 'true' : undefined}>
+	<div>
+		<label for="formstead-email">Email</label><br />
+		<input id="formstead-email" name="email" type="email" autocomplete="email" aria-describedby="formstead-email-error" />
+		<p id="formstead-email-error"></p>
+	</div>
+	<div>
+		<label for="formstead-message">Message</label><br />
+		<textarea id="formstead-message" name="message" aria-describedby="formstead-message-error"></textarea>
+		<p id="formstead-message-error"></p>
+	</div>
+	<div class="formstead-honeypot" aria-hidden="true">
+		<label for="formstead-honeypot">Company</label>
+		<input id="formstead-honeypot" name="_fs_honeypot" type="text" tabindex="-1" autocomplete="off" />
+	</div>
+	<button type="submit">Send</button>
+</form>
+<div id="formstead-status" role="status" aria-live="polite"></div>
+
+{enhance && (
+	<script>
+		import { enhanceForm } from '../scripts/submit';
+
+		document.querySelectorAll('form[data-enhance="true"]').forEach((form) => {
+			if (form instanceof HTMLFormElement) {
+				enhanceForm(form);
+			}
+		});
+	</script>
+)}
