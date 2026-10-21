@@ -18,7 +18,8 @@ use WP_Error;
  * Writes the key and the submission in one transaction.
  *
  * A replay or a conflict rolls the transaction back, so a second request
- * does not leave a new row. Delivery tasks join this transaction in a later change.
+ * does not leave a new row. A form with recipients gets its delivery row
+ * in this same transaction.
  */
 final class SubmissionIntake {
 

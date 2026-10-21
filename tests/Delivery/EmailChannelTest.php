@@ -124,6 +124,24 @@ final class EmailChannelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A site name stored with HTML entities is decoded in the subject.
+	 */
+	public function test_subject_decodes_html_entities_in_the_site_name(): void {
+		add_filter(
+			'pre_option_blogname',
+			static function () {
+				return 'A &amp; B';
+			}
+		);
+
+		$captured = $this->send_with_reply_to( 'ada@example.com', false );
+
+		$this->assertIsArray( $captured );
+		$this->assertStringContainsString( '[A & B] ', (string) $captured['subject'] );
+		$this->assertStringNotContainsString( '&amp;', (string) $captured['subject'] );
+	}
+
+	/**
 	 * Full content uses the label from the schema snapshot, not a later rename.
 	 */
 	public function test_full_content_uses_the_snapshot_label(): void {

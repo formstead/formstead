@@ -88,7 +88,7 @@ final class EmailChannel implements Channel {
 	private function subject( Form $form ): string {
 		return sprintf(
 			'[%s] New submission: %s',
-			$this->single_line( (string) get_bloginfo( 'name' ) ),
+			$this->single_line( wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ) ),
 			$this->single_line( $form->name() )
 		);
 	}
