@@ -218,7 +218,9 @@ final class IdentityBackfillTest extends MigrationTestCase {
 		$this->assertSame( 'pending', $cursor['status'] );
 
 		$this->assertSame( 'done', ( new IdentityBackfill() )->run( null, null ) );
-		$exported = PrivacyExporter::export( 'ada.alt@example.com', 1 );
+		$request_id = wp_create_user_request( 'ada.alt@example.com', 'export_personal_data' );
+		$this->assertIsInt( $request_id );
+		$exported = PrivacyExporter::export( 'ada.alt@example.com', 1, $request_id );
 		$this->assertIsArray( $exported );
 		$this->assertCount( 3, $exported['data'] );
 	}
@@ -314,7 +316,9 @@ final class IdentityBackfillTest extends MigrationTestCase {
 		$this->assertSame( 'pending', $cursor['status'] );
 
 		$this->assertSame( 'done', ( new IdentityBackfill() )->run( null, null ) );
-		$exported = PrivacyExporter::export( 'ada@example.com', 1 );
+		$request_id = wp_create_user_request( 'ada@example.com', 'export_personal_data' );
+		$this->assertIsInt( $request_id );
+		$exported = PrivacyExporter::export( 'ada@example.com', 1, $request_id );
 		$this->assertIsArray( $exported );
 		$this->assertCount( 1, $exported['data'] );
 	}

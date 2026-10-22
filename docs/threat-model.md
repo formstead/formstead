@@ -1,5 +1,15 @@
 # Threat model
 
+## Release-candidate regression coverage
+
+`tests/Admin/SubmissionsPageTest.php` checks stored script/attribute payloads in form names, field labels and values in both inbox views. `tests/Rest/AdminSubmissionsTest.php` exercises SQL syntax in list filters and denies every administrative method to anonymous users and ordinary subscribers. Existing CSV-prefix, open-redirect, CORS, limits, failure and parallel-idempotency checks remain part of the suite.
+
+`tests/Webhook/PinnedRequestTransportTest.php` uses a disposable local HTTP receiver and a name with no DNS record. The real WordPress request reaches the checked address through an explicitly selected cURL transport; missing pinning arguments stop before the receiver sees a body. Pinning and direct-connect options must succeed. A host without the required cURL support gets a terminal `webhook_unsafe_transport` delivery failure. TLS verification stays enabled for HTTPS. Production and staging ignore the E2E host exception.
+
+`tests/Privacy/PrivacyToolsTest.php` covers deletion between export pages, new submissions after the initial boundary, repeated pages, and mismatched or missing privacy requests. `tests/e2e/privacy.spec.ts` exercises the WordPress export UI while deleting an already exported row between pages. Historical schemas are stored independently under `tests/fixtures/schemas/`; the upgrade suite checks v1–v8 rather than reconstructing them from today's DDL.
+
+These are project regression checks, not an independent security audit. A hosting pilot is still required before the stable release. See [Operations](operations.md) for delivery cancellation boundaries and data kept outside the plugin.
+
 This note describes the Formstead plugin, including personal-data export and erase, the audit log, the admin API, and webhooks. It is not a certification, and it does not cover the host, WordPress core, or other plugins. What is stored, and how it is removed, is in [data-flows.md](data-flows.md). How to call the API and check a signature is in [integrations.md](integrations.md).
 
 Report a vulnerability to security@formstead.dev. See [SECURITY.md](../SECURITY.md).
@@ -62,12 +72,12 @@ The public route does not list, export, or change stored submissions.
 | Double submit | The same idempotency key and body replay the original result for 24 hours. A different body is 409. A lock conflict is retried in the request. | `tests/Rest/IdempotencyTest.php`, `tests/e2e/failures.spec.ts` |
 | Lose a submission when mail fails | The submission is stored first. Mail is a delivery row. A failed hand-off stays pending with `mail_failed` and does not retry forever. | `tests/Delivery/DeliveryWorkerTest.php`, `tests/e2e/failures.spec.ts` |
 | Inject mail headers from a field | The subject has no field values. `Reply-To` must be a single valid email. | `tests/Delivery/EmailChannelTest.php` |
-| Script injection in the inbox | Submission text is escaped before it is printed. | The submission template escapes values. A dedicated injection pass is part of later hardening. |
+| Script injection in the inbox | Submission text, form names and field labels are escaped before printing. | `tests/Admin/SubmissionsPageTest.php` stored-XSS regression in list and detail views. |
 | Formula injection in CSV | Cells that start with `=`, `+`, `-`, `@`, tab, or CR get a quote prefix. Export requires `formstead_export_submissions`. | `tests/Submissions/CsvExportTest.php`, `tests/Admin/SubmissionActionsTest.php` |
 | Delete or export without the capability | Each admin action checks its own capability and a nonce. Reading does not grant export or deletion. | `tests/Admin/SubmissionActionsTest.php` |
 | Send mail after the submission is gone | Deletion cancels pending deliveries and removes the idempotency key in one transaction. | `tests/Submissions/SubmissionDeleterTest.php` |
 | Keep data past the configured period | Retention deletes through that same deletion path. Pending deliveries are left for the worker. | `tests/Retention/RetentionRunnerTest.php` |
-| SQL built from request text | Queries go through `$wpdb->prepare()`. Table names are fixed identifiers. | A dedicated injection pass is part of later hardening. |
+| SQL built from request text | Queries go through `$wpdb->prepare()`. Table names are fixed identifiers. | `tests/Rest/AdminSubmissionsTest.php` injection strings in form, status, date and email filters. |
 | Wipe a site on uninstall by surprise | Data is removed only when an administrator who can activate plugins has opted in. | `tests/Lifecycle/UninstallerTest.php` |
 | Network activation on Multisite | Activation as a network plugin is refused. | `tests/Lifecycle/ActivatorTest.php` |
 | Export or erase while the identity index is unfinished | Both tools return an error and do not report a partial result. The message names `wp formstead identities rebuild`. | `tests/Privacy/PrivacyToolsTest.php` |
@@ -88,7 +98,7 @@ The public route does not list, export, or change stored submissions.
 | Put the receiver's answer in the database or the log | The response body is discarded. The log line names the delivery id. | `tests/Webhook/WebhookChannelTest.php` |
 | Retry a blocked URL or a redirect until the limit | `webhook_blocked_url`, `webhook_redirect`, and `webhook_http_4xx` fail the delivery immediately. Timeouts, connection failures, `429`, and `5xx` stop after five attempts. | `tests/Webhook/WebhookChannelTest.php` |
 
-A focused pass over injection, open redirect, and the other Core 1.0 abuse cases is part of later hardening. The table is what this version already checks.
+The table describes project regression coverage. It does not represent an independent audit or a hosting pilot.
 
 ## Not in this version
 
@@ -102,8 +112,8 @@ These are intentionally absent. They are not silent controls.
 
 WP-Cron runs when the site is visited. A site that must send mail or delete old submissions on time should call the WP-CLI commands from system cron. Settings warns when retention looks overdue.
 
-The plugin does not encrypt submissions at rest and does not manage host backups. Mail leaves the site only when a form has recipients, or when the host's own mail path sends it. A webhook leaves the site only when that form has a URL. The filter `formstead_webhook_allowed_hosts` can allow a private address for a test. A production site should leave it empty.
+The plugin does not encrypt submissions at rest and does not manage host backups. Mail leaves the site only when a form has recipients, or when the host's own mail path sends it. A webhook leaves the site only when that form has a URL. The filter `formstead_webhook_allowed_hosts` can allow a private address only in an explicit local/development E2E environment. Production and staging ignore it.
 
-The address pin is applied to curl. A host whose HTTP transport is not curl still refuses a private address at check time, and does not pin the later lookup.
+Webhook requests explicitly select cURL and require successful address pinning. Unsupported transport or pinning fails closed without a streams fallback.
 
 An inbox search puts the email address in the page URL. Server logs and the browser history can keep it after the submission is gone. Details are in [data-flows.md](data-flows.md).

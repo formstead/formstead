@@ -85,6 +85,19 @@ jobs:
         if: matrix.php == '8.3' && matrix.wp == '7.1'
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G
 
+      - name: MariaDB index and large-inbox acceptance
+        if: matrix.php == '8.3' && matrix.wp == '7.1'
+        run: |
+          set -o pipefail
+          npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --group explain 2>&1 | tee performance-mariadb.log
+
+      - name: Upload MariaDB acceptance measurements
+        if: always() && matrix.php == '8.3' && matrix.wp == '7.1'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: performance-mariadb
+          path: performance-mariadb.log
+
       - name: Mailpit accepts one notification
         if: matrix.php == '8.3' && matrix.wp == '7.1'
         run: bash bin/ci/mailpit-check.sh
@@ -114,7 +127,7 @@ jobs:
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: "8.3"
-          extensions: mysqli
+          extensions: mysqli, curl
           tools: composer
           coverage: none
 
@@ -125,9 +138,18 @@ jobs:
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 7.1.3
 
       - name: PHPUnit including index checks
-        run: vendor/bin/phpunit --exclude-group multisite
+        run: |
+          set -o pipefail
+          vendor/bin/phpunit --exclude-group multisite 2>&1 | tee performance-mysql.log
         env:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
+
+      - name: Upload MySQL acceptance measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: performance-mysql
+          path: performance-mysql.log
 
       - name: PHPUnit multisite
         run: WP_MULTISITE=1 vendor/bin/phpunit --group multisite
@@ -202,6 +224,21 @@ jobs:
             --admin_password=password \
             --admin_email=admin@example.com \
             --skip-email
+
+      - name: Upgrade a populated 0.9.0 ZIP installation
+        run: |
+          git fetch --no-tags origin 004a8e672283102c00a481be7afcb8fdd78956d3
+          baseline="$(mktemp -d)"
+          git archive 004a8e672283102c00a481be7afcb8fdd78956d3 | tar -x -C "$baseline"
+          FORMSTEAD_ZIP=/tmp/formstead-0.9.0.zip bash "$baseline/bin/build-zip.sh"
+          wp config set DISABLE_WP_CRON true --raw --path=wordpress
+          wp plugin install /tmp/formstead-0.9.0.zip --activate --path=wordpress
+          wp eval-file bin/ci/upgrade-package.php seed --path=wordpress
+          wp plugin install formstead.zip --force --activate --path=wordpress
+          wp eval-file bin/ci/upgrade-package.php verify --path=wordpress
+          wp option update formstead_delete_data_on_uninstall 1 --path=wordpress
+          wp plugin uninstall formstead --deactivate --path=wordpress
+          wp config delete DISABLE_WP_CRON --path=wordpress
 
       - name: Install Formstead from ZIP
         run: wp plugin install formstead.zip --activate --path=wordpress

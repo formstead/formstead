@@ -23,6 +23,7 @@
 		"check": "bash bin/check.sh",
 		"e2e:setup": "node tests/e2e/setup.mjs",
 		"e2e": "playwright test",
+		"screenshots": "node bin/screenshots.mjs",
 		"mail:up": "bash bin/mailpit.sh up",
 		"mail:down": "bash bin/mailpit.sh down"
 	}

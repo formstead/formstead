@@ -33,12 +33,21 @@ final class WebhookUrlPolicy {
 	private $resolver;
 
 	/**
+	 * Environment for the test-host exception.
+	 *
+	 * @var string
+	 */
+	private string $environment;
+
+	/**
 	 * Create a policy.
 	 *
-	 * @param callable(string): list<string>|null $resolver Address lookup. Null uses DNS.
+	 * @param callable(string): list<string>|null $resolver    Address lookup. Null uses DNS.
+	 * @param string|null                         $environment Environment override for tests.
 	 */
-	public function __construct( ?callable $resolver = null ) {
-		$this->resolver = $resolver;
+	public function __construct( ?callable $resolver = null, ?string $environment = null ) {
+		$this->resolver    = $resolver;
+		$this->environment = $environment ?? wp_get_environment_type();
 	}
 
 	/**
@@ -128,6 +137,10 @@ final class WebhookUrlPolicy {
 	 * @param int    $port Port, including the HTTPS default.
 	 */
 	private function is_allowed( string $host, int $port ): bool {
+		if ( ! defined( 'FORMSTEAD_E2E' ) || ! constant( 'FORMSTEAD_E2E' ) || ! in_array( $this->environment, array( 'local', 'development' ), true ) ) {
+			return false;
+		}
+
 		$allowed = apply_filters( 'formstead_webhook_allowed_hosts', array() );
 		if ( ! is_array( $allowed ) ) {
 			return false;

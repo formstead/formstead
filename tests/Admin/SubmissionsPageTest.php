@@ -95,6 +95,24 @@ final class SubmissionsPageTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Stored script and attribute payloads stay text in both inbox views.
+	 */
+	public function test_stored_xss_in_names_labels_and_values_is_escaped(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$attack = '<script>alert("stored")</script><img src=x onerror=alert(1)>';
+		$form   = $this->save_form( $attack, 'note', $attack, FieldType::Text, false );
+		$saved  = ( new SubmissionRepository() )->insert( $form, array( 'note' => $attack ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $saved );
+		foreach ( array( array(), array( 'submission' => (string) $saved->id() ) ) as $query ) {
+			$_GET = $query;
+			$html = $this->render();
+			$this->assertStringNotContainsString( '<script>alert(', $html );
+			$this->assertStringNotContainsString( '<img src=x', $html );
+			$this->assertStringContainsString( '&lt;script&gt;', $html );
+		}
+	}
+
+	/**
 	 * Opening spam or an archived submission does not move it back to the inbox.
 	 */
 	public function test_opening_spam_or_archived_submission_keeps_its_status(): void {

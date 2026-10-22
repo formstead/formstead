@@ -40,6 +40,13 @@ if [[ ! -f "$PLUGIN_DIR/formstead.php" ]] || [[ ! -f "$PLUGIN_DIR/vendor/autoloa
 	exit 1
 fi
 
+for required in languages/formstead.pot LICENSE THIRD-PARTY-NOTICES.txt vendor/composer/LICENSE; do
+	if [[ ! -f "$PLUGIN_DIR/$required" ]]; then
+		echo "ZIP staging is missing $required." >&2
+		exit 1
+	fi
+done
+
 rm -f "$OUTPUT"
 (
 	cd "$STAGING"

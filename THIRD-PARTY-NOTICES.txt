@@ -1,0 +1,9 @@
+Third-party notices
+
+Formstead is licensed under GPL-2.0-or-later; see `LICENSE` and the main plugin header.
+
+The installable ZIP includes Composer's generated autoloader (`vendor/autoload.php` and `vendor/composer/`). The Composer loader is licensed under MIT, copyright Nils Adermann and Jordi Boggiano. Its complete notice is preserved at `vendor/composer/LICENSE` in the ZIP. Do not remove that file when repackaging.
+
+There are no third-party runtime packages declared in `composer.json`; the only production requirement is PHP. WordPress and its Requests HTTP library are supplied by the host WordPress installation and are not copied into this ZIP. The plugin assets and translation template are maintained in this repository; no third-party font, stock image or icon package is bundled.
+
+Development dependencies and frontend examples have their own locked dependency trees and licenses. PHPUnit, static-analysis tools, Plugin Check, Playwright, Astro, Next.js, React and their dependencies are not part of the installable plugin. The build excludes the development directories and installs Composer with `--no-dev`.

@@ -1,0 +1,1237 @@
+# Copyright (C) 2026 Formstead
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Formstead 1.0.0-rc.1\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/formstead\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-10-22T12:47:24+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: formstead\n"
+
+#. Plugin Name of the plugin
+#. Author of the plugin
+#: formstead.php
+#: src/Admin/Menu.php:42
+#: src/Admin/Menu.php:52
+msgid "Formstead"
+msgstr ""
+
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: formstead.php
+msgid "https://formstead.dev"
+msgstr ""
+
+#. Description of the plugin
+#: formstead.php
+msgid "Receive form submissions from static and headless sites on an existing WordPress install."
+msgstr ""
+
+#. translators: 1: required PHP version, 2: current PHP version
+#: formstead.php:59
+#, php-format
+msgid "Formstead requires PHP %1$s or later. This site is running PHP %2$s."
+msgstr ""
+
+#. translators: 1: required WordPress version, 2: current WordPress version
+#: formstead.php:66
+#: src/Lifecycle/Activator.php:75
+#, php-format
+msgid "Formstead requires WordPress %1$s or later. This site is running WordPress %2$s."
+msgstr ""
+
+#: formstead.php:92
+msgid "Formstead could not load because vendor/autoload.php is missing. Run composer install."
+msgstr ""
+
+#: src/Admin/AuditPage.php:28
+msgid "Sorry, you are not allowed to view the audit log."
+msgstr ""
+
+#: src/Admin/AuditTable.php:142
+#: src/Admin/SubmissionsTable.php:123
+#: src/Privacy/PrivacyExporter.php:171
+msgid "Date"
+msgstr ""
+
+#: src/Admin/AuditTable.php:143
+#: templates/admin/audit-list.php:27
+msgid "Event"
+msgstr ""
+
+#: src/Admin/AuditTable.php:144
+msgid "User"
+msgstr ""
+
+#: src/Admin/AuditTable.php:145
+msgid "Object"
+msgstr ""
+
+#: src/Admin/AuditTable.php:146
+msgid "Details"
+msgstr ""
+
+#: src/Admin/AuditTable.php:154
+msgid "No audit events found."
+msgstr ""
+
+#: src/Admin/AuditTable.php:203
+msgid "Automatic"
+msgstr ""
+
+#. translators: %d: user id.
+#: src/Admin/AuditTable.php:211
+#, php-format
+msgid "User #%d"
+msgstr ""
+
+#. translators: 1: object type, 2: object id.
+#: src/Admin/AuditTable.php:239
+#, php-format
+msgid "%1$s #%2$d"
+msgstr ""
+
+#: src/Admin/AuditTable.php:337
+#: src/Admin/SubmissionsTable.php:124
+#: src/Privacy/PrivacyExporter.php:163
+#: templates/admin/submissions-list.php:45
+msgid "Form"
+msgstr ""
+
+#: src/Admin/AuditTable.php:339
+#: src/Admin/Menu.php:90
+#: src/Admin/Menu.php:91
+#: templates/admin/form-edit.php:268
+#: templates/admin/settings.php:38
+msgid "Settings"
+msgstr ""
+
+#: src/Admin/AuditTable.php:341
+#: src/Admin/SubmissionsTable.php:126
+#: templates/admin/submission-detail.php:34
+msgid "Submission"
+msgstr ""
+
+#: src/Admin/AuditTable.php:343
+msgid "Retention"
+msgstr ""
+
+#: src/Admin/FormsPage.php:110
+#: src/Admin/FormsPage.php:258
+#: src/Admin/FormsPage.php:299
+#: src/Admin/SettingsPage.php:85
+msgid "Sorry, you are not allowed to manage forms."
+msgstr ""
+
+#: src/Admin/FormsPage.php:122
+#: src/Admin/FormsPage.php:346
+#: src/Admin/SubmissionsExport.php:58
+#: src/Forms/FormRepository.php:212
+#: src/Forms/FormRepository.php:336
+#: src/Forms/FormRepository.php:364
+msgid "This form could not be found."
+msgstr ""
+
+#: src/Admin/FormsPage.php:688
+#: src/Admin/SubmissionsPage.php:382
+#: templates/admin/form-edit.php:181
+#: templates/admin/submission-detail.php:69
+msgid "Email"
+msgstr ""
+
+#: src/Admin/FormsPage.php:689
+msgid "Textarea"
+msgstr ""
+
+#: src/Admin/FormsPage.php:690
+msgid "Number"
+msgstr ""
+
+#: src/Admin/FormsPage.php:691
+msgid "Checkbox"
+msgstr ""
+
+#: src/Admin/FormsPage.php:692
+msgid "Choice"
+msgstr ""
+
+#: src/Admin/FormsPage.php:693
+msgid "Text"
+msgstr ""
+
+#: src/Admin/Menu.php:67
+#: src/Admin/Menu.php:68
+#: templates/admin/forms-list.php:18
+msgid "Forms"
+msgstr ""
+
+#: src/Admin/Menu.php:81
+#: src/Admin/Menu.php:82
+#: templates/admin/audit-list.php:23
+#: templates/admin/settings.php:81
+msgid "Audit log"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:48
+msgid "Sorry, you are not allowed to change this setting."
+msgstr ""
+
+#. translators: %s: WP-CLI command.
+#: src/Admin/SettingsPage.php:158
+#, php-format
+msgid "Retention has not run yet. Run %s from the system cron."
+msgstr ""
+
+#. translators: %s: WP-CLI command.
+#: src/Admin/SettingsPage.php:165
+#, php-format
+msgid "Retention has not finished in the last 48 hours, or expired rows have been waiting for more than 24 hours. Run %s from the system cron."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:227
+msgid "Submissions could not be deleted."
+msgstr ""
+
+#: src/Admin/SubmissionsExport.php:47
+msgid "Sorry, you are not allowed to export submissions."
+msgstr ""
+
+#: src/Admin/SubmissionsExport.php:73
+msgid "The export could not be started."
+msgstr ""
+
+#: src/Admin/SubmissionsPage.php:59
+#: src/Admin/SubmissionsPage.php:87
+msgid "Sorry, you are not allowed to read submissions."
+msgstr ""
+
+#: src/Admin/SubmissionsPage.php:146
+#: src/Admin/SubmissionsTable.php:161
+msgid "Mark as unread"
+msgstr ""
+
+#: src/Admin/SubmissionsPage.php:152
+#: src/Admin/SubmissionsTable.php:163
+msgid "Move to inbox"
+msgstr ""
+
+#: src/Admin/SubmissionsPage.php:158
+#: src/Admin/SubmissionsTable.php:162
+msgid "Archive"
+msgstr ""
+
+#: src/Admin/SubmissionsPage.php:164
+#: src/Admin/SubmissionsTable.php:164
+msgid "Mark as spam"
+msgstr ""
+
+#: src/Admin/SubmissionsPage.php:169
+#: src/Admin/SubmissionsTable.php:165
+msgid "Not spam"
+msgstr ""
+
+#: src/Admin/SubmissionsPage.php:248
+msgid "Sorry, you are not allowed to delete submissions."
+msgstr ""
+
+#. translators: %s: number of submissions.
+#: src/Admin/SubmissionsPage.php:295
+#, php-format
+msgid "%s submission updated."
+msgid_plural "%s submissions updated."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of submissions.
+#: src/Admin/SubmissionsPage.php:304
+#, php-format
+msgid "%s submission deleted."
+msgid_plural "%s submissions deleted."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Admin/SubmissionsPage.php:383
+#: templates/admin/form-edit.php:224
+msgid "Webhook"
+msgstr ""
+
+#: src/Admin/SubmissionsPage.php:397
+msgid "Handed to the receiver"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:125
+#: src/Privacy/PrivacyExporter.php:175
+#: templates/admin/form-edit.php:89
+#: templates/admin/forms-list.php:31
+#: templates/admin/submission-detail.php:77
+msgid "Status"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:137
+msgid "Inbox"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:138
+#: src/Submissions/SubmissionStatus.php:65
+msgid "Unread"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:139
+#: src/Submissions/SubmissionStatus.php:68
+msgid "Archived"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:140
+#: src/Submissions/SubmissionStatus.php:67
+#: templates/admin/settings.php:51
+#: templates/admin/settings.php:128
+msgid "Spam"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:141
+msgid "All"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:160
+msgid "Mark as read"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:168
+#: templates/admin/submission-detail.php:66
+msgid "Delete permanently"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:188
+msgid "Select submission"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:223
+msgid "No submissions yet."
+msgstr ""
+
+#. translators: %d: form id.
+#: src/Admin/SubmissionsTable.php:241
+#, php-format
+msgid "Form %d"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:288
+#: src/Delivery/EmailChannel.php:185
+#: src/Submissions/SubmissionRows.php:74
+#: templates/admin/settings.php:149
+msgid "Yes"
+msgstr ""
+
+#: src/Admin/SubmissionsTable.php:288
+#: src/Delivery/EmailChannel.php:185
+#: src/Submissions/SubmissionRows.php:74
+#: templates/admin/settings.php:149
+msgid "No"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:69
+msgid "Form created"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:71
+msgid "Form updated"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:73
+msgid "Webhook secret rotated"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:75
+msgid "Settings updated"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:77
+msgid "Submissions exported"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:79
+msgid "Submissions deleted"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:81
+msgid "Retention run"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:83
+msgid "Personal data exported"
+msgstr ""
+
+#: src/Audit/AuditEvent.php:85
+msgid "Personal data erased"
+msgstr ""
+
+#: src/Database/Migrator.php:68
+msgid "Formstead is already updating its database. Reload this screen in a moment."
+msgstr ""
+
+#: src/Database/Migrator.php:84
+#: src/Database/Migrator.php:99
+msgid "Formstead could not create its database tables."
+msgstr ""
+
+#: src/Database/Migrator.php:164
+msgid "Formstead requires the InnoDB storage engine."
+msgstr ""
+
+#: src/Database/Migrator.php:213
+#: src/Database/Migrator.php:250
+#: src/Database/Migrator.php:274
+#: src/Database/Migrator.php:306
+#: src/Database/Migrator.php:364
+#: src/Database/Migrator.php:373
+#: src/Database/Migrator.php:416
+#: src/Database/Migrator.php:440
+#: src/Database/Migrator.php:454
+#: src/Database/Migrator.php:517
+#: src/Database/Migrator.php:537
+msgid "Formstead could not update its database."
+msgstr ""
+
+#: src/Delivery/DeliveryRepository.php:45
+#: src/Delivery/DeliveryRepository.php:55
+#: src/Delivery/DeliveryRepository.php:101
+#: src/Rest/AdminAccess.php:107
+#: src/Submissions/SubmissionIntake.php:88
+#: src/Submissions/SubmissionIntake.php:102
+#: src/Submissions/SubmissionIntake.php:121
+#: src/Submissions/SubmissionIntake.php:149
+#: src/Submissions/SubmissionIntake.php:163
+#: src/Submissions/SubmissionRepository.php:41
+#: src/Submissions/SubmissionRepository.php:87
+#: src/Submissions/SubmissionRepository.php:95
+msgid "The submission could not be saved."
+msgstr ""
+
+#: src/Delivery/DeliveryStatus.php:50
+msgid "Waiting to send"
+msgstr ""
+
+#: src/Delivery/DeliveryStatus.php:51
+msgid "Sending"
+msgstr ""
+
+#: src/Delivery/DeliveryStatus.php:52
+msgid "Handed to the mail system"
+msgstr ""
+
+#: src/Delivery/DeliveryStatus.php:53
+msgid "Failed"
+msgstr ""
+
+#: src/Delivery/DeliveryStatus.php:54
+msgid "Cancelled"
+msgstr ""
+
+#: src/Delivery/EmailChannel.php:120
+msgid "A new submission was stored."
+msgstr ""
+
+#: src/Delivery/Scheduler.php:56
+msgid "Every five minutes"
+msgstr ""
+
+#: src/Forms/FormInput.php:47
+msgid "Enter a name."
+msgstr ""
+
+#: src/Forms/FormInput.php:49
+msgid "Enter a name up to 190 characters."
+msgstr ""
+
+#: src/Forms/FormInput.php:54
+msgid "Enter an absolute http or https URL."
+msgstr ""
+
+#: src/Forms/FormInput.php:125
+msgid "Enter an https URL that is not a private address."
+msgstr ""
+
+#: src/Forms/FormInput.php:178
+#: src/Forms/FormInput.php:190
+msgid "Enter up to 10 valid email addresses, one per line."
+msgstr ""
+
+#: src/Forms/FormInput.php:217
+msgid "Choose an email field."
+msgstr ""
+
+#: src/Forms/FormInput.php:238
+#: src/Forms/FormInput.php:244
+msgid "Enter a whole number of days from 0 to 3650."
+msgstr ""
+
+#: src/Forms/FormInput.php:262
+msgid "Enter a per-minute limit from 1 to 60."
+msgstr ""
+
+#: src/Forms/FormInput.php:263
+msgid "Enter a per-hour limit from 1 to 10000."
+msgstr ""
+
+#: src/Forms/FormInput.php:289
+msgid "Enter up to 20 origins."
+msgstr ""
+
+#: src/Forms/FormInput.php:295
+msgid "Enter one http or https origin per line, without a path."
+msgstr ""
+
+#: src/Forms/FormInput.php:454
+#: src/Forms/FormInput.php:520
+msgid "Add at least one field."
+msgstr ""
+
+#: src/Forms/FormInput.php:472
+msgid "Enter a field name using lowercase letters, numbers, and underscores."
+msgstr ""
+
+#: src/Forms/FormInput.php:474
+msgid "Field names must be unique."
+msgstr ""
+
+#: src/Forms/FormInput.php:480
+msgid "Enter a label up to 190 characters."
+msgstr ""
+
+#: src/Forms/FormInput.php:485
+msgid "Choose a field type."
+msgstr ""
+
+#: src/Forms/FormInput.php:490
+msgid "Enter a length from 1 to 10000."
+msgstr ""
+
+#: src/Forms/FormInput.php:556
+msgid "Enter a minimum as a whole or decimal number."
+msgstr ""
+
+#: src/Forms/FormInput.php:557
+msgid "Enter a maximum as a whole or decimal number."
+msgstr ""
+
+#: src/Forms/FormInput.php:564
+msgid "Enter a number of decimal places from 0 to 6."
+msgstr ""
+
+#: src/Forms/FormInput.php:569
+msgid "Enter a minimum that is not greater than the maximum."
+msgstr ""
+
+#: src/Forms/FormInput.php:640
+msgid "Enter an option value up to 190 characters."
+msgstr ""
+
+#: src/Forms/FormInput.php:644
+msgid "Enter an option label up to 190 characters."
+msgstr ""
+
+#: src/Forms/FormInput.php:648
+msgid "Option values must be unique."
+msgstr ""
+
+#: src/Forms/FormInput.php:660
+msgid "Enter up to 100 options."
+msgstr ""
+
+#: src/Forms/FormInput.php:665
+msgid "Enter at least one option."
+msgstr ""
+
+#: src/Forms/FormRepository.php:185
+#: src/Forms/FormRepository.php:192
+#: src/Forms/FormRepository.php:277
+#: src/Forms/FormRepository.php:356
+#: src/Forms/FormVersionRepository.php:80
+msgid "The form could not be saved."
+msgstr ""
+
+#: src/Forms/FormRepository.php:219
+#: src/Forms/FormRepository.php:293
+#: src/Forms/FormRepository.php:422
+#: src/Forms/FormVersionRepository.php:74
+msgid "This form was saved somewhere else. Reload the screen and try again."
+msgstr ""
+
+#: src/Forms/FormRepository.php:595
+msgid "The form was saved, but the identity index could not be updated."
+msgstr ""
+
+#: src/Lifecycle/Activator.php:29
+#: src/Lifecycle/Activator.php:42
+msgid "Formstead activation failed"
+msgstr ""
+
+#: src/Lifecycle/Activator.php:63
+msgid "Network activation is not supported. Activate Formstead on each site separately."
+msgstr ""
+
+#: src/Privacy/IdentityBackfill.php:96
+msgid "The identity index is up to date."
+msgstr ""
+
+#. translators: 1: last indexed submission id, 2: highest submission id in this job, 3: WP-CLI command.
+#: src/Privacy/IdentityBackfill.php:101
+#, php-format
+msgid "The identity index is still being built (submission %1$s of %2$s). Run %3$s to finish it now."
+msgstr ""
+
+#: src/Privacy/IdentityRepository.php:265
+#: src/Privacy/PrivacyExportPages.php:47
+#: src/Privacy/PrivacyExportPages.php:73
+msgid "Formstead could not read the identity index. Try the export or erase again."
+msgstr ""
+
+#: src/Privacy/PrivacyEraser.php:43
+#: src/Privacy/PrivacyExporter.php:52
+#: src/Privacy/PrivacyExporter.php:193
+msgid "Formstead submissions"
+msgstr ""
+
+#. translators: %s: WP-CLI command.
+#: src/Privacy/PrivacyEraser.php:119
+#: src/Privacy/PrivacyExporter.php:113
+#, php-format
+msgid "The identity index is still being built. Run %s to finish it before exporting or erasing personal data."
+msgstr ""
+
+#: src/Privacy/PrivacyExporter.php:159
+msgid "Receipt"
+msgstr ""
+
+#. translators: %d: form id.
+#: src/Privacy/PrivacyExporter.php:166
+#, php-format
+msgid "Form #%d"
+msgstr ""
+
+#: src/Privacy/PrivacyExportPages.php:101
+msgid "The export page could not be prepared. Restart the personal-data export."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:42
+msgid "Suggested text. Copy the parts that match this site. This is a description of the plugin, not legal advice."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:45
+msgid "Formstead stores form submissions on this website. A submission keeps the field values, the time it was stored, a status, and a receipt id. A hash of the submission content is stored with it and is used to recognize the same content for a short time. The visitor IP address is not stored on the submission. A secret that rotates about once a day is used to hash that address into a short-lived rate-limit counter."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:46
+msgid "Email fields marked as identifying the person are also stored as an HMAC. The address itself is not written in that index. The secret for that HMAC is kept separately and is not rotated, because rotating it would make the index unusable. Fields of other types are not indexed, even when an email address is typed into them. Spam submissions are indexed with the rest."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:47
+msgid "When a form has notification recipients, the site emails them after a submission is stored. The message links to that submission. It includes the field values only when the form is set to include them. Mail is handed to the mail system of this site. A message already accepted by that system is outside this plugin."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:48
+msgid "People who can read submissions can search the inbox for an exact email address. The address is placed in the page address, so it can appear in the browser history and in server logs."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:49
+msgid "WordPress personal-data export and erase can copy or delete the submissions tied to an identifying email field. Erasure deletes the whole submission, including a waiting notification and the index row. Export and erase do not run while the index is still being built. Finish it with wp formstead identities rebuild."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:50
+msgid "An audit log records that a form was saved, settings were changed, submissions were exported or deleted, retention ran, or personal data was exported or erased. The log stores who did it and a short code. It does not store field values, email addresses, or IP addresses. Audit rows are deleted after 180 days."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:51
+msgid "Each form keeps submissions for the number of days set on that form. The default is 30 days. Zero keeps them until someone deletes them. Spam is deleted after 7 days. Finished notification rows are deleted after 30 days. Idempotency keys are kept for 24 hours. Someone who can delete submissions can delete one immediately. Uninstall removes Formstead tables and options only when the site has chosen that."
+msgstr ""
+
+#: src/Privacy/PrivacyPolicy.php:52
+msgid "Deleting a row here does not delete a host backup, a server log, or a message that the mail system has already accepted."
+msgstr ""
+
+#: src/Rest/AdminAccess.php:100
+msgid "The admin API requires HTTPS."
+msgstr ""
+
+#: src/Rest/AdminAccess.php:101
+msgid "Authentication is required."
+msgstr ""
+
+#: src/Rest/AdminAccess.php:102
+msgid "You are not allowed to do that."
+msgstr ""
+
+#: src/Rest/AdminAccess.php:103
+msgid "That submission was not found."
+msgstr ""
+
+#: src/Rest/AdminAccess.php:104
+msgid "That form was not found."
+msgstr ""
+
+#: src/Rest/AdminAccess.php:105
+msgid "Choose a valid status."
+msgstr ""
+
+#: src/Rest/AdminAccess.php:106
+msgid "Enter a valid date."
+msgstr ""
+
+#: src/Rest/AdminSubmissionsController.php:216
+#: src/Submissions/SubmissionDeleter.php:46
+#: src/Submissions/SubmissionDeleter.php:52
+#: src/Submissions/SubmissionDeleter.php:58
+#: src/Submissions/SubmissionDeleter.php:66
+msgid "The submissions could not be deleted."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:89
+msgid "This form is not available."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:90
+msgid "The request body could not be read."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:91
+msgid "This form does not accept that content type."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:92
+msgid "File uploads are not supported."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:93
+msgid "Check the form and try again."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:94
+msgid "The submission could not be saved. Please try again."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:95
+msgid "This submission is too large."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:96
+msgid "This form does not accept submissions from that site."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:97
+msgid "Too many submissions. Please wait and try again."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:98
+msgid "The idempotency key is not valid."
+msgstr ""
+
+#: src/Rest/RequestPayload.php:99
+msgid "This idempotency key was already used for a different submission."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:77
+#: src/Rest/SubmissionResponder.php:127
+msgid "Check the form"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:78
+#: src/Rest/SubmissionResponder.php:128
+msgid "Check the form and try again"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:86
+msgid "Form not found"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:87
+msgid "Something went wrong"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:88
+msgid "Submission too large"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:89
+msgid "Submission not accepted"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:90
+msgid "Too many submissions"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:91
+msgid "Invalid idempotency key"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:92
+msgid "Already submitted"
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:175
+msgid "This field is required."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:176
+msgid "This value is too long."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:177
+msgid "Enter a valid email address."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:178
+msgid "Enter a valid number."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:179
+msgid "This value is too small."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:180
+msgid "This value is too large."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:181
+msgid "This value has too many decimal places."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:182
+msgid "Choose a valid option."
+msgstr ""
+
+#: src/Rest/SubmissionResponder.php:183
+msgid "This value is not valid."
+msgstr ""
+
+#: src/Submissions/SubmissionStatus.php:66
+msgid "Read"
+msgstr ""
+
+#: src/Webhook/WebhookUrlPolicy.php:520
+msgid "The webhook address is not allowed."
+msgstr ""
+
+#: templates/admin/audit-list.php:29
+msgid "All events"
+msgstr ""
+
+#: templates/admin/audit-list.php:36
+#: templates/admin/submissions-list.php:57
+msgid "From"
+msgstr ""
+
+#: templates/admin/audit-list.php:38
+#: templates/admin/submissions-list.php:59
+msgid "To"
+msgstr ""
+
+#: templates/admin/audit-list.php:40
+#: templates/admin/submissions-list.php:63
+msgid "Filter"
+msgstr ""
+
+#: templates/admin/form-edit.php:61
+msgid "Edit form"
+msgstr ""
+
+#: templates/admin/form-edit.php:61
+#: templates/admin/forms-list.php:20
+msgid "Add form"
+msgstr ""
+
+#: templates/admin/form-edit.php:64
+msgid "Form saved."
+msgstr ""
+
+#: templates/admin/form-edit.php:80
+#: templates/admin/form-edit.php:263
+#: templates/admin/form-edit.php:293
+#: templates/admin/form-edit.php:387
+#: templates/admin/forms-list.php:30
+msgid "Name"
+msgstr ""
+
+#: templates/admin/form-edit.php:93
+msgid "Accept submissions"
+msgstr ""
+
+#: templates/admin/form-edit.php:98
+msgid "Success URL"
+msgstr ""
+
+#: templates/admin/form-edit.php:104
+msgid "Absolute http or https URL. The form never redirects to an address from the request."
+msgstr ""
+
+#: templates/admin/form-edit.php:109
+msgid "Keep submissions for (days)"
+msgstr ""
+
+#: templates/admin/form-edit.php:115
+msgid "Submissions older than this are deleted. Use 0 to keep them until someone deletes them."
+msgstr ""
+
+#: templates/admin/form-edit.php:120
+msgid "Allowed origins"
+msgstr ""
+
+#: templates/admin/form-edit.php:126
+msgid "One http or https origin per line, without a path. Leave this empty to allow only this site."
+msgstr ""
+
+#: templates/admin/form-edit.php:131
+msgid "Submissions per minute"
+msgstr ""
+
+#: templates/admin/form-edit.php:137
+msgid "Per IP address. Leave empty to use the global limit of 5."
+msgstr ""
+
+#: templates/admin/form-edit.php:142
+msgid "Submissions per hour"
+msgstr ""
+
+#: templates/admin/form-edit.php:148
+msgid "For this form, from every address. Leave empty to use the global limit of 100."
+msgstr ""
+
+#: templates/admin/form-edit.php:154
+msgid "Endpoint URL"
+msgstr ""
+
+#: templates/admin/form-edit.php:157
+msgid "The public identifier is not a secret. Anyone with this URL can submit the form."
+msgstr ""
+
+#: templates/admin/form-edit.php:161
+#: templates/admin/forms-list.php:33
+msgid "Honeypot"
+msgstr ""
+
+#. translators: %s: number of rejected submissions.
+#: templates/admin/form-edit.php:168
+#, php-format
+msgid "Rejected submissions: %s. These are not stored."
+msgstr ""
+
+#: templates/admin/form-edit.php:174
+msgid "Add this hidden field to the form."
+msgstr ""
+
+#: templates/admin/form-edit.php:184
+msgid "Recipients"
+msgstr ""
+
+#: templates/admin/form-edit.php:190
+msgid "One address per line, up to 10. Leave this empty to store submissions without sending email."
+msgstr ""
+
+#: templates/admin/form-edit.php:195
+msgid "Reply-To"
+msgstr ""
+
+#: templates/admin/form-edit.php:198
+#: templates/admin/submission-detail.php:99
+#: templates/admin/submission-detail.php:100
+msgid "None"
+msgstr ""
+
+#: templates/admin/form-edit.php:208
+msgid "Uses the submitted value of an email field. An invalid value is left off the message."
+msgstr ""
+
+#: templates/admin/form-edit.php:213
+msgid "Message"
+msgstr ""
+
+#: templates/admin/form-edit.php:217
+msgid "Include submission content"
+msgstr ""
+
+#: templates/admin/form-edit.php:219
+msgid "The message always links to this submission. The subject never includes submitted values."
+msgstr ""
+
+#: templates/admin/form-edit.php:227
+msgid "URL"
+msgstr ""
+
+#: templates/admin/form-edit.php:233
+msgid "An https address that is not on a private network. Leave this empty to store submissions without a webhook."
+msgstr ""
+
+#: templates/admin/form-edit.php:238
+msgid "Payload"
+msgstr ""
+
+#: templates/admin/form-edit.php:242
+msgid "Include submission fields"
+msgstr ""
+
+#: templates/admin/form-edit.php:244
+msgid "The webhook always includes the receipt and the form. Submitted fields are included only when this is on."
+msgstr ""
+
+#: templates/admin/form-edit.php:249
+msgid "Secret"
+msgstr ""
+
+#: templates/admin/form-edit.php:252
+msgid "Rotate secret"
+msgstr ""
+
+#: templates/admin/form-edit.php:253
+msgid "Rotating the secret stops the previous one immediately."
+msgstr ""
+
+#: templates/admin/form-edit.php:259
+msgid "Fields"
+msgstr ""
+
+#: templates/admin/form-edit.php:264
+#: templates/admin/form-edit.php:299
+#: templates/admin/form-edit.php:388
+msgid "Label"
+msgstr ""
+
+#: templates/admin/form-edit.php:265
+#: templates/admin/form-edit.php:305
+#: templates/admin/form-edit.php:390
+msgid "Type"
+msgstr ""
+
+#: templates/admin/form-edit.php:266
+#: templates/admin/form-edit.php:318
+#: templates/admin/form-edit.php:397
+msgid "Required"
+msgstr ""
+
+#: templates/admin/form-edit.php:267
+#: templates/admin/form-edit.php:321
+#: templates/admin/form-edit.php:398
+msgid "Max length"
+msgstr ""
+
+#: templates/admin/form-edit.php:269
+#: templates/admin/form-edit.php:372
+#: templates/admin/form-edit.php:374
+#: templates/admin/form-edit.php:420
+#: templates/admin/form-edit.php:422
+msgid "Remove"
+msgstr ""
+
+#: templates/admin/form-edit.php:306
+#: templates/admin/form-edit.php:391
+msgid "Select"
+msgstr ""
+
+#: templates/admin/form-edit.php:331
+#: templates/admin/form-edit.php:404
+msgid "Identifies the person"
+msgstr ""
+
+#: templates/admin/form-edit.php:336
+#: templates/admin/form-edit.php:408
+msgid "Min"
+msgstr ""
+
+#: templates/admin/form-edit.php:340
+#: templates/admin/form-edit.php:409
+msgid "Max"
+msgstr ""
+
+#: templates/admin/form-edit.php:344
+#: templates/admin/form-edit.php:410
+msgid "Decimal places"
+msgstr ""
+
+#: templates/admin/form-edit.php:358
+#: templates/admin/form-edit.php:413
+msgid "Options"
+msgstr ""
+
+#: templates/admin/form-edit.php:359
+msgid "One option per line, as value|Label. A missing label uses the value."
+msgstr ""
+
+#: templates/admin/form-edit.php:362
+#: templates/admin/form-edit.php:414
+msgid "Allow more than one"
+msgstr ""
+
+#: templates/admin/form-edit.php:382
+msgid "Add field"
+msgstr ""
+
+#: templates/admin/form-edit.php:427
+msgid "Save form"
+msgstr ""
+
+#: templates/admin/form-edit.php:427
+msgid "Create form"
+msgstr ""
+
+#: templates/admin/forms-list.php:25
+msgid "No forms yet."
+msgstr ""
+
+#: templates/admin/forms-list.php:32
+msgid "Public identifier"
+msgstr ""
+
+#: templates/admin/forms-list.php:34
+msgid "Updated"
+msgstr ""
+
+#: templates/admin/forms-list.php:53
+msgid "Enabled"
+msgstr ""
+
+#: templates/admin/forms-list.php:54
+msgid "Disabled"
+msgstr ""
+
+#: templates/admin/settings.php:41
+msgid "Settings saved."
+msgstr ""
+
+#: templates/admin/settings.php:48
+msgid "Data retention"
+msgstr ""
+
+#. translators: 1: number of days, 2: PHP constant name.
+#: templates/admin/settings.php:57
+#: templates/admin/settings.php:72
+#: templates/admin/settings.php:87
+#, php-format
+msgid "%1$s days. Constant: %2$s."
+msgstr ""
+
+#: templates/admin/settings.php:66
+msgid "Finished deliveries"
+msgstr ""
+
+#: templates/admin/settings.php:97
+msgid "Identity index"
+msgstr ""
+
+#: templates/admin/settings.php:100
+msgid "Last run"
+msgstr ""
+
+#: templates/admin/settings.php:102
+msgid "Retention has not run yet."
+msgstr ""
+
+#. translators: %s: date and time of the first retention run.
+#: templates/admin/settings.php:109
+#, php-format
+msgid "The first run is scheduled for %s."
+msgstr ""
+
+#: templates/admin/settings.php:120
+msgid "Finished"
+msgstr ""
+
+#: templates/admin/settings.php:124
+#: templates/admin/submissions-list.php:32
+msgid "Submissions"
+msgstr ""
+
+#: templates/admin/settings.php:132
+msgid "Deliveries"
+msgstr ""
+
+#: templates/admin/settings.php:136
+msgid "Idempotency keys"
+msgstr ""
+
+#: templates/admin/settings.php:140
+msgid "Rate-limit counters"
+msgstr ""
+
+#: templates/admin/settings.php:144
+msgid "Audit events"
+msgstr ""
+
+#: templates/admin/settings.php:148
+msgid "Rows still waiting"
+msgstr ""
+
+#: templates/admin/settings.php:153
+msgid "Errors"
+msgstr ""
+
+#: templates/admin/settings.php:165
+msgid "Uninstall"
+msgstr ""
+
+#: templates/admin/settings.php:171
+msgid "Data"
+msgstr ""
+
+#: templates/admin/settings.php:175
+msgid "Delete all data on uninstall"
+msgstr ""
+
+#: templates/admin/settings.php:177
+msgid "Deletes tables, settings, and capabilities when the plugin is uninstalled. Leave this off to keep submissions."
+msgstr ""
+
+#: templates/admin/settings.php:181
+msgid "Save settings"
+msgstr ""
+
+#: templates/admin/settings.php:184
+msgid "Only a person who can activate plugins can choose to delete data on uninstall."
+msgstr ""
+
+#: templates/admin/submission-detail.php:30
+msgid "Delete this submission permanently?"
+msgstr ""
+
+#: templates/admin/submission-detail.php:35
+msgid "Back to submissions"
+msgstr ""
+
+#: templates/admin/submission-detail.php:42
+msgid "This submission could not be found."
+msgstr ""
+
+#: templates/admin/submission-detail.php:71
+msgid "No delivery was queued for this submission."
+msgstr ""
+
+#: templates/admin/submission-detail.php:76
+msgid "Channel"
+msgstr ""
+
+#: templates/admin/submission-detail.php:78
+msgid "Attempts"
+msgstr ""
+
+#: templates/admin/submission-detail.php:79
+msgid "Last error"
+msgstr ""
+
+#: templates/admin/submission-detail.php:80
+msgid "Next attempt"
+msgstr ""
+
+#: templates/admin/submissions-list.php:34
+msgid "Export CSV"
+msgstr ""
+
+#: templates/admin/submissions-list.php:47
+msgid "All forms"
+msgstr ""
+
+#: templates/admin/submissions-list.php:61
+msgid "Search by email"
+msgstr ""
