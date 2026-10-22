@@ -4,6 +4,8 @@
 /.gitignore
 /.github
 /.github/**
+/.wordpress-org
+/.wordpress-org/**
 /.distignore
 /.wp-env.json
 /.wp-env.override.json

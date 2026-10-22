@@ -132,9 +132,19 @@ final class WebhookUrlPolicyTest extends WP_UnitTestCase {
 			}
 		);
 
-		$result = ( new WebhookUrlPolicy() )->inspect( 'https://127.0.0.1:8443/hook' );
+		$result = ( new WebhookUrlPolicy( null, 'local' ) )->inspect( 'https://127.0.0.1:8443/hook' );
 		$this->assertIsArray( $result );
 		$this->assertSame( 8443, $result['port'] );
+	}
+
+	/**
+	 * A test filter cannot open a private destination in staging or production.
+	 */
+	public function test_the_host_exception_is_ignored_outside_local_development(): void {
+		add_filter( WebhookUrlPolicy::ALLOWED_HOSTS, static fn(): array => array( '127.0.0.1' ) );
+		foreach ( array( 'production', 'staging' ) as $environment ) {
+			$this->assertInstanceOf( WP_Error::class, ( new WebhookUrlPolicy( null, $environment ) )->inspect( 'http://127.0.0.1:8443/hook' ) );
+		}
 	}
 
 	/**

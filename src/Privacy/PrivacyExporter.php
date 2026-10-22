@@ -34,6 +34,7 @@ final class PrivacyExporter {
 	 */
 	public static function register(): void {
 		add_filter( 'wp_privacy_personal_data_exporters', array( self::class, 'add_exporter' ) );
+		add_action( 'wp_privacy_personal_data_export_file_created', array( self::class, 'clear_pages' ), 10, 4 );
 	}
 
 	/**
@@ -60,22 +61,22 @@ final class PrivacyExporter {
 	 *
 	 * @param string $email_address Address WordPress is exporting.
 	 * @param int    $page          Page number, starting at 1.
+	 * @param int    $request_id    Request id for PHP callers; AJAX resolves the validated core request.
 	 * @return array{data: list<array{group_id: string, group_label: string, item_id: string, data: list<array{name: string, value: string}>}>, done: bool}|WP_Error
 	 */
-	public static function export( string $email_address, int $page = 1 ): array|WP_Error {
+	public static function export( string $email_address, int $page = 1, int $request_id = 0 ): array|WP_Error {
 		$pending = self::pending_error();
 		if ( $pending instanceof WP_Error ) {
 			return $pending;
 		}
 
-		$page = max( 1, $page );
-		$ids  = self::submission_ids( $email_address, ( $page - 1 ) * self::PAGE_SIZE );
-		if ( $ids instanceof WP_Error ) {
-			return $ids;
+		$pages = PrivacyExportPages::read( $request_id > 0 ? $request_id : self::ajax_request_id(), $email_address, max( 1, $page ) );
+		if ( $pages instanceof WP_Error ) {
+			return $pages;
 		}
 
 		$data = array();
-		foreach ( $ids as $id ) {
+		foreach ( $pages['ids'] as $id ) {
 			$item = self::item( $id );
 			if ( null !== $item ) {
 				$data[] = $item;
@@ -93,7 +94,7 @@ final class PrivacyExporter {
 
 		return array(
 			'data' => $data,
-			'done' => count( $ids ) < self::PAGE_SIZE,
+			'done' => $pages['done'],
 		);
 	}
 
@@ -116,19 +117,28 @@ final class PrivacyExporter {
 	}
 
 	/**
-	 * Submission ids for one page of this address.
-	 *
-	 * @param string $email  Address to match.
-	 * @param int    $offset Rows to skip.
-	 * @return list<int>|WP_Error
+	 * Resolve only a core privacy request with its own capability and nonce.
 	 */
-	private static function submission_ids( string $email, int $offset ): array|WP_Error {
-		$hash = IdentityHasher::hash( $email );
-		if ( ! is_string( $hash ) ) {
-			return array();
+	private static function ajax_request_id(): int {
+		$id    = isset( $_POST['id'] ) && is_scalar( $_POST['id'] ) ? absint( $_POST['id'] ) : 0;
+		$nonce = isset( $_POST['security'] ) && is_string( $_POST['security'] ) ? sanitize_text_field( wp_unslash( $_POST['security'] ) ) : '';
+		if ( $id < 1 || ! current_user_can( 'export_others_personal_data' ) || ! wp_verify_nonce( $nonce, 'wp-privacy-export-personal-data-' . $id ) ) {
+			return 0;
 		}
+		return $id;
+	}
 
-		return ( new IdentityRepository() )->submission_ids_for_hash( $hash, self::PAGE_SIZE, $offset );
+	/**
+	 * Remove temporary page boundaries once core has built the export file.
+	 *
+	 * @param mixed $archive_path Archive path. Unused.
+	 * @param mixed $archive_url  Archive URL. Unused.
+	 * @param mixed $html_path    HTML path. Unused.
+	 * @param int   $request_id   WordPress privacy request id.
+	 */
+	public static function clear_pages( mixed $archive_path, mixed $archive_url, mixed $html_path, int $request_id ): void {
+		unset( $archive_path, $archive_url, $html_path );
+		delete_post_meta( $request_id, PrivacyExportPages::META_KEY );
 	}
 
 	/**

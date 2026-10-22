@@ -18,6 +18,8 @@ use Formstead\Forms\FormRepository;
 use Formstead\Privacy\IdentityBackfill;
 use Formstead\Privacy\PrivacyEraser;
 use Formstead\Privacy\PrivacyExporter;
+use Formstead\Privacy\PrivacyExportPages;
+use Formstead\Submissions\SubmissionDeleter;
 use Formstead\Submissions\Submission;
 use Formstead\Submissions\SubmissionIntake;
 use Formstead\Submissions\SubmissionRepository;
@@ -73,11 +75,13 @@ final class PrivacyToolsTest extends WP_UnitTestCase {
 		$delivery_id = ( new DeliveryRepository() )->create( $owned[0]->id() );
 		$this->assertIsInt( $delivery_id );
 
-		$ids   = array();
+		$ids        = array();
+		$request_id = wp_create_user_request( self::EMAIL, 'export_personal_data' );
+		$this->assertIsInt( $request_id );
 		$page  = 1;
 		$sizes = array();
 		do {
-			$result = PrivacyExporter::export( self::EMAIL, $page );
+			$result = PrivacyExporter::export( self::EMAIL, $page, $request_id );
 			$this->assertIsArray( $result );
 			$sizes[] = count( $result['data'] );
 			foreach ( $result['data'] as $item ) {
@@ -147,14 +151,78 @@ final class PrivacyToolsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Deletion cannot shift a later page, and additions wait for another export.
+	 */
+	public function test_pages_survive_deletion_and_replay_without_including_new_submissions(): void {
+		$form  = $this->form( 'Concurrent export' );
+		$owned = array();
+		for ( $i = 0; $i < 251; ++$i ) {
+			$owned[] = $this->store( $form, self::EMAIL );
+		}
+		$request_id = wp_create_user_request( self::EMAIL, 'export_personal_data' );
+		$this->assertIsInt( $request_id );
+		$first = PrivacyExporter::export( self::EMAIL, 1, $request_id );
+		$this->assertIsArray( $first );
+		$this->assertCount( 100, $first['data'] );
+		$this->assertSame( 1, ( new SubmissionDeleter() )->delete( array( $owned[0]->id() ) ) );
+		$added = $this->store( $form, self::EMAIL );
+
+		$second = PrivacyExporter::export( self::EMAIL, 2, $request_id );
+		$this->assertIsArray( $second );
+		$this->assertCount( 100, $second['data'] );
+		$this->assertSame( 'submission-' . $owned[100]->id(), $second['data'][0]['item_id'] );
+		$this->assertSame( $second, PrivacyExporter::export( self::EMAIL, 2, $request_id ) );
+		$again = PrivacyExporter::export( self::EMAIL, 1, $request_id );
+		$this->assertIsArray( $again );
+		$this->assertCount( 99, $again['data'] );
+		$this->assertFalse( $again['done'] );
+		$this->assertSame( $second, PrivacyExporter::export( self::EMAIL, 2, $request_id ) );
+		$last = PrivacyExporter::export( self::EMAIL, 3, $request_id );
+		$this->assertIsArray( $last );
+		$this->assertCount( 51, $last['data'] );
+		$this->assertTrue( $last['done'] );
+		$this->assertNotContains( 'submission-' . $added->id(), array_column( $last['data'], 'item_id' ) );
+		$this->assertSame( $last, PrivacyExporter::export( self::EMAIL, 3, $request_id ) );
+
+		$this->assertNotEmpty( get_post_meta( $request_id, PrivacyExportPages::META_KEY, true ) );
+		PrivacyExporter::clear_pages( '', '', '', $request_id );
+		$this->assertSame( '', get_post_meta( $request_id, PrivacyExportPages::META_KEY, true ) );
+	}
+
+	/**
+	 * A cursor belongs to one valid request and cannot silently skip a page.
+	 */
+	public function test_pages_require_the_matching_request_and_the_preceding_page(): void {
+		$request_id = wp_create_user_request( self::EMAIL, 'export_personal_data' );
+		$this->assertIsInt( $request_id );
+		$this->assertInstanceOf( WP_Error::class, PrivacyExporter::export( self::EMAIL, 2, $request_id ) );
+		$this->assertInstanceOf( WP_Error::class, PrivacyExporter::export( self::OTHER, 1, $request_id ) );
+		$this->assertInstanceOf( WP_Error::class, PrivacyExporter::export( self::EMAIL, 1 ) );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$_POST['id']       = (string) $request_id;
+		$_POST['security'] = wp_create_nonce( 'wp-privacy-export-personal-data-' . $request_id );
+		try {
+			$this->assertIsArray( PrivacyExporter::export( self::EMAIL, 1 ) );
+			$_POST['security'] = 'invalid';
+			$this->assertInstanceOf( WP_Error::class, PrivacyExporter::export( self::EMAIL, 1 ) );
+		} finally {
+			unset( $_POST['id'], $_POST['security'] );
+			wp_set_current_user( 0 );
+		}
+	}
+
+	/**
 	 * A failed index read is an error, not an empty export or a finished erasure.
 	 */
 	public function test_a_failed_index_read_refuses_export_and_erasure(): void {
 		global $wpdb;
 
-		$form  = $this->form( 'Readable' );
-		$saved = $this->store( $form, self::EMAIL );
-		$table = Schema::identities_table();
+		$form       = $this->form( 'Readable' );
+		$saved      = $this->store( $form, self::EMAIL );
+		$table      = Schema::identities_table();
+		$request_id = wp_create_user_request( self::EMAIL, 'export_personal_data' );
+		$this->assertIsInt( $request_id );
 
 		$previous = $wpdb->suppress_errors( true );
 		$filter   = static function ( $query ) use ( $table ) {
@@ -167,7 +235,7 @@ final class PrivacyToolsTest extends WP_UnitTestCase {
 
 		add_filter( 'query', $filter );
 		try {
-			$exported = PrivacyExporter::export( self::EMAIL, 1 );
+			$exported = PrivacyExporter::export( self::EMAIL, 1, $request_id );
 			$erased   = PrivacyEraser::erase( self::EMAIL, 1 );
 		} finally {
 			remove_filter( 'query', $filter );

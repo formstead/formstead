@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Keep one branch and squash pull request per roadmap stage, with automatic branch deletion. Tags and GitHub Releases are reserved for distributed versions. Stages 0–9 are consolidated into ten commits; the previous history is archived.
 
+## 1.0.0-rc.1 - 2026-10-22
+
+### Fixed
+
+- Require verified cURL address pinning for webhooks and refuse delivery when the transport cannot guarantee it. Restrict test-only network exceptions to explicit local development environments.
+- Keep stable personal-data export page boundaries when earlier submissions are deleted or new submissions arrive during export.
+- Keep failed migration reads and incomplete schema changes from being recorded as successful upgrades.
+
+### Added
+
+- Historical schema fixtures, concurrent delivery and reactivation coverage, real HTTP transport and signed webhook tests, and a repeatable 100,000-submission acceptance benchmark.
+- Getting-started, API, operations and testing guides, translation template, screenshot capture tooling and third-party license notices.
+
 ## [0.9.0] - 2026-10-21
 
 ### Added

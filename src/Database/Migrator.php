@@ -90,6 +90,17 @@ final class Migrator {
 				return $engine;
 			}
 
+			// dbDelta can continue after a failed ALTER, clearing last_error later.
+			// A read-only second pass must have no remaining schema changes.
+			foreach ( Schema::statements() as $statement ) {
+				if ( array() !== dbDelta( $statement, false ) ) {
+					return new WP_Error(
+						'formstead_migration_tables',
+						__( 'Formstead could not create its database tables.', 'formstead' )
+					);
+				}
+			}
+
 			if ( $installed < 2 ) {
 				$upgraded = self::upgrade_to_2();
 				if ( $upgraded instanceof WP_Error ) {
@@ -196,7 +207,13 @@ final class Migrator {
 				ARRAY_A
 			);
 
-			if ( ! is_array( $rows ) || array() === $rows ) {
+			if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
+				return new WP_Error(
+					'formstead_migration_backfill',
+					__( 'Formstead could not update its database.', 'formstead' )
+				);
+			}
+			if ( array() === $rows ) {
 				return null;
 			}
 
@@ -220,6 +237,19 @@ final class Migrator {
 						$version
 					)
 				);
+				// get_var() can change last_error despite its inferred earlier value.
+				/**
+				 * Current database error after the lookup.
+				 *
+				 * @var string $read_error
+				 */
+				$read_error = $wpdb->last_error;
+				if ( '' !== $read_error ) {
+					return new WP_Error(
+						'formstead_migration_backfill',
+						__( 'Formstead could not update its database.', 'formstead' )
+					);
+				}
 				if ( null !== $exists ) {
 					continue;
 				}
@@ -270,7 +300,13 @@ final class Migrator {
 				ARRAY_A
 			);
 
-			if ( ! is_array( $rows ) || array() === $rows ) {
+			if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
+				return new WP_Error(
+					'formstead_migration_backfill',
+					__( 'Formstead could not update its database.', 'formstead' )
+				);
+			}
+			if ( array() === $rows ) {
 				return null;
 			}
 
@@ -374,7 +410,7 @@ final class Migrator {
 				ARRAY_A
 			);
 
-			if ( ! is_array( $rows ) ) {
+			if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
 				return new WP_Error(
 					'formstead_migration_backfill',
 					__( 'Formstead could not update its database.', 'formstead' )

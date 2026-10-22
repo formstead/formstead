@@ -54,6 +54,8 @@ npm run analyse
 npm run plugin-check
 ```
 
+Release hardening also runs `npm run test:explain`: index-plan checks and the 100,000-submission acceptance benchmark. CI runs that group on MariaDB and MySQL and saves performance logs. See [Release checks](docs/testing.md) for fixture shape, thresholds, package checks and screenshots.
+
 After Composer dependencies change, install them in the container:
 
 ```sh

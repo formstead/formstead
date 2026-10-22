@@ -156,6 +156,7 @@ final class DeliveryWorker {
 		return in_array(
 			$error,
 			array(
+				WebhookFailure::UNSAFE_TRANSPORT,
 				WebhookFailure::BLOCKED_URL,
 				WebhookFailure::REDIRECT,
 				WebhookFailure::HTTP_4XX,

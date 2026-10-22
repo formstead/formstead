@@ -96,10 +96,13 @@ A delivery is attempted at most five times. After a failure the waits are 1 minu
 | --- | --- | --- |
 | `webhook_blocked_url` | The URL is not allowed, or the secret cannot sign. | No |
 | `webhook_redirect` | The receiver answered `3xx`. | No |
+| `webhook_unsafe_transport` | The host cannot enforce a direct connection to the checked address. | No |
 | `webhook_http_4xx` | The receiver answered another `4xx`. | No |
 | `webhook_timeout` | The connection exceeded 5 seconds. | Yes |
 | `webhook_connect_failed` | The connection could not be opened. | Yes |
 | `webhook_http_429` | The receiver answered `429`. | Yes |
 | `webhook_http_5xx` | The receiver answered `5xx`. | Yes |
 
-The filter `formstead_webhook_allowed_hosts` can allow a host, `host:port`, or `[ipv6]:port` to use HTTP, another port, or a private address. It exists for tests. A production site should not add it.
+Webhook requests require PHP cURL with HTTPS support. The transport is selected explicitly, pins the checked address, and connects directly without an HTTP proxy. If pinning cannot be enforced, `webhook_unsafe_transport` fails the delivery without retry. Receiver response bodies are limited to 1,024 bytes and discarded.
+
+The filter `formstead_webhook_allowed_hosts` can allow a host, `host:port`, or `[ipv6]:port` to use HTTP, another port, or a private address only when `FORMSTEAD_E2E` is enabled and the environment is `local` or `development`. Staging and production ignore that exception. It exists for isolated tests.

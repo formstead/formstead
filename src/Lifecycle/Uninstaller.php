@@ -10,6 +10,7 @@ namespace Formstead\Lifecycle;
 use Formstead\Database\Schema;
 use Formstead\Delivery\Scheduler;
 use Formstead\Privacy\IdentityBackfill;
+use Formstead\Privacy\PrivacyExportPages;
 use Formstead\Retention\RetentionScheduler;
 use Formstead\Security\Capabilities;
 use WP_Role;
@@ -91,6 +92,7 @@ final class Uninstaller {
 		RetentionScheduler::clear();
 		Scheduler::clear();
 		IdentityBackfill::clear();
+		delete_post_meta_by_key( PrivacyExportPages::META_KEY );
 		self::drop_tables();
 		self::delete_options();
 		self::delete_capabilities();

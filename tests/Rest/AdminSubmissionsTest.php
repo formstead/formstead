@@ -137,6 +137,46 @@ final class AdminSubmissionsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Every method denies anonymous and ordinary users before exposing or changing data.
+	 */
+	public function test_all_admin_methods_require_a_capability(): void {
+		$submission = $this->store( $this->save_form(), 'ada@example.com', 'Must remain private' );
+		foreach ( array( 0, self::factory()->user->create( array( 'role' => 'subscriber' ) ) ) as $user_id ) {
+			wp_set_current_user( $user_id );
+			foreach ( array( 'GET', 'PATCH', 'DELETE' ) as $method ) {
+				$response = $this->dispatch( $method, '/formstead/v1/submissions/' . $submission->receipt_id() );
+				$this->assertSame( 0 === $user_id ? 401 : 403, $response->get_status() );
+				$this->assertStringNotContainsString( 'Must remain private', (string) wp_json_encode( $response->get_data() ) );
+			}
+			$this->assertSame( 0 === $user_id ? 401 : 403, $this->dispatch( 'GET', '/formstead/v1/submissions' )->get_status() );
+		}
+		$this->assertSame( 'new', ( new SubmissionRepository() )->find( $submission->id() )->status() );
+	}
+
+	/**
+	 * SQL syntax in public filters is rejected or matches nothing, never all rows.
+	 */
+	public function test_injection_strings_cannot_expand_the_list(): void {
+		$this->sign_in( Capabilities::READ_SUBMISSIONS );
+		$saved = $this->store( $this->save_form(), 'ada@example.com', 'Kept value' );
+		foreach ( array( 'form', 'status', 'after', 'before', 'email' ) as $filter ) {
+			$response = $this->dispatch( 'GET', '/formstead/v1/submissions', array( $filter => "' OR 1=1; --" ) );
+			if ( 200 === $response->get_status() ) {
+				$this->assertSame( array(), $response->get_data() );
+			} else {
+				$this->assertGreaterThanOrEqual( 400, $response->get_status() );
+			}
+		}
+		$this->assertSame(
+			array(
+				'email' => 'ada@example.com',
+				'note'  => 'Kept value',
+			),
+			( new SubmissionRepository() )->find( $saved->id() )->payload()
+		);
+	}
+
+	/**
 	 * Plain HTTP is refused outside local and development.
 	 *
 	 * WordPress 7 reads the environment from a constant and does not filter it,

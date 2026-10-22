@@ -4,7 +4,7 @@ Tags: forms, rest-api, headless, submissions
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.9.0
+Stable tag: 1.0.0-rc.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Receive form submissions from static and headless sites on an existing WordPress
 
 Formstead receives form submissions from static and headless sites on an existing WordPress install. Plain HTML, Astro, and Next.js post to WordPress. WordPress stores submissions in a private inbox. The site frontend stays with its author.
 
-Version 0.9.0 ends Core beta. It adds an authenticated submissions API and a signed webhook for each form. The Next.js example and the integration notes stay in the source repository. Version 0.7.0 is the technical MVP. The source repository includes HTML and Astro examples that post with and without JavaScript, including from another site. The installable package does not include those examples. Version 0.6.0 keeps each form's submissions for a number of days, 30 by default. Forms that already exist get the same 30 days, and the first cleanup deletes older submissions. Use 0 to keep a form's submissions until someone deletes them. Settings shows the last cleanup and warns when it is overdue. The inbox lists submissions; opening a new one marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
+Version 1.0.0-rc.1 is a candidate for pilot testing. It hardens webhook transport, stabilizes personal-data export pagination, and verifies historical upgrades. Version 0.9.0 ended Core beta. It adds an authenticated submissions API and a signed webhook for each form. The Next.js example and the integration notes stay in the source repository. Version 0.7.0 is the technical MVP. The source repository includes HTML and Astro examples that post with and without JavaScript, including from another site. The installable package does not include those examples. Version 0.6.0 keeps each form's submissions for a number of days, 30 by default. Forms that already exist get the same 30 days, and the first cleanup deletes older submissions. Use 0 to keep a form's submissions until someone deletes them. Settings shows the last cleanup and warns when it is overdue. The inbox lists submissions; opening a new one marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
 
 Network activation on WordPress Multisite is not supported.
 
@@ -38,7 +38,39 @@ No. The plugin runs entirely on the WordPress install. There is no required Form
 
 No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
+= Can a form work without JavaScript? =
+
+Yes. Copy its endpoint into a normal HTML form's action and use method="post". A valid submission redirects to the success URL saved on the form. For JSON, send Accept: application/json. Examples and the full contract are in the source repository's docs and examples directories.
+
+= Why is mail still waiting? =
+
+Deliveries use WP-Cron and the site's mail setup. On a quiet site, schedule wp formstead deliveries run from system cron. A handed-off email has been accepted by the mail system; that does not prove mailbox delivery. Full submission content is included only when the form explicitly enables it.
+
+= What does a webhook require? =
+
+A public HTTPS destination on port 443, PHP cURL with HTTPS support, and direct outbound access. Redirects and private destinations are refused. Unsupported address pinning fails the delivery safely. The receiver must verify the signature and timestamp and deduplicate the event id. Webhooks are optional; email and stored submissions work independently.
+
+= What happens to data on update or uninstall? =
+
+Back up the database and plugin files together before updating. Forms keep their configured retention; the default is 30 days. Uninstall keeps data unless an administrator explicitly enabled deletion. Opt-in deletion removes plugin tables, settings, permissions, scheduled work and temporary export page boundaries. Host backups, sent mail, receiver data and WordPress privacy export files remain outside Formstead.
+
+= Where are the setup and operations instructions? =
+
+The source repository contains docs/getting-started.md, docs/api.md, docs/operations.md, docs/integrations.md and docs/data-flows.md. They cover the first form, CORS, application passwords, cron, retentions, permissions, privacy tools and recovery. The installable ZIP includes this readme; the detailed source guides are not bundled.
+
+== Screenshots ==
+
+1. The private inbox with status views, exact-email search, form and date filters, and CSV export.
+2. Form configuration with field types, origin controls, notification options and per-form retention.
+3. Settings with cleanup status, privacy-index progress and the explicit uninstall-data choice.
+
 == Changelog ==
+
+= 1.0.0-rc.1 =
+* Require verified cURL address pinning for webhooks and restrict local test exceptions.
+* Keep personal-data export pages stable when submissions change during export.
+* Refuse to mark failed migrations as complete. Add historical upgrade, concurrency and performance acceptance coverage.
+* Add operator and API guides, translation template and license notices.
 
 = 0.9.0 =
 * Add an authenticated submissions API addressed by receipt id. It requires HTTPS outside local development, uses a WordPress application password, and sends no CORS headers. Reading a submission does not mark it read.
@@ -137,6 +169,9 @@ No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 * Initial installable skeleton.
 
 == Upgrade Notice ==
+
+= 1.0.0-rc.1 =
+Release candidate for pilot testing. Back up files and database together. Schema remains v8. Webhooks require cURL with address pinning and direct outbound access.
 
 = 0.9.0 =
 Existing forms do not send a webhook until a URL is saved. The database upgrade adds the webhook columns and does not change stored submissions.

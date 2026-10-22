@@ -55,11 +55,26 @@ tests_add_filter( 'muplugins_loaded', 'formstead_tests_load_plugin' );
 
 require $formstead_tests_dir . '/includes/bootstrap.php';
 
+// Only this test harness may exercise the explicitly allowed local webhook hosts.
+if ( ! defined( 'FORMSTEAD_E2E' ) ) {
+	define( 'FORMSTEAD_E2E', true );
+}
+
 // START TRANSACTION would commit the suite transaction. See notes/roadmap.md section 7a.
 Formstead\Database\Transaction::use_savepoints( true );
 
 // Install the schema before the suite transaction starts, so ordinary tests
 // write real rows that the suite can roll back. DDL during a test commits.
+// Core reinstalls its own tables, but leaves plugin tables from E2E intact.
+// This is the same disposable tests database, never the development database.
+global $wpdb;
+foreach ( Formstead\Database\Schema::tables() as $formstead_test_table ) {
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- reset plugin tables in the test installer only.
+	$wpdb->query( "DROP TABLE IF EXISTS {$formstead_test_table}" );
+}
+delete_option( Formstead\Database\Schema::VERSION_OPTION );
+delete_option( Formstead\Database\Schema::LOCK_OPTION );
+delete_option( Formstead\Database\Migrator::IDENTITY_BACKFILL_OPTION );
 $formstead_migration = Formstead\Database\Migrator::run();
 if ( $formstead_migration instanceof WP_Error ) {
 	fwrite( STDERR, 'Formstead test schema install failed: ' . $formstead_migration->get_error_code() . "\n" );

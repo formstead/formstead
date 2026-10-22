@@ -13,6 +13,11 @@ namespace Formstead\Webhook;
 final class WebhookFailure {
 
 	/**
+	 * The transport cannot guarantee a connection to the checked address.
+	 */
+	public const UNSAFE_TRANSPORT = 'webhook_unsafe_transport';
+
+	/**
 	 * The URL is not HTTPS, has userinfo, or points at a blocked address.
 	 */
 	public const BLOCKED_URL = 'webhook_blocked_url';

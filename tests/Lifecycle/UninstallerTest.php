@@ -12,6 +12,7 @@ use Formstead\Database\Schema;
 use Formstead\Delivery\Scheduler;
 use Formstead\Lifecycle\Uninstaller;
 use Formstead\Privacy\IdentityBackfill;
+use Formstead\Privacy\PrivacyExportPages;
 use Formstead\Retention\RetentionRunner;
 use Formstead\Retention\RetentionScheduler;
 use Formstead\Security\Capabilities;
@@ -45,6 +46,7 @@ final class UninstallerTest extends MigrationTestCase {
 	 */
 	public function test_without_the_option_data_stays(): void {
 		$this->assertNull( Migrator::run() );
+		add_post_meta( 999998, PrivacyExportPages::META_KEY, array( 'until' => 10 ) );
 		update_option(
 			IpHasher::OPTION,
 			array(
@@ -67,6 +69,8 @@ final class UninstallerTest extends MigrationTestCase {
 		$role = get_role( 'administrator' );
 		$this->assertNotNull( $role );
 		$this->assertTrue( $role->has_cap( Capabilities::MANAGE_FORMS ) );
+		$this->assertSame( array( 'until' => 10 ), get_post_meta( 999998, PrivacyExportPages::META_KEY, true ) );
+		delete_post_meta( 999998, PrivacyExportPages::META_KEY );
 	}
 
 	/**
@@ -74,6 +78,7 @@ final class UninstallerTest extends MigrationTestCase {
 	 */
 	public function test_with_the_option_nothing_formstead_remains(): void {
 		$this->assertNull( Migrator::run() );
+		add_post_meta( 999999, PrivacyExportPages::META_KEY, array( 'until' => 10 ) );
 		update_option( Uninstaller::OPTION, '1', false );
 		update_option( RetentionRunner::REPORT_OPTION, array( 'finished_at' => time() ), false );
 		update_option(
@@ -125,6 +130,7 @@ final class UninstallerTest extends MigrationTestCase {
 		$this->assertFalse( wp_next_scheduled( Scheduler::SWEEP ) );
 		$this->assertFalse( wp_next_scheduled( IdentityBackfill::HOOK ) );
 		$this->assertFalse( get_option( Migrator::IDENTITY_BACKFILL_OPTION ) );
+		$this->assertSame( '', get_post_meta( 999999, PrivacyExportPages::META_KEY, true ) );
 	}
 
 	/**

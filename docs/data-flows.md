@@ -1,5 +1,7 @@
 # Data flows
 
+Personal-data export also keeps temporary numeric page boundaries on its existing WordPress privacy-request post, under `_formstead_export_pages`. They contain no payload or email address. The first page fixes the highest submission id; later pages use remembered id ranges so deleting an earlier row does not shift the result. New submissions after that boundary belong to another export. WordPress removes the boundaries when the export file is created or the request is deleted. Opt-in Formstead uninstall removes remaining boundaries, while WordPress manages its requests and already generated export files.
+
 This note describes what Formstead stores, where it lives, how long it stays, and how it is removed. It is a description of the plugin. It is not a statement that a site meets any privacy law.
 
 Report a vulnerability to security@formstead.dev. See [SECURITY.md](../SECURITY.md). The controls are in the [threat model](threat-model.md).
