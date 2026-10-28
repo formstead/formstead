@@ -117,7 +117,9 @@ final class DeliveryRepository {
 	/**
 	 * Claim one due delivery, or return null when another worker holds it.
 	 *
-	 * The update is the lock. A processing row whose lock has expired can be claimed again.
+	 * The update is the lock. A processing row whose lock has expired can be
+	 * claimed again while attempts remain. Once the limit is already used, that
+	 * recovery closes the row as failed and does not hand it to a channel.
 	 *
 	 * @param int $id Delivery id.
 	 */
@@ -128,13 +130,17 @@ final class DeliveryRepository {
 			return null;
 		}
 
+		if ( $this->fail_abandoned( $id ) ) {
+			return null;
+		}
+
 		$now   = $this->now();
 		$until = gmdate( 'Y-m-d H:i:s', time() + self::LOCK_TTL );
 		$token = bin2hex( random_bytes( 16 ) );
 		$table = Schema::deliveries_table();
 		$saved = $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$table} SET status = %s, lock_token = %s, locked_until = %s, attempts = attempts + 1, updated_at = %s WHERE id = %d AND ( ( status = %s AND next_attempt_at <= %s ) OR ( status = %s AND locked_until < %s ) )",
+				"UPDATE {$table} SET status = %s, lock_token = %s, locked_until = %s, attempts = attempts + 1, updated_at = %s WHERE id = %d AND ( ( status = %s AND next_attempt_at <= %s ) OR ( status = %s AND locked_until < %s AND attempts < %d ) )",
 				DeliveryStatus::PROCESSING,
 				$token,
 				$until,
@@ -143,7 +149,8 @@ final class DeliveryRepository {
 				DeliveryStatus::PENDING,
 				$now,
 				DeliveryStatus::PROCESSING,
-				$now
+				$now,
+				self::MAX_ATTEMPTS
 			)
 		);
 
@@ -152,6 +159,41 @@ final class DeliveryRepository {
 		}
 
 		return $this->find_token( $id, $token );
+	}
+
+	/**
+	 * Close a crashed claim that has already used every attempt.
+	 *
+	 * A lock that is still held is left alone. The attempt count stays as it
+	 * is, because those claims already happened. Two workers can run this
+	 * together: only one update matches the expired processing row.
+	 *
+	 * @param int $id Delivery id.
+	 */
+	private function fail_abandoned( int $id ): bool {
+		global $wpdb;
+
+		$now   = $this->now();
+		$table = Schema::deliveries_table();
+		$saved = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = %s, locked_until = NULL, lock_token = NULL, last_error = %s, updated_at = %s WHERE id = %d AND status = %s AND locked_until < %s AND attempts >= %d",
+				DeliveryStatus::FAILED,
+				'abandoned',
+				$now,
+				$id,
+				DeliveryStatus::PROCESSING,
+				$now,
+				self::MAX_ATTEMPTS
+			)
+		);
+
+		if ( ! is_int( $saved ) ) {
+			$this->log_failure( $id );
+			return false;
+		}
+
+		return 1 === $saved;
 	}
 
 	/**

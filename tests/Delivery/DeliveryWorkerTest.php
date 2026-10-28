@@ -156,6 +156,105 @@ final class DeliveryWorkerTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An abandoned lock on the last allowed attempt is still sent once.
+	 */
+	public function test_abandoned_lock_on_the_last_attempt_is_sent(): void {
+		global $wpdb;
+
+		$delivery   = $this->pending_delivery();
+		$repository = new DeliveryRepository();
+		$channel    = new RecordingChannel();
+		$wpdb->update(
+			Schema::deliveries_table(),
+			array(
+				'status'       => DeliveryStatus::PROCESSING,
+				'attempts'     => DeliveryRepository::MAX_ATTEMPTS - 1,
+				'locked_until' => '2000-01-01 00:00:00',
+				'lock_token'   => 'stale',
+			),
+			array( 'id' => $delivery ),
+			array( '%s', '%d', '%s', '%s' ),
+			array( '%d' )
+		);
+
+		( new DeliveryWorker( $channel, $repository ) )->send( $delivery );
+
+		$loaded = $repository->find( $delivery );
+		$this->assertNotNull( $loaded );
+		$this->assertSame( DeliveryStatus::HANDED_OFF, $loaded->status() );
+		$this->assertSame( DeliveryRepository::MAX_ATTEMPTS, $loaded->attempts() );
+		$this->assertSame( 1, $channel->calls );
+	}
+
+	/**
+	 * A live claim at the attempt limit stays with the worker that holds it.
+	 */
+	public function test_live_lock_at_the_attempt_limit_is_not_closed(): void {
+		global $wpdb;
+
+		$delivery   = $this->pending_delivery();
+		$repository = new DeliveryRepository();
+		$channel    = new RecordingChannel();
+		$wpdb->update(
+			Schema::deliveries_table(),
+			array(
+				'status'       => DeliveryStatus::PROCESSING,
+				'attempts'     => DeliveryRepository::MAX_ATTEMPTS,
+				'locked_until' => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ),
+				'lock_token'   => 'held',
+			),
+			array( 'id' => $delivery ),
+			array( '%s', '%d', '%s', '%s' ),
+			array( '%d' )
+		);
+
+		( new DeliveryWorker( $channel, $repository ) )->send( $delivery );
+
+		$loaded = $repository->find( $delivery );
+		$this->assertNotNull( $loaded );
+		$this->assertSame( DeliveryStatus::PROCESSING, $loaded->status() );
+		$this->assertSame( 'held', $loaded->lock_token() );
+		$this->assertSame( DeliveryRepository::MAX_ATTEMPTS, $loaded->attempts() );
+		$this->assertSame( 0, $channel->calls );
+	}
+
+	/**
+	 * A claim abandoned after the attempt limit is failed and not sent again.
+	 */
+	public function test_abandoned_claim_past_the_limit_is_failed_without_sending(): void {
+		global $wpdb;
+
+		$delivery   = $this->pending_delivery();
+		$repository = new DeliveryRepository();
+		$channel    = new RecordingChannel();
+		$wpdb->update(
+			Schema::deliveries_table(),
+			array(
+				'status'       => DeliveryStatus::PROCESSING,
+				'attempts'     => DeliveryRepository::MAX_ATTEMPTS,
+				'locked_until' => '2000-01-01 00:00:00',
+				'lock_token'   => 'stale',
+			),
+			array( 'id' => $delivery ),
+			array( '%s', '%d', '%s', '%s' ),
+			array( '%d' )
+		);
+
+		( new DeliveryWorker( $channel, $repository ) )->send( $delivery );
+
+		$loaded = $repository->find( $delivery );
+		$this->assertNotNull( $loaded );
+		$this->assertSame( DeliveryStatus::FAILED, $loaded->status() );
+		$this->assertSame( 'abandoned', $loaded->last_error() );
+		$this->assertSame( DeliveryRepository::MAX_ATTEMPTS, $loaded->attempts() );
+		$this->assertSame( '', $loaded->lock_token() );
+		$this->assertSame( 0, $channel->calls );
+
+		( new DeliveryWorker( $channel, $repository ) )->send( $delivery );
+		$this->assertSame( 0, $channel->calls );
+	}
+
+	/**
 	 * The fifth failure is final, and a later run does not send again.
 	 */
 	public function test_retries_stop_after_five_failures(): void {
