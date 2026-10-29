@@ -102,7 +102,8 @@ test( 'the field editor can add and remove a row from the keyboard', async ( { p
 async function expectAccessible( page: Page, include?: string ): Promise<void> {
 	let builder = new AxeBuilder( { page } ).withTags( tags );
 	if ( include ) {
-		builder = builder.include( include );
+		// WordPress core's update notice is outside Formstead's accessibility scope.
+		builder = builder.include( include ).exclude( '#wpbody-content > .update-nag' );
 	}
 	const results = await builder.analyze();
 	const summary = results.violations
