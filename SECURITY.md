@@ -22,4 +22,4 @@ Security fixes apply to the latest release. Older tags are not patched.
 
 Formstead is a WordPress plugin. Reports that require a compromised WordPress administrator account, a misconfigured host, or third-party plugins are out of scope unless they show a distinct Formstead defect.
 
-The design of the current plugin is described in [docs/threat-model.md](docs/threat-model.md). What the plugin stores, and how that data is removed, is described in [docs/data-flows.md](docs/data-flows.md).
+The design of the current plugin is described in [docs/threat-model.md](docs/threat-model.md). What the plugin stores, and how that data is removed, is described in [docs/data-flows.md](docs/data-flows.md). The author's review of `1.0.0-rc.1` is in [docs/review.md](docs/review.md). It is not an independent security audit.

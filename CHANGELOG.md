@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-29
+
+### Fixed
+
+- Close a delivery whose worker died after the last attempt, so recovery does not send it again.
+
 ### Changed
 
+- Record the hosting pilot and publish the author's review. There has been no independent security audit.
 - Keep one branch and squash pull request per roadmap stage, with automatic branch deletion. Tags and GitHub Releases are reserved for distributed versions. Stages 0–9 are consolidated into ten commits; the previous history is archived.
 
 ## 1.0.0-rc.1 - 2026-10-22
@@ -231,7 +238,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions checks for PHPUnit, PHPCS, and PHPStan.
 - Distributable ZIP build and Plugin Check on a clean WordPress install.
 
-[Unreleased]: https://github.com/formstead/formstead/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/formstead/formstead/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/formstead/formstead/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/formstead/formstead/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/formstead/formstead/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/formstead/formstead/compare/v0.7.1...v0.8.0

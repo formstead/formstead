@@ -43,7 +43,7 @@ function formstead_ci_upgrade_package( string $mode ): void {
 	if ( 'seed' === $mode ) {
 		update_option( 'formstead_package_upgrade_snapshot', $snapshot, false );
 	} elseif ( 'verify' === $mode ) {
-		if ( '1.0.0-rc.1' !== FORMSTEAD_VERSION || 8 !== (int) get_option( 'formstead_db_version' ) || get_option( 'formstead_package_upgrade_snapshot' ) !== $snapshot ) {
+		if ( '1.0.0' !== FORMSTEAD_VERSION || 8 !== (int) get_option( 'formstead_db_version' ) || get_option( 'formstead_package_upgrade_snapshot' ) !== $snapshot ) {
 			WP_CLI::error( 'ZIP upgrade changed stored rows or did not load the candidate.' );
 		}
 		WP_CLI::success( 'The v0.9.0 ZIP upgrade preserves every populated table.' );

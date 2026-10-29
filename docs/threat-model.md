@@ -8,7 +8,7 @@
 
 `tests/Privacy/PrivacyToolsTest.php` covers deletion between export pages, new submissions after the initial boundary, repeated pages, and mismatched or missing privacy requests. `tests/e2e/privacy.spec.ts` exercises the WordPress export UI while deleting an already exported row between pages. Historical schemas are stored independently under `tests/fixtures/schemas/`; the upgrade suite checks v1–v8 rather than reconstructing them from today's DDL.
 
-These are project regression checks, not an independent security audit. A hosting pilot is still required before the stable release. See [Operations](operations.md) for delivery cancellation boundaries and data kept outside the plugin.
+These are project regression checks. There has been no independent security audit. The author's review is in [review.md](review.md). A hosting pilot of the release candidate exercised a submission from another site, mail delivery, a signed webhook, the submissions API from an administrator session, and personal-data export and erasure. See [Operations](operations.md) for delivery cancellation boundaries and data kept outside the plugin.
 
 This note describes the Formstead plugin, including personal-data export and erase, the audit log, the admin API, and webhooks. It is not a certification, and it does not cover the host, WordPress core, or other plugins. What is stored, and how it is removed, is in [data-flows.md](data-flows.md). How to call the API and check a signature is in [integrations.md](integrations.md).
 
@@ -98,7 +98,7 @@ The public route does not list, export, or change stored submissions.
 | Put the receiver's answer in the database or the log | The response body is discarded. The log line names the delivery id. | `tests/Webhook/WebhookChannelTest.php` |
 | Retry a blocked URL or a redirect until the limit | `webhook_blocked_url`, `webhook_redirect`, and `webhook_http_4xx` fail the delivery immediately. Timeouts, connection failures, `429`, and `5xx` stop after five attempts. | `tests/Webhook/WebhookChannelTest.php` |
 
-The table describes project regression coverage. It does not represent an independent audit or a hosting pilot.
+The table describes project regression coverage. The hosting pilot is recorded above. There has been no independent security audit.
 
 ## Not in this version
 
