@@ -4,6 +4,78 @@ This note is how another site posts a form, how an authenticated client reads su
 
 Examples: [HTML](../examples/html/README.md), [Astro](../examples/astro/README.md), and [Next.js](../examples/next/README.md). There is no SDK.
 
+The form editor's **Integration code** section generates code for the last saved
+schema, including all configured fields and a honeypot. Choose a platform and use
+**Copy code**, then adapt the labels and styling. The generator supplies starter source, not a
+finished design or deployment, and does not synchronize later schema changes:
+
+- **HTML** posts natively and redirects to the saved Success URL.
+- **JavaScript / fetch** includes the same form plus a script. Paste them together,
+  keeping the script immediately after its form. It sends multipart data without
+  cookies, shows accessible errors and confirms acceptance without navigation.
+  With JavaScript disabled, the form still posts natively.
+
+If clipboard access is unavailable or refused, the code is selected for Ctrl+C
+or Cmd+C. Without panel JavaScript, all variants remain manually copyable.
+Platform selection and copying never save the form. Unsaved edits show a notice;
+the source continues to use the saved schema. After changing fields, save and
+replace the frontend code. Configure allowed origins before posting from another
+site. The **Astro** variant provides a standalone `.astro` component. Save it as
+`src/components/FormsteadForm.astro`, import it into a page and render
+`<FormsteadForm />`. For two copies use different prefixes, for example
+`<FormsteadForm idPrefix="contact" />` and `<FormsteadForm idPrefix="footer" />`.
+It uses native POST without a client script and the saved Success URL.
+
+For example, from `src/pages/contact.astro`:
+
+```astro
+---
+import FormsteadForm from '../components/FormsteadForm.astro';
+---
+<FormsteadForm idPrefix="contact" />
+```
+
+The component uses [Astro props and template expressions](https://docs.astro.build/en/basics/astro-components/).
+Field labels and choices are encoded as data, then rendered through expressions;
+they are not inserted as executable template source. No runtime import from the
+Formstead repository or SDK is required.
+
+The **React / Next.js** variant is a standalone TypeScript component. Save it as
+`components/FormsteadForm.tsx`, then import and render it from your page:
+
+```tsx
+import FormsteadForm from '../components/FormsteadForm';
+
+export default function ContactPage() {
+  return <main><h1>Contact</h1><FormsteadForm /></main>;
+}
+```
+
+Keep the component's [`'use client'` directive](https://nextjs.org/docs/app/api-reference/directives/use-client)
+for the Next.js App Router. Its only import is React; it needs no SDK or repository
+files. [`useId`](https://react.dev/reference/react/useId) supplies instance IDs
+that match server rendering and hydration, including repeated components.
+A synchronous [`useRef`](https://react.dev/reference/react/useRef) guard prevents
+overlapping submissions before React updates the button state. Browser APIs and
+random key generation run only on submit. The component uses the fetch behavior
+below; without JavaScript it posts natively to the saved Success URL.
+For repeated components inside one React application (including a normal Next.js
+page), no extra prefix is needed. For separate React applications on the same page,
+set distinct `identifierPrefix` options when calling `createRoot` or `hydrateRoot`.
+This is an application-root option, not a prop on `FormsteadForm`. With SSR, use the
+same prefix in the server renderer and client hydration. See the
+[React root-prefix example](https://react.dev/reference/react/useId#specifying-a-shared-prefix-for-all-generated-ids).
+
+The generated fetch script and React component keep their logical idempotency keys
+after network errors, unreadable replies, `5xx` and `429`. Retrying unchanged details can recover a lost
+response without creating another submission or delivery. Validation errors start
+a new key; `409` requires another manual send with a new key. `Retry-After` blocks
+early manual attempts without automatic retries. A confirmed identical submission
+is not sent again until its values change; a separate message explains that the
+details were accepted earlier and were not sent again. State lasts only until the page is
+reloaded; no submission values are stored in browser storage. The optional
+`_fs_elapsed` signal is omitted. Browser errors never display raw response HTML.
+
 ## Posting a form
 
 The public route is `POST /wp-json/formstead/v1/forms/{public_form_id}/submissions`. With plain permalinks the same route is `/?rest_route=/formstead/v1/forms/{public_form_id}/submissions`. The public form id is an address, not a secret. Copy it from the form screen.

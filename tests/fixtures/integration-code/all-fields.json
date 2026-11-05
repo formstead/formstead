@@ -1,0 +1,141 @@
+{
+  "form_input": {
+    "name": "Integration contract — all fields",
+    "is_enabled": "1",
+    "success_url": "http://localhost:4400/thanks.html",
+    "allowed_origins": "http://localhost:4400\nhttp://localhost:4321\nhttp://localhost:4500",
+    "fields": [
+      {
+        "name": "name",
+        "label": "Name < & > \" ' ` ${value} {label} </textarea></script> 🌿",
+        "type": "text",
+        "required": "1",
+        "max_length": "80"
+      },
+      {
+        "name": "email",
+        "label": "Email",
+        "type": "email",
+        "required": "1",
+        "max_length": "255"
+      },
+      {
+        "name": "message",
+        "label": "Message",
+        "type": "textarea",
+        "max_length": "1000"
+      },
+      {
+        "name": "amount",
+        "label": "Amount",
+        "type": "number",
+        "required": "1",
+        "min": "-0.005",
+        "max": "9007199254740993.123456",
+        "scale": "6"
+      },
+      {
+        "name": "quantity",
+        "label": "Quantity",
+        "type": "number",
+        "min": "0.5",
+        "max": "10",
+        "scale": "0"
+      },
+      {
+        "name": "agree",
+        "label": "Confirm details",
+        "type": "boolean",
+        "required": "1"
+      },
+      {
+        "name": "updates",
+        "label": "Send updates",
+        "type": "boolean"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "choice",
+        "required": "1",
+        "options": "general|General\nspecial<&>\"'`${value}|Special < & > \" ' ` ${value} {label} </textarea></script> 🌿"
+      },
+      {
+        "name": "interests",
+        "label": "Interests",
+        "type": "choice",
+        "required": "1",
+        "multiple": "1",
+        "options": "plants|Plants\nwater|Water\ncompost|Compost"
+      },
+      {
+        "name": "optional_topic",
+        "label": "Optional topic",
+        "type": "choice",
+        "options": "general|General\nother|Other"
+      },
+      {
+        "name": "action",
+        "label": "Action",
+        "type": "text",
+        "max_length": "50"
+      },
+      {
+        "name": "method",
+        "label": "Method",
+        "type": "text",
+        "max_length": "50"
+      },
+      {
+        "name": "submit",
+        "label": "Submit",
+        "type": "text",
+        "max_length": "50"
+      },
+      {
+        "name": "reset",
+        "label": "Reset",
+        "type": "text",
+        "max_length": "50"
+      }
+    ]
+  },
+  "submission": {
+    "name": "  Ada 🌿  ",
+    "email": "ada@example.com",
+    "message": "First line\r\nSecond line",
+    "amount": "9007199254740993.123456",
+    "quantity": "1",
+    "agree": "1",
+    "topic": "special<&>\"'`${value}",
+    "interests": [
+      "compost",
+      "plants",
+      "plants"
+    ],
+    "optional_topic": "",
+    "action": "action value",
+    "method": "method value",
+    "submit": "submit value",
+    "reset": "reset value",
+    "_fs_honeypot": ""
+  },
+  "normalized": {
+    "name": "Ada 🌿",
+    "email": "ada@example.com",
+    "message": "First line\nSecond line",
+    "amount": "9007199254740993.123456",
+    "quantity": "1",
+    "agree": true,
+    "updates": false,
+    "topic": "special<&>\"'`${value}",
+    "interests": [
+      "plants",
+      "compost"
+    ],
+    "action": "action value",
+    "method": "method value",
+    "submit": "submit value",
+    "reset": "reset value"
+  }
+}

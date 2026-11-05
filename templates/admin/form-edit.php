@@ -70,7 +70,7 @@ $next_index       = count( $rows );
 		</div>
 	<?php endif; ?>
 
-	<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=formstead-forms' ) ); ?>">
+	<form id="formstead-form-editor" method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=formstead-forms' ) ); ?>">
 		<?php wp_nonce_field( 'formstead_save_form' ); ?>
 		<input type="hidden" name="form_id" value="<?php echo esc_attr( (string) $form_id ); ?>">
 		<input type="hidden" name="schema_version" value="<?php echo esc_attr( (string) $schema_version ); ?>">
@@ -426,6 +426,7 @@ $next_index       = count( $rows );
 
 	<?php submit_button( $form instanceof Form ? __( 'Save form', 'formstead' ) : __( 'Create form', 'formstead' ) ); ?>
 </form>
+<?php require __DIR__ . '/integration-code.php'; ?>
 <?php if ( $form instanceof Form && '' !== $webhook_secret ) : ?>
 	<form method="post" id="formstead-rotate-webhook" action="<?php echo esc_url( admin_url( 'admin.php?page=formstead-forms' ) ); ?>">
 		<?php wp_nonce_field( 'formstead_rotate_webhook_' . $form->id() ); ?>

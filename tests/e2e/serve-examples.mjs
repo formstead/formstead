@@ -44,6 +44,20 @@ const server = createServer( ( request, response ) => {
 		return;
 	}
 
+	// Only test-created UUID filenames are served; never accept an arbitrary path.
+	const generated = /^\/generated\/([a-f0-9-]{36})\.html$/.exec( url.pathname );
+	if ( generated ) {
+		try {
+			const html = readFileSync( join( root, 'tests/e2e/.auth/integration-code', generated[ 1 ] + '.html' ), 'utf8' );
+			response.writeHead( 200, { 'content-type': 'text/html; charset=utf-8' } );
+			response.end( html );
+		} catch {
+			response.writeHead( 404 );
+			response.end( 'Generated fixture not found.' );
+		}
+		return;
+	}
+
 	const relative = normalize( decodeURIComponent( url.pathname ) ).replace( /^[/\\]+/, '' );
 	if ( relative === '' || relative.includes( '..' ) || ! relative.endsWith( '.html' ) ) {
 		response.writeHead( 404, { 'content-type': 'text/plain; charset=utf-8' } );

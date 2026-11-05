@@ -9,6 +9,8 @@
 /.distignore
 /.wp-env.json
 /.wp-env.override.json
+/.wp-env.tests.json
+/.wp-env.tests.override.json
 /.nvmrc
 /node_modules
 /node_modules/**

@@ -22,103 +22,99 @@ type SuccessPayload = {
 	receipt_id?: string;
 };
 
-/**
- * Post the form with fetch while keeping a native submit as the fallback.
- *
- * A new idempotency key is created after success and after a 409. A network
- * failure or a 5xx keeps the key so the next try is the same submission.
- * `_fs_elapsed` is the whole milliseconds since this script loaded.
- */
+interface SendState {
+	key: string | null;
+	elapsed: number | null;
+	busy: boolean;
+	retryAt: number;
+	accepted: string | null;
+}
+
+/** Enhance the fixed contact demo; timing is frozen for each logical submission. */
 export function enhanceForm(form: HTMLFormElement): void {
+	if (!window.fetch || !window.FormData || !window.crypto ||
+		(typeof crypto.randomUUID !== 'function' && typeof crypto.getRandomValues !== 'function')) return;
 	const status = document.getElementById('formstead-status');
 	const started = performance.now();
-	let idempotencyKey = crypto.randomUUID();
-
+	const state: SendState = { key: null, elapsed: null, busy: false, retryAt: 0, accepted: null };
 	form.addEventListener('submit', (event) => {
 		event.preventDefault();
-		void submitForm(form, status, started, () => idempotencyKey, (next) => {
-			idempotencyKey = next;
-		});
+		if (state.busy) return;
+		if (Date.now() < state.retryAt) {
+			setStatus(status, `Too many submissions. Try again in ${Math.ceil((state.retryAt - Date.now()) / 1000)} seconds.`);
+			return;
+		}
+		const signature = JSON.stringify(Array.from(new FormData(form).entries()));
+		if (signature === state.accepted) {
+			setStatus(status, 'These details were already accepted. They have not been sent again.');
+			return;
+		}
+		state.busy = true;
+		void submitForm(form, status, started, state, signature);
 	});
 }
 
-async function submitForm(
-	form: HTMLFormElement,
-	status: HTMLElement | null,
-	started: number,
-	currentKey: () => string,
-	setKey: (key: string) => void,
-): Promise<void> {
+async function submitForm(form: HTMLFormElement, status: HTMLElement | null, started: number, state: SendState, signature: string): Promise<void> {
 	clearErrors(form);
+	setStatus(status, '');
 	const button = form.querySelector('button[type="submit"]');
-	if (button instanceof HTMLButtonElement) {
-		button.disabled = true;
-	}
-
+	if (button instanceof HTMLButtonElement) button.disabled = true;
 	try {
-		const response = await fetch(form.action, {
-			method: 'POST',
-			headers: {
-				Accept: 'application/json',
-				'Content-Type': 'application/json',
-				'Idempotency-Key': currentKey(),
-			},
-			body: JSON.stringify(payload(form, started)),
+		state.key ??= typeof crypto.randomUUID === 'function' ? crypto.randomUUID() :
+			Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+		state.elapsed ??= Math.max(0, Math.round(performance.now() - started));
+		const response = await fetch(form.getAttribute('action')!, {
+			method: 'POST', credentials: 'omit',
+			headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'Idempotency-Key': state.key },
+			body: JSON.stringify(payload(form, state.elapsed)),
 		});
-
 		if (response.status === 201) {
 			const body = (await response.json()) as SuccessPayload;
-			const receipt = typeof body.receipt_id === 'string' ? body.receipt_id : '';
-			setStatus(status, receipt === '' ? 'Thanks.' : `Thanks. Receipt ${receipt}.`);
-			setKey(crypto.randomUUID());
-			return;
-		}
-
-		if (response.status === 422) {
+			if (typeof body?.receipt_id !== 'string' || !/^fsr_[a-z2-7]{16}$/.test(body.receipt_id)) throw new Error('Unconfirmed response');
+			state.accepted = signature;
+			state.key = null;
+			state.elapsed = null;
+			setStatus(status, `Thanks. Receipt ${body.receipt_id}.`);
+		} else if (response.status === 422) {
 			const body = (await response.json()) as ErrorPayload;
-			const invalid = showFieldErrors(form, body.error?.fields ?? {});
+			const fields = body?.error?.fields;
+			if (!fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error('Unconfirmed response');
+			state.key = null;
+			state.elapsed = null;
+			const invalid = showFieldErrors(form, fields);
 			setStatus(status, 'Check the form and try again.');
 			invalid?.focus();
-			return;
-		}
-
-		if (response.status === 429) {
+		} else if (response.status === 429) {
 			const retry = response.headers.get('Retry-After');
-			setStatus(
-				status,
-				retry === null
-					? 'Too many submissions. Try again later.'
-					: `Too many submissions. Try again in ${retry} seconds.`,
-			);
-			return;
+			const seconds = retry !== null && /^\d+$/.test(retry) ? Number(retry) : NaN;
+			const deadline = Date.now() + seconds * 1000;
+			if (Number.isSafeInteger(seconds) && Number.isSafeInteger(deadline)) {
+				state.retryAt = deadline;
+				setStatus(status, `Too many submissions. Try again in ${seconds} seconds.`);
+			} else setStatus(status, 'Too many submissions. Try again later.');
+		} else if (response.status === 409) {
+			state.key = null;
+			state.elapsed = null;
+			setStatus(status, 'This submission may already have been sent with different details. Check before sending again.');
+		} else if (response.status === 403 || response.status === 404) {
+			setStatus(status, 'This form is unavailable. Please contact the site owner.');
+		} else {
+			setStatus(status, response.status >= 500 ? unconfirmed : 'The form could not be sent. Check your details and try again.');
 		}
-
-		if (response.status === 409) {
-			setStatus(status, 'This submission was already sent with different details. Send it again.');
-			setKey(crypto.randomUUID());
-			return;
-		}
-
-		setStatus(status, 'The form could not be sent. Try again.');
 	} catch {
-		setStatus(status, 'The form could not be sent. Try again.');
+		setStatus(status, unconfirmed);
 	} finally {
-		if (button instanceof HTMLButtonElement) {
-			button.disabled = false;
-		}
+		state.busy = false;
+		if (button instanceof HTMLButtonElement) button.disabled = false;
 	}
 }
 
-function payload(form: HTMLFormElement, started: number): Record<string, string | number> {
-	const body: Record<string, string | number> = {
-		email: value(form, 'email'),
-		message: value(form, 'message'),
-		_fs_elapsed: Math.max(0, Math.round(performance.now() - started)),
-	};
+const unconfirmed = 'We could not confirm whether your submission was accepted. Try again with the same details.';
+
+function payload(form: HTMLFormElement, elapsed: number): Record<string, string | number> {
+	const body: Record<string, string | number> = { email: value(form, 'email'), message: value(form, 'message'), _fs_elapsed: elapsed };
 	const honeypot = value(form, '_fs_honeypot').trim();
-	if (honeypot !== '') {
-		body._fs_honeypot = honeypot;
-	}
+	if (honeypot !== '') body._fs_honeypot = honeypot;
 	return body;
 }
 
@@ -153,7 +149,8 @@ function showFieldErrors(form: HTMLFormElement, fields: Record<string, string[]>
 		field.setAttribute('aria-invalid', 'true');
 		const error = document.getElementById(`${field.id}-error`);
 		if (error) {
-			error.textContent = fieldMessages[code] ?? 'This value is not valid.';
+			const message = fieldMessages[code];
+			error.textContent = typeof message === 'string' ? message : 'This value is not valid.';
 		}
 		first ??= field;
 	}

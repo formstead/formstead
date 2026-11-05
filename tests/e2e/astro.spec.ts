@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { formState, readForms, wp } from './helpers/wp';
+import { formState, readForms, receiptState, wp } from './helpers/wp';
+import { assertTestMailbox } from './helpers/mailpit';
 
 const forms = readForms();
 const site = 'http://localhost:4321';
@@ -16,6 +17,7 @@ async function fillContact( page: Page, email: string, message: string ): Promis
 }
 
 async function clearMailbox(): Promise<void> {
+	assertTestMailbox( mailPort );
 	wp( [ 'formstead', 'deliveries', 'run' ] );
 	const response = await fetch( `http://127.0.0.1:${ mailPort }/api/v1/messages`, { method: 'DELETE' } );
 	if ( ! response.ok ) {
@@ -142,7 +144,43 @@ test.describe( 'fetch', () => {
 		await fillContact( page, `astro-closed-${ stamp }@example.com`, `Astro closed ${ stamp }` );
 		await formOn( page ).getByRole( 'button', { name: 'Send' } ).click();
 
-		await expect( page.getByRole( 'status' ) ).toHaveText( 'The form could not be sent. Try again.' );
+		await expect( page.getByRole( 'status' ) ).toHaveText( 'We could not confirm whether your submission was accepted. Try again with the same details.' );
 		expect( formState( forms.forms.closed.public_id ).submissions ).toBe( before );
 	} );
+} );
+
+test( 'the JSON timing example replays a lost response with the same frozen body', async ( { page } ) => {
+	const before = formState( forms.forms.cross.public_id ).submissions ?? 0;
+	await page.goto( `${ site }/fetch` );
+	const form = formOn( page );
+	const endpoint = ( await form.getAttribute( 'action' ) )!;
+	const posts: { key: string; body: string | null }[] = [];
+	let receipt = '';
+	let first = true;
+	await page.route( endpoint, async route => {
+		if ( route.request().method() !== 'POST' ) { await route.continue(); return; }
+		posts.push( { key: route.request().headers()['idempotency-key'], body: route.request().postData() } );
+		if ( first ) {
+			first = false;
+			const response = await route.fetch();
+			expect( response.status() ).toBe( 201 );
+			receipt = ( await response.json() ).receipt_id;
+			await route.abort();
+		} else await route.continue();
+	} );
+	await fillContact( page, `astro-lost-${ Date.now() }@example.com`, 'Frozen timing retry' );
+	await page.clock.install();
+	await page.clock.fastForward( 4000 );
+	await form.getByRole( 'button', { name: 'Send' } ).click();
+	await expect( page.getByRole( 'status' ) ).toContainText( 'We could not confirm' );
+	await page.clock.fastForward( 5000 );
+	await form.getByRole( 'button', { name: 'Send' } ).click();
+	await expect( page.getByRole( 'status' ) ).toContainText( receipt );
+	expect( posts ).toHaveLength( 2 );
+	expect( posts[1] ).toEqual( posts[0] );
+	expect( formState( forms.forms.cross.public_id ).submissions ).toBe( before + 1 );
+	expect( receiptState( receipt ).deliveries ).toHaveLength( 1 );
+	await form.getByRole( 'button', { name: 'Send' } ).click();
+	await expect( page.getByRole( 'status' ) ).toContainText( 'They have not been sent again.' );
+	expect( posts ).toHaveLength( 2 );
 } );

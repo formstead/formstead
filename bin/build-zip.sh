@@ -40,7 +40,12 @@ if [[ ! -f "$PLUGIN_DIR/formstead.php" ]] || [[ ! -f "$PLUGIN_DIR/vendor/autoloa
 	exit 1
 fi
 
-for required in languages/formstead.pot LICENSE THIRD-PARTY-NOTICES.txt vendor/composer/LICENSE; do
+for required in \
+	languages/formstead.pot LICENSE THIRD-PARTY-NOTICES.txt vendor/composer/LICENSE \
+	src/Integration/CodeGenerator.php \
+	templates/admin/integration-code.php \
+	templates/integration/html.php templates/integration/fields.php templates/integration/javascript.php templates/integration/astro.php templates/integration/react.php templates/integration/messages.php \
+	assets/admin/integration-code.js; do
 	if [[ ! -f "$PLUGIN_DIR/$required" ]]; then
 		echo "ZIP staging is missing $required." >&2
 		exit 1

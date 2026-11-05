@@ -14,6 +14,8 @@ Receive form submissions from static and headless sites on an existing WordPress
 
 Formstead receives form submissions from static and headless sites on an existing WordPress install. Plain HTML, Astro, and Next.js post to WordPress. WordPress stores submissions in a private inbox. The site frontend stays with its author.
 
+The form editor generates starter code for HTML, JavaScript / fetch, Astro and React / Next.js from the last saved fields. Copy the code into your frontend and adapt its labels and styling. The fetch variant handles validation errors and retries without a required SDK. HTML and Astro post natively; JavaScript / fetch and React show confirmation on the page and retain native POST without JavaScript. The generator does not provide a finished design, deploy your frontend or synchronize later field changes. Configure the frontend origin and replace copied code after changing fields.
+
 Version 1.0.0 closes a delivery whose worker died after the last attempt, so recovery does not send it again. A hosting pilot of the release candidate exercised a submission from another site, mail, a signed webhook, the submissions API from an administrator session, and personal-data export and erasure. There has been no independent security audit. The source repository includes the author's review at `docs/review.md`. Version 1.0.0-rc.1 hardens webhook transport, stabilizes personal-data export pagination, and verifies historical upgrades. Version 0.9.0 ended Core beta. It adds an authenticated submissions API and a signed webhook for each form. The Next.js example and the integration notes stay in the source repository. Version 0.7.0 is the technical MVP. The source repository includes HTML and Astro examples that post with and without JavaScript, including from another site. The installable package does not include those examples. Version 0.6.0 keeps each form's submissions for a number of days, 30 by default. Forms that already exist get the same 30 days, and the first cleanup deletes older submissions. Use 0 to keep a form's submissions until someone deletes them. Settings shows the last cleanup and warns when it is overdue. The inbox lists submissions; opening a new one marks it read. The list can be filtered by form and date, and exported as CSV for one form. A submission filled in under three seconds, or an identical submission within ten minutes, is stored as spam and is not emailed. The visitor still sees the normal success response. A form can notify recipients by email and can list the sites allowed to submit it. Forms that already exist do not start sending mail until recipients are saved.
 
 Network activation on WordPress Multisite is not supported.
@@ -26,7 +28,7 @@ Formstead stores submissions on this site. An email field can be marked as ident
 
 1. Upload the `formstead` directory to the `/wp-content/plugins/` directory.
 2. Activate Formstead through the Plugins screen. Do not network-activate it.
-3. Open Forms to create a form and copy its endpoint URL. Submissions are listed under Formstead.
+3. Open Forms, create and save a form, then choose HTML, JavaScript / fetch, Astro or React / Next.js in Integration code and copy it to your frontend. Configure Allowed origins for another site. Submissions are listed under Formstead.
 
 == Frequently Asked Questions ==
 
@@ -40,7 +42,7 @@ No. Multisite is outside Core 1.0. Activate the plugin on a single site instead.
 
 = Can a form work without JavaScript? =
 
-Yes. Copy its endpoint into a normal HTML form's action and use method="post". A valid submission redirects to the success URL saved on the form. For JSON, send Accept: application/json. Examples and the full contract are in the source repository's docs and examples directories.
+Yes. Choose HTML in Integration code, or copy its endpoint into a normal HTML form's action and use method="post". A valid submission redirects to the success URL saved on the form. The generated Astro component posts natively too. JavaScript / fetch and React / Next.js retain native POST when JavaScript is unavailable. Examples and the full contract are in the source repository's docs and examples directories.
 
 = Why is mail still waiting? =
 
@@ -65,6 +67,10 @@ The source repository contains docs/getting-started.md, docs/api.md, docs/operat
 3. Settings with cleanup status, privacy-index progress and the explicit uninstall-data choice.
 
 == Changelog ==
+
+= Unreleased =
+* Generate starter HTML, JavaScript / fetch, Astro and React / Next.js from saved fields. Include a honeypot, native POST, accessible fetch errors and retry-safe idempotency.
+* Copy the selected variant with a manual fallback and show unsaved editor changes without changing the generated source.
 
 = 1.0.0 =
 * Close a delivery whose worker died after the last attempt, so recovery does not send it again.

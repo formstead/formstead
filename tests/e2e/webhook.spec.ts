@@ -15,7 +15,7 @@ test( 'a real worker delivers a verified webhook and refuses the wrong signature
 				0, '', 'E2E webhook ${ valid ? 'valid' : 'invalid' }', true,
 				array( new Formstead\\Forms\\Field( 'email', 'Email', Formstead\\Forms\\FieldType::Email, true, 255 ) ),
 				1, 'https://example.com/thanks', '', '', null, 0, null, 30, array( 'email' ),
-				new Formstead\\Forms\\FormWebhook( 'http://tests-wordpress:80/wp-json/formstead-e2e/v1/webhook', '${ secret }', false )
+				new Formstead\\Forms\\FormWebhook( 'http://wordpress:80/wp-json/formstead-e2e/v1/webhook', '${ secret }', false )
 			) );
 			if ( $form instanceof WP_Error ) { throw new RuntimeException( 'Webhook fixture failed.' ); }
 			echo 'FORMSTEAD_E2E_JSON ' . wp_json_encode( rest_url( 'formstead/v1/forms/' . $form->public_id() . '/submissions' ) );

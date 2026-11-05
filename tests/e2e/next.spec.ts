@@ -8,11 +8,11 @@ test.describe( 'Next.js', () => {
 		const email = `next-route-${ stamp }@example.com`;
 
 		await page.goto( `${ site }/server` );
-		await page.locator( '#formstead-email' ).fill( email );
-		await page.locator( '#formstead-message' ).fill( `Next route ${ stamp }` );
+		await page.locator( '[name="email"]' ).fill( email );
+		await page.locator( '[name="message"]' ).fill( `Next route ${ stamp }` );
 		await page.waitForFunction( () => performance.now() >= 3500 );
 		await page.getByRole( 'button', { name: 'Send' } ).click();
-		await expect( page.getByRole( 'status' ) ).toContainText( 'Thanks. Receipt' );
+		await expect( page.getByRole( 'status' ) ).toContainText( 'Thanks. Your submission was accepted.' );
 
 		await page.goto( '/wp-admin/admin.php?page=formstead' );
 		await page.getByLabel( 'Search by email' ).fill( email );
@@ -24,9 +24,9 @@ test.describe( 'Next.js', () => {
 		const stamp = Date.now();
 
 		await page.goto( site );
-		await page.locator( '#formstead-email' ).fill( `next-client-${ stamp }@example.com` );
-		await page.locator( '#formstead-message' ).fill( `Next client ${ stamp }` );
+		await page.locator( '[name="email"]' ).fill( `next-client-${ stamp }@example.com` );
+		await page.locator( '[name="message"]' ).fill( `Next client ${ stamp }` );
 		await page.getByRole( 'button', { name: 'Send' } ).click();
-		await expect( page.getByRole( 'status' ) ).toContainText( 'Thanks. Receipt' );
+		await expect( page.getByRole( 'status' ) ).toContainText( 'Thanks. Your submission was accepted.' );
 	} );
 } );

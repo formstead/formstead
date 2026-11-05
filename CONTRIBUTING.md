@@ -19,6 +19,8 @@ npx wp-env start
 
 The development site is at http://localhost:8888. Default credentials are `admin` / `password`. `wp-env` activates Twenty Twenty-Five after start; WordPress 7.1.3 can otherwise leave `template` set to a missing `default` theme and render an empty front page.
 
+Tests use a separate `.wp-env.tests.json` configuration on http://localhost:8889. Start it with `npm run start:tests` and stop it with `npm run stop:tests`. Keep the WordPress, PHP, database, plugin and mapping versions in both configurations aligned. `testsEnvironment: false` explicitly disables the deprecated automatic second environment in the installed wp-env version.
+
 Stop the environment with `npx wp-env stop`. Destroy it, including the database, with `npx wp-env destroy`.
 
 ## Mail
@@ -42,6 +44,7 @@ GitHub Actions does not start on a push, a pull request, or a schedule. After me
 Branch protection is unavailable on this private repository. Do not push directly to `main`, including fixes to CI.
 
 ```sh
+npm run start:tests
 npm run check
 ```
 
@@ -62,19 +65,19 @@ After Composer dependencies change, install them in the container:
 npm run composer -- install
 ```
 
-PHPUnit must run in `tests-cli`. The `cli` container shares the development database, and the WordPress test installer drops that database.
+PHPUnit must run in `cli --config=.wp-env.tests.json` (as used by `npm test`). Without `--config`, `cli` shares the development database, and the WordPress test installer drops that database.
 
 ## Browser tests
 
 Playwright uses the wp-env tests site at http://localhost:8889. `npm test` reinstalls that site and deactivates plugins, so run setup again before the browser tests. The development site on port 8888 is left alone.
 
 ```sh
-npx wp-env start
+npm run start:tests
 npm run e2e:setup
 npm run e2e
 ```
 
-`npx wp-env start` is required after `.wp-env.json` changes so the tests site defines `FORMSTEAD_E2E`. Tests that read mail also need `npm run mail:up`. Mailpit joins both the development and the tests Docker networks.
+`npm run start:tests` is required after `.wp-env.tests.json` changes so the tests site defines `FORMSTEAD_E2E`. Tests that read mail also need `npm run mail:up`. Mailpit joins both the development and the tests Docker networks.
 
 ## Pull requests
 

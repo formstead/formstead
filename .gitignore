@@ -28,6 +28,10 @@ skills-lock.json
 /tests/e2e/.auth/
 
 # Build output and OS / editor junk
+examples/astro/.integration-*/
+examples/next/.integration-*/
 *.zip
 .DS_Store
 .idea/
+
+/.wp-env.tests.override.json

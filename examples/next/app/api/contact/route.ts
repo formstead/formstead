@@ -65,8 +65,11 @@ async function readSubmission( request: Request ): Promise<Record<string, string
 	const body: Record<string, string | number> = {
 		email: text( parsed.email ),
 		message: text( parsed.message ),
-		_fs_elapsed: elapsed( parsed._fs_elapsed ),
 	};
+	const timing = elapsed( parsed._fs_elapsed );
+	if ( timing !== undefined ) {
+		body._fs_elapsed = timing;
+	}
 	const honeypot = text( parsed._fs_honeypot ).trim();
 	if ( honeypot !== '' ) {
 		body._fs_honeypot = honeypot;
@@ -89,7 +92,7 @@ function text( value: unknown ): string {
 	return typeof value === 'string' ? value : '';
 }
 
-function elapsed( value: unknown ): number {
+function elapsed( value: unknown ): number | undefined {
 	if ( typeof value === 'number' && Number.isFinite( value ) ) {
 		return Math.max( 0, Math.round( value ) );
 	}
@@ -98,5 +101,5 @@ function elapsed( value: unknown ): number {
 		return Number( value );
 	}
 
-	return 5000;
+	return undefined;
 }

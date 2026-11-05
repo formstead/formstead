@@ -15,8 +15,8 @@
 		"stop": "wp-env stop",
 		"destroy": "wp-env destroy",
 		"composer": "wp-env run cli --env-cwd=wp-content/plugins/formstead composer",
-		"test": "wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain",
-		"test:explain": "wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --group explain",
+		"test": "wp-env run cli --config=.wp-env.tests.json --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain",
+		"test:explain": "wp-env run cli --config=.wp-env.tests.json --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --group explain",
 		"lint": "wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpcs",
 		"analyse": "wp-env run cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpstan analyse --memory-limit=1G",
 		"plugin-check": "bash bin/plugin-check.sh",
@@ -25,6 +25,9 @@
 		"e2e": "playwright test",
 		"screenshots": "node bin/screenshots.mjs",
 		"mail:up": "bash bin/mailpit.sh up",
-		"mail:down": "bash bin/mailpit.sh down"
+		"mail:down": "bash bin/mailpit.sh down",
+		"start:tests": "wp-env start --config=.wp-env.tests.json",
+		"stop:tests": "wp-env stop --config=.wp-env.tests.json",
+		"destroy:tests": "wp-env destroy --config=.wp-env.tests.json"
 	}
 }

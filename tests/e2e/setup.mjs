@@ -17,7 +17,7 @@ const jsonPrefix = 'FORMSTEAD_E2E_JSON ';
 function wp( args ) {
 	return execFileSync(
 		'npx',
-		[ 'wp-env', 'run', 'tests-cli', '--env-cwd=wp-content/plugins/formstead', 'wp', ...args ],
+		[ 'wp-env', 'run', 'cli', '--config=.wp-env.tests.json', '--env-cwd=wp-content/plugins/formstead', 'wp', ...args ],
 		{ encoding: 'utf8', cwd: root }
 	);
 }

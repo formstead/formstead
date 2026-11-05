@@ -1,4 +1,4 @@
-import { chromium, type FullConfig } from '@playwright/test';
+import { chromium, expect, type FullConfig } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { readForms } from './helpers/wp';
 
@@ -15,6 +15,8 @@ export default async function globalSetup( config: FullConfig ): Promise<void> {
 	const browser = await chromium.launch();
 	const page = await browser.newPage();
 	await page.goto( `${ base }/wp-login.php` );
+	// WordPress focuses the username on a timer; wait so it cannot interrupt fill().
+	await expect( page.locator( '#user_login' ) ).toBeFocused();
 	await page.locator( '#user_login' ).fill( 'admin' );
 	await page.locator( '#user_pass' ).fill( 'password' );
 	await page.locator( '#wp-submit' ).click();

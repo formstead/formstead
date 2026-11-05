@@ -24,7 +24,7 @@ function formstead_e2e_allow_webhook_hosts( $hosts ) {
 	$list   = is_array( $hosts ) ? $hosts : array();
 	$list[] = 'localhost:4500';
 	$list[] = '127.0.0.1:4500';
-	$list[] = 'tests-wordpress:80';
+	$list[] = 'wordpress:80';
 
 	return $list;
 }
@@ -38,7 +38,7 @@ add_filter( 'formstead_webhook_allowed_hosts', 'formstead_e2e_allow_webhook_host
  * @param string $host     Requested host.
  */
 function formstead_e2e_allow_receiver( bool $external, string $host ): bool {
-	return 'tests-wordpress' === $host || $external;
+	return 'wordpress' === $host || $external;
 }
 add_filter( 'http_request_host_is_external', 'formstead_e2e_allow_receiver', 10, 2 );
 

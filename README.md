@@ -8,6 +8,14 @@ License: [GPL-2.0-or-later](LICENSE).
 
 ## Status
 
+Unreleased work adds **Integration code** to the form editor: copy standalone HTML
+and JavaScript / fetch, or Astro and React / Next.js components generated from
+the saved fields, with a honeypot, validation attributes and accessible fetch errors.
+Configure the frontend origin and embed the HTML or import the component. These
+are starter integrations: they do not deploy your frontend, supply its finished
+design or synchronize later field changes. The frontend remains yours to style; no SDK is required.
+See [Your first form](docs/getting-started.md) for the setup path.
+
 `1.0.0` closes a delivery whose worker died after the last attempt, so recovery does not send it again. A hosting pilot of the release candidate exercised a submission from another site, mail delivery, a signed webhook, the submissions API from an administrator session, and personal-data export and erasure. There has been no independent security audit. The [author's review](docs/review.md) records what that pass covered. `0.9.0` ended Core beta. `0.7.0` was the technical MVP. [HTML](examples/html/README.md), [Astro](examples/astro/README.md), and [Next.js](examples/next/README.md) examples post to WordPress from this site and from another origin, with and without JavaScript. The Next.js example also posts from a route handler, which sends no `Origin`, and checks a webhook signature. [Integrations](docs/integrations.md) covers CORS, the admin API, and webhooks. The [threat model](docs/threat-model.md) describes the controls.
 
 The plugin accepts URL-encoded, multipart, and JSON submissions. A client that sends `Accept: application/json` receives a receipt id. Other clients are redirected or shown an HTML page. Sending the same `Idempotency-Key` again returns that result for 24 hours. A different submission with the same key is refused. Parallel requests that share a key are retried after a database lock conflict. WordPress stores the submission against the field schema that was current at the time. People who can read submissions see an inbox: unread, archived, and spam are separate views, and the list filters by form and date. Opening a new submission marks it read. One form can be exported as CSV from the current view. A form can list the sites allowed to submit it, and it can email recipients after a submission is stored. The message links to that submission. Each form keeps submissions for a number of days, 30 by default. Zero keeps them until someone deletes them. Settings shows the last cleanup and warns when it is overdue. The plugin activates on WordPress 7.0+ with PHP 8.3+.
@@ -42,3 +50,5 @@ npx wp-env start
 ```
 
 The development site is at http://localhost:8888 (`admin` / `password`).
+
+Start the isolated tests site on http://localhost:8889 with `npm run start:tests`; stop it with `npm run stop:tests`. See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and browser tests.

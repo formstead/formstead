@@ -7,14 +7,29 @@ Formstead needs a single WordPress site running WordPress 7.0 or later, PHP 8.3 
 1. Download the installable Formstead ZIP for the version you want to test.
 2. In WordPress, open **Plugins → Add Plugin → Upload Plugin**, select the ZIP and activate it. Network activation is refused.
 3. Open **Formstead → Forms** and add a form. Give it a name and an absolute success URL on your frontend, such as `https://your-site.example/thanks`.
-4. Add a required `email` field named `email` and a `textarea` named `message`. Save the form and copy the endpoint URL shown on that screen. It remains valid when you change fields.
+4. Add a required `email` field named `email` and a `textarea` named `message`. Save the form, open **Integration code**, choose **HTML**, **JavaScript / fetch**, **Astro** or **React / Next.js**, and use **Copy code**. The generated source contains your saved fields, endpoint and honeypot.
 5. If the frontend has another origin, add its origin to the form's allowlist, including the scheme and any non-default port. An empty list accepts the WordPress site's own origin.
 
 The public form id is not a password. Never put an application password or webhook secret in browser code.
 
+Use HTML/fetch source where the form should appear. Save the Astro or React source
+as a component and import it into a page; see the [component examples](integrations.md).
+Adapt the labels and styling to your frontend.
+Keep the fetch script immediately after its form. HTML redirects on success;
+Astro posts natively too. JavaScript / fetch and React show confirmation on the same page and retain native POST as a fallback
+when JavaScript is unavailable. If copying is refused, the code is selected for
+Ctrl+C / Cmd+C. All four variants remain available for manual copying without panel JavaScript.
+
+After editing fields, save and replace the source on your frontend. The generator
+continues to use the last saved configuration while you edit. The public endpoint
+remains stable. Copies are not synchronized automatically; the generator does not
+deploy your frontend or supply its finished design. [Integrations](integrations.md) describes errors, retries and origins.
+
 ## Post without JavaScript
 
-Replace `COPIED_ENDPOINT` with the URL from the form screen. The example works with JavaScript disabled.
+For a minimal manual integration, replace `COPIED_ENDPOINT` with the URL from
+the form screen. You can also copy complete HTML from Integration code. This
+example works with JavaScript disabled.
 
 ```html
 <form method="post" action="COPIED_ENDPOINT">

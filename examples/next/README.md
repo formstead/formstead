@@ -8,11 +8,28 @@ Copy `.env.example` to `.env`. Set `FORMSTEAD_ENDPOINT` to the submissions URL f
 
 ## Pages
 
-`/` posts straight to Formstead with `fetch`. The browser sends `Origin`. The script sends `Accept: application/json`, a JSON body, and a new `Idempotency-Key` for each submit. `_fs_elapsed` is the whole milliseconds since the form was shown.
+For your own saved schema, choose **React / Next.js** in the WordPress form editor
+and copy its standalone component. See [Integrations](../../docs/integrations.md)
+for the import example. This repository example retains a fixed email/message
+schema to demonstrate direct posting and the optional server route. That proxy
+parses only those fixed fields; it is not a general proxy for generated schemas.
+Replace copied components after saving schema changes, and supply your own styling
+and deployment.
 
-`/server` posts to `/api/contact`. That route handler sends the same JSON to Formstead and does not set `Origin`. It passes `422`, `409`, and `429` through, including `Retry-After`.
+`/` posts straight to Formstead with `fetch`, multipart `FormData`,
+`credentials: 'omit'` and `Accept: application/json`. `/server` posts to
+`/api/contact`, whose route converts those fixed fields to JSON for Formstead.
+The route forwards the client's idempotency key and `Retry-After`; it does not
+invent an elapsed-time value when the client omits it.
 
-A `201` shows the `receipt_id`. A `422` shows the first field error. A `409` asks for a new submission. A `429` shows `Retry-After`.
+Both pages use the same behavior as the generated component: independent `useId`
+instance IDs, a synchronous sending guard, accessible field errors, a honeypot,
+and lazy key generation. No browser API is accessed during server rendering.
+No elapsed-time signal is added. After an uncertain response or `429`, a manual
+retry keeps its key; `422` clears it for corrected details, and `409` warns before
+a new manual attempt. A valid `201` confirms acceptance; an identical confirmed
+submission is not sent again; the status explains it was accepted earlier and was
+not resent. The component keeps values and retry state in memory.
 
 ## Webhook
 

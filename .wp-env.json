@@ -22,13 +22,5 @@
 	"lifecycleScripts": {
 		"afterStart": "npx wp-env run cli wp theme activate twentytwentyfive"
 	},
-	"env": {
-		"tests": {
-			"config": {
-				"WP_ENVIRONMENT_TYPE": "local",
-				"FORMSTEAD_E2E": true,
-				"FORMSTEAD_E2E_FAULTS": true
-			}
-		}
-	}
+	"testsEnvironment": false
 }

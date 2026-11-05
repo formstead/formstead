@@ -55,7 +55,7 @@ export function readForms(): E2EForms {
 export function wp( args: string[] ): string {
 	return execFileSync(
 		'npx',
-		[ 'wp-env', 'run', 'tests-cli', '--env-cwd=wp-content/plugins/formstead', 'wp', ...args ],
+		[ 'wp-env', 'run', 'cli', '--config=.wp-env.tests.json', '--env-cwd=wp-content/plugins/formstead', 'wp', ...args ],
 		{ encoding: 'utf8' }
 	);
 }

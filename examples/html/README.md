@@ -2,7 +2,12 @@
 
 Two ways to post a form without JavaScript. Copy the submissions URL from the form screen in WordPress. That address is public. It is not a secret. With plain permalinks it looks like `/?rest_route=/formstead/v1/forms/fs_…/submissions`.
 
-Replace `__FORMSTEAD_ENDPOINT__` with that URL.
+These examples use fixed `email` and `message` fields. For all fields of your saved
+form, choose **Integration code → HTML** in WordPress instead. Copy the complete
+source and adapt its styling. After changing the schema, save and replace that copy.
+The generator does not deploy or synchronize your frontend.
+
+For the fixed examples below, replace `__FORMSTEAD_ENDPOINT__` with that URL.
 
 ## Same site
 

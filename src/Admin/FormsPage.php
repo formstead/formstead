@@ -15,6 +15,7 @@ use Formstead\Forms\FieldType;
 use Formstead\Forms\Form;
 use Formstead\Forms\FormInput;
 use Formstead\Forms\FormRepository;
+use Formstead\Integration\CodeGenerator;
 use Formstead\Security\Capabilities;
 use WP_Error;
 
@@ -77,6 +78,27 @@ final class FormsPage {
 			FORMSTEAD_VERSION,
 			true
 		);
+
+		if ( self::is_editor_screen() ) {
+			wp_enqueue_script(
+				'formstead-integration-code',
+				plugins_url( 'assets/admin/integration-code.js', FORMSTEAD_FILE ),
+				array( 'formstead-form-fields' ),
+				FORMSTEAD_VERSION,
+				true
+			);
+		}
+	}
+
+	/**
+	 * Whether normalized query parameters or failed validation select the editor.
+	 */
+	private static function is_editor_screen(): bool {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- screen selection only, no write.
+		$form_id = isset( $_GET['form'] ) ? absint( wp_unslash( $_GET['form'] ) ) : 0;
+		$action  = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		return self::$invalid || 'new' === $action || $form_id > 0;
 	}
 
 	/**
@@ -304,10 +326,9 @@ final class FormsPage {
 
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- reading the screen query, not a submission.
 		$form_id = isset( $_GET['form'] ) ? absint( wp_unslash( $_GET['form'] ) ) : 0;
-		$action  = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : '';
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-		if ( self::$invalid || 'new' === $action || $form_id > 0 ) {
+		if ( self::is_editor_screen() ) {
 			self::render_edit( $form_id );
 			return;
 		}
@@ -355,10 +376,22 @@ final class FormsPage {
 		$values['fields'] = self::with_blank_row( $values['fields'] ?? array() );
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading the screen query, not a submission.
-		$updated_flag = isset( $_GET['updated'] ) ? sanitize_text_field( wp_unslash( $_GET['updated'] ) ) : '';
-		$errors       = self::$errors;
-		$updated      = '1' === $updated_flag;
-
+		$updated_flag           = isset( $_GET['updated'] ) ? sanitize_text_field( wp_unslash( $_GET['updated'] ) ) : '';
+		$errors                 = self::$errors;
+		$updated                = '1' === $updated_flag;
+		$integration_unsaved    = self::$invalid;
+		$integration_code       = '';
+		$integration_javascript = '';
+		$integration_astro      = '';
+		$integration_react      = '';
+		if ( $form instanceof Form ) {
+			$generator              = new CodeGenerator();
+			$endpoint               = rest_url( 'formstead/v1/forms/' . $form->public_id() . '/submissions' );
+			$integration_code       = $generator->generate( $form, $endpoint );
+			$integration_javascript = $generator->generate( $form, $endpoint, 'javascript' );
+			$integration_astro      = $generator->generate( $form, $endpoint, 'astro' );
+			$integration_react      = $generator->generate( $form, $endpoint, 'react' );
+		}
 		include dirname( FORMSTEAD_FILE ) . '/templates/admin/form-edit.php';
 	}
 

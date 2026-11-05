@@ -67,13 +67,15 @@ jobs:
           key: composer-${{ hashFiles('composer.lock') }}
 
       - name: Start wp-env
-        run: npx wp-env start
+        run: |
+          npx wp-env start
+          npm run start:tests
 
       - name: Install Composer dependencies
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist
 
       - name: PHPUnit
-        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain,multisite
+        run: npx wp-env run cli --config=.wp-env.tests.json --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --exclude-group explain,multisite
 
       # Static analysis and Mailpit stay on the primary supported pair.
       # The other cells only compare PHPUnit across PHP and WordPress.
@@ -89,7 +91,7 @@ jobs:
         if: matrix.php == '8.3' && matrix.wp == '7.1'
         run: |
           set -o pipefail
-          npx wp-env run tests-cli --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --group explain 2>&1 | tee performance-mariadb.log
+          npx wp-env run cli --config=.wp-env.tests.json --env-cwd=wp-content/plugins/formstead vendor/bin/phpunit --group explain 2>&1 | tee performance-mariadb.log
 
       - name: Upload MariaDB acceptance measurements
         if: always() && matrix.php == '8.3' && matrix.wp == '7.1'
@@ -757,7 +759,9 @@ jobs:
           key: composer-${{ hashFiles('composer.lock') }}
 
       - name: Start wp-env
-        run: npx wp-env start
+        run: |
+          npx wp-env start
+          npm run start:tests
 
       - name: Install Composer dependencies
         run: npx wp-env run cli --env-cwd=wp-content/plugins/formstead composer install --no-interaction --prefer-dist

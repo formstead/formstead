@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Formstead 1.0.0-rc.1\n"
+"Project-Id-Version: Formstead 1.0.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/formstead\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-22T12:47:24+00:00\n"
+"POT-Creation-Date: 2026-11-04T16:58:19+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: formstead\n"
@@ -122,15 +122,15 @@ msgstr ""
 msgid "Retention"
 msgstr ""
 
-#: src/Admin/FormsPage.php:110
-#: src/Admin/FormsPage.php:258
-#: src/Admin/FormsPage.php:299
+#: src/Admin/FormsPage.php:132
+#: src/Admin/FormsPage.php:280
+#: src/Admin/FormsPage.php:321
 #: src/Admin/SettingsPage.php:85
 msgid "Sorry, you are not allowed to manage forms."
 msgstr ""
 
-#: src/Admin/FormsPage.php:122
-#: src/Admin/FormsPage.php:346
+#: src/Admin/FormsPage.php:144
+#: src/Admin/FormsPage.php:367
 #: src/Admin/SubmissionsExport.php:58
 #: src/Forms/FormRepository.php:212
 #: src/Forms/FormRepository.php:336
@@ -138,30 +138,30 @@ msgstr ""
 msgid "This form could not be found."
 msgstr ""
 
-#: src/Admin/FormsPage.php:688
+#: src/Admin/FormsPage.php:721
 #: src/Admin/SubmissionsPage.php:382
 #: templates/admin/form-edit.php:181
 #: templates/admin/submission-detail.php:69
 msgid "Email"
 msgstr ""
 
-#: src/Admin/FormsPage.php:689
+#: src/Admin/FormsPage.php:722
 msgid "Textarea"
 msgstr ""
 
-#: src/Admin/FormsPage.php:690
+#: src/Admin/FormsPage.php:723
 msgid "Number"
 msgstr ""
 
-#: src/Admin/FormsPage.php:691
+#: src/Admin/FormsPage.php:724
 msgid "Checkbox"
 msgstr ""
 
-#: src/Admin/FormsPage.php:692
+#: src/Admin/FormsPage.php:725
 msgid "Choice"
 msgstr ""
 
-#: src/Admin/FormsPage.php:693
+#: src/Admin/FormsPage.php:726
 msgid "Text"
 msgstr ""
 
@@ -708,6 +708,7 @@ msgid "File uploads are not supported."
 msgstr ""
 
 #: src/Rest/RequestPayload.php:93
+#: templates/integration/messages.php:13
 msgid "Check the form and try again."
 msgstr ""
 
@@ -774,38 +775,47 @@ msgid "Already submitted"
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:175
+#: templates/integration/messages.php:21
 msgid "This field is required."
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:176
+#: templates/integration/messages.php:22
 msgid "This value is too long."
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:177
+#: templates/integration/messages.php:23
 msgid "Enter a valid email address."
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:178
+#: templates/integration/messages.php:24
 msgid "Enter a valid number."
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:179
+#: templates/integration/messages.php:25
 msgid "This value is too small."
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:180
+#: templates/integration/messages.php:26
 msgid "This value is too large."
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:181
+#: templates/integration/messages.php:27
 msgid "This value has too many decimal places."
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:182
+#: templates/integration/messages.php:28
 msgid "Choose a valid option."
 msgstr ""
 
 #: src/Rest/SubmissionResponder.php:183
+#: templates/integration/messages.php:29
 msgid "This value is not valid."
 msgstr ""
 
@@ -1097,6 +1107,82 @@ msgstr ""
 msgid "Disabled"
 msgstr ""
 
+#: templates/admin/integration-code.php:15
+msgid "Integration code"
+msgstr ""
+
+#: templates/admin/integration-code.php:17
+msgid "Save the form to generate integration code."
+msgstr ""
+
+#: templates/admin/integration-code.php:19
+msgid "This code uses the last saved configuration."
+msgstr ""
+
+#: templates/admin/integration-code.php:21
+msgid "Platform"
+msgstr ""
+
+#: templates/admin/integration-code.php:33
+msgid "Unsaved changes. This code uses the last saved configuration."
+msgstr ""
+
+#: templates/admin/integration-code.php:35
+msgid "This form is disabled and does not accept submissions."
+msgstr ""
+
+#: templates/admin/integration-code.php:38
+msgid "HTML code"
+msgstr ""
+
+#: templates/admin/integration-code.php:40
+msgid "Paste this HTML where the form should appear on your site and adapt the labels and styling. It works without JavaScript. A successful submission redirects to the saved Success URL."
+msgstr ""
+
+#: templates/admin/integration-code.php:43
+msgid "JavaScript / fetch code"
+msgstr ""
+
+#: templates/admin/integration-code.php:45
+msgid "Paste the complete HTML and script together where the form should appear, then adapt the labels and styling. With JavaScript it shows confirmation without leaving the page; without JavaScript it redirects to the saved Success URL. No build step or SDK is required."
+msgstr ""
+
+#: templates/admin/integration-code.php:48
+msgid "Astro component"
+msgstr ""
+
+#: templates/admin/integration-code.php:50
+msgid "Save as src/components/FormsteadForm.astro. Import it into a page and render <FormsteadForm />. Use a unique idPrefix prop for each copy on the same page. This component posts without JavaScript and redirects to the saved Success URL."
+msgstr ""
+
+#: templates/admin/integration-code.php:53
+msgid "React / Next.js component"
+msgstr ""
+
+#: templates/admin/integration-code.php:55
+msgid "Save as components/FormsteadForm.tsx. Import FormsteadForm from that file and render <FormsteadForm /> in your React or Next.js page. Keep the use client directive for Next.js. Each instance receives unique IDs automatically. Confirmation and errors appear on the page; without JavaScript the form redirects to the saved Success URL."
+msgstr ""
+
+#: templates/admin/integration-code.php:57
+msgid "Copied."
+msgstr ""
+
+#: templates/admin/integration-code.php:57
+msgid "Press Ctrl+C or Cmd+C to copy."
+msgstr ""
+
+#: templates/admin/integration-code.php:57
+msgid "Copy code"
+msgstr ""
+
+#: templates/admin/integration-code.php:59
+msgid "For another site, add its origin (scheme, host and port, without a path) to Allowed origins and save. An empty list permits only this WordPress site. Serve local previews over HTTP rather than opening a file directly."
+msgstr ""
+
+#: templates/admin/integration-code.php:60
+msgid "After changing fields, save and replace the code on your frontend. For HTML or JavaScript copies on the same page, give each copy a different ID prefix, including its labels and descriptions."
+msgstr ""
+
 #: templates/admin/settings.php:41
 msgid "Settings saved."
 msgstr ""
@@ -1234,4 +1320,69 @@ msgstr ""
 
 #: templates/admin/submissions-list.php:61
 msgid "Search by email"
+msgstr ""
+
+#: templates/integration/astro.php:16
+#: templates/integration/html.php:19
+#: templates/integration/react.php:17
+msgid "Send"
+msgstr ""
+
+#: templates/integration/astro.php:17
+#: templates/integration/html.php:16
+#: templates/integration/react.php:18
+msgid "Company"
+msgstr ""
+
+#: templates/integration/astro.php:18
+#: templates/integration/fields.php:75
+#: templates/integration/react.php:19
+msgid "Choose an option"
+msgstr ""
+
+#. translators: %s: maximum decimal places.
+#: templates/integration/astro.php:20
+#: templates/integration/react.php:21
+#, php-format
+msgid "Use no more than %s decimal places."
+msgstr ""
+
+#. translators: %d: maximum decimal places.
+#: templates/integration/fields.php:88
+#, php-format
+msgid "Use no more than %d decimal places."
+msgstr ""
+
+#: templates/integration/messages.php:11
+msgid "These details were already accepted. They have not been sent again."
+msgstr ""
+
+#: templates/integration/messages.php:12
+msgid "Thanks. Your submission was accepted."
+msgstr ""
+
+#: templates/integration/messages.php:14
+msgid "We could not confirm whether your submission was accepted. Try again with the same details."
+msgstr ""
+
+#: templates/integration/messages.php:15
+msgid "The form could not be sent. Check your details and try again."
+msgstr ""
+
+#: templates/integration/messages.php:16
+msgid "This form is unavailable. Please contact the site owner."
+msgstr ""
+
+#: templates/integration/messages.php:17
+msgid "This submission may already have been sent with different details. Check before sending again."
+msgstr ""
+
+#: templates/integration/messages.php:18
+msgid "Too many submissions. Try again later."
+msgstr ""
+
+#. translators: %s: seconds until another attempt is allowed.
+#: templates/integration/messages.php:20
+#, php-format
+msgid "Too many submissions. Try again in %s seconds."
 msgstr ""

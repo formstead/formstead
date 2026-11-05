@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, resolve as resolvePath } from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { formState, readForms, wp } from './helpers/wp';
+import { assertTestMailbox } from './helpers/mailpit';
 
 const forms = readForms();
 const htmlExamples = 'http://localhost:4400';
@@ -218,7 +219,7 @@ function testsMysql(): string {
 			'--filter',
 			`label=com.docker.compose.project=${ project }`,
 			'--filter',
-			'label=com.docker.compose.service=tests-mysql',
+			'label=com.docker.compose.service=mysql',
 			'--format',
 			'{{.Names}}',
 		],
@@ -235,13 +236,13 @@ function testsMysql(): string {
 }
 
 /**
- * Cache directory wp-env derives from this checkout's `.wp-env.json`.
+ * Cache directory wp-env derives from this checkout's `.wp-env.tests.json`.
  *
  * The compose project name is that directory's basename, so `docker stop`
  * cannot select another checkout's tests database.
  */
 function wpEnvCacheDirectory(): string {
-	const configFile = resolvePath( '.wp-env.json' );
+	const configFile = resolvePath( '.wp-env.tests.json' );
 	const home = process.env.WP_ENV_HOME
 		? resolvePath( process.env.WP_ENV_HOME )
 		: resolvePath( homedir(), existsSync( '/snap' ) ? 'wp-env' : '.wp-env' );
@@ -252,7 +253,7 @@ function wpEnvCacheDirectory(): string {
 
 	const projectDirectory = basename( dirname( configFile ) );
 	const shortHash = md5( configFile ).slice( 0, 8 );
-	return resolvePath( home, `wp-env-${ projectDirectory }-${ shortHash }` );
+	return resolvePath( home, `wp-env-${ projectDirectory }-tests-${ shortHash }` );
 }
 
 function md5( value: string ): string {
@@ -317,6 +318,7 @@ async function postJsonFromBrowser( page: Page, endpoint: string, bodies: string
 }
 
 async function clearMailbox(): Promise<void> {
+	assertTestMailbox( mailPort );
 	const response = await fetch( `http://127.0.0.1:${ mailPort }/api/v1/messages`, { method: 'DELETE' } );
 	if ( ! response.ok ) {
 		throw new Error( `Mailpit refused to clear the inbox (${ response.status }).` );

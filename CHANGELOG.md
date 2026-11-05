@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Start only the development site by default to remove the wp-env deprecation warning. Use a separate tests configuration for PHPUnit, browser tests and CI.
+
+- Keep the Astro JSON example's elapsed time stable across uncertain retries. Align its sending guard, receipt validation, manual retries and error feedback with generated clients.
+
+### Added
+
+- Document all four generated integration variants, component imports, React root identifiers and copied-source acceptance. Distinguish fixed demonstration forms from saved-schema starter code.
+
+- Generate a standalone React / Next.js TypeScript component with hydration-safe instance IDs, all field types, accessible errors and retry-safe multipart submission. Align the fixed Next.js example with the same retry and honeypot behavior.
+
+- Generate a standalone Astro component with all configured field types, native POST and a configurable instance ID prefix. Compile and submit the generated source in browser acceptance tests.
+
+- Standalone HTML integration code on the form editor, generated from saved fields with labels, validation attributes and a honeypot. New and disabled forms show their respective setup states.
+- Copy integration code with a manual-selection fallback when clipboard access is unavailable or refused. Warn about unsaved editor changes while keeping the last saved source available.
+- Generate standalone JavaScript / fetch code with multipart submission, accessible field errors, retry-safe idempotency keys, rate-limit feedback and independent form instances. Choose HTML or JavaScript in the editor without saving configuration.
+
 ## [1.0.0] - 2026-10-29
 
 ### Fixed
